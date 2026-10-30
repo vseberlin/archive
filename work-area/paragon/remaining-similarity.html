@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paragon · JPEG / TIFF Master review</title>
+<style>
+:root{font:15px system-ui,sans-serif;color:#263b32;background:#f3f2ed;--green:#225346;--line:#ced8cc}*{box-sizing:border-box}body{margin:0}header{background:#173d33;color:white;padding:20px 28px;display:flex;justify-content:space-between;align-items:center;gap:20px}h1{font-size:24px;margin:0 0 6px}header p{margin:0;color:#dae8df}a{color:#225346;text-underline-offset:3px}header a{color:#e4eee8}main{max-width:1500px;margin:auto;padding:24px}button,select,input,textarea{font:inherit}button,select{padding:10px 13px;border:1px solid #b9c8bb;border-radius:5px;background:white;color:inherit}button{cursor:pointer}button.primary{background:var(--green);border-color:var(--green);color:white}button:disabled{opacity:.45;cursor:default}.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:15px}.toolbar select{max-width:100%}#pairChoice{flex:1;min-width:220px}.counts{color:#53675a;font-size:13px}.identity{padding:16px 20px;background:#e5ece1;border-left:4px solid #648c69;margin:18px 0}.identity h2{margin:0 0 5px;font-size:23px;overflow-wrap:anywhere}.identity p{margin:5px 0;line-height:1.5}.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{min-width:0;background:white;border:1px solid var(--line);border-radius:6px;overflow:hidden}.card.selected{outline:3px solid #648c69}.card h3{font-size:17px;margin:0}.card .top{padding:14px 17px;display:flex;justify-content:space-between;gap:12px;align-items:center}.picture{height:460px;display:flex;align-items:center;justify-content:center;background:#eeeee8}.picture img{width:100%;height:100%;object-fit:contain;cursor:zoom-in}.card .body{padding:14px 17px}.path{font-size:12px;overflow-wrap:anywhere;line-height:1.5;color:#607466}.choice{display:flex;align-items:center;gap:9px;font-weight:650;margin:12px 0}.choice input{accent-color:var(--green);width:18px;height:18px}.evidence{font-size:13px;color:#526b5a;line-height:1.6;margin:15px 0}.form{background:white;border:1px solid var(--line);padding:18px 20px;border-radius:6px;margin-top:20px}.confirm{display:flex;align-items:flex-start;gap:10px;line-height:1.5}.confirm input{margin-top:4px;accent-color:var(--green)}textarea{width:100%;margin-top:7px;padding:10px;border:1px solid #bbc9ba;border-radius:4px;min-height:64px;resize:vertical}.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}#message{flex:1;min-width:160px;font-size:14px}.error{color:#a32e25}.success{color:#225346}.muted{color:#607466;font-size:13px;line-height:1.5}details{margin:10px 0}summary{cursor:pointer}dl{display:grid;grid-template-columns:100px 1fr;gap:8px;font-size:14px}dt{font-weight:600}dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}dialog{width:94vw;height:94vh;max-width:none;max-height:none;border:0;border-radius:6px;background:#f3f2ed;padding:16px}dialog::backdrop{background:#000b}.dialogtop{display:flex;align-items:center;gap:15px;justify-content:space-between;min-height:42px}.dialogtop span{font-size:12px;overflow-wrap:anywhere}.zoomarea{height:calc(100% - 50px);overflow:auto;text-align:center}.zoomarea img{max-width:100%;max-height:100%;object-fit:contain}.zoomarea.native img{max-width:none;max-height:none}@media(max-width:800px){header{display:block;padding:18px}header nav{margin-top:12px}main{padding:16px}.pair{grid-template-columns:1fr}.picture{height:360px}.toolbar{align-items:stretch}#pairChoice{flex-basis:100%}.card .top{align-items:flex-start}.actions button{flex:1}dl{grid-template-columns:80px 1fr}}
+
+.review-context{padding:14px 18px;background:#fff7df;border-left:4px solid #b18c3c;margin:16px 0;line-height:1.5}.review-context p{margin:5px 0}.pair.with-related{grid-template-columns:repeat(3,minmax(0,1fr))}.card.reference{border-color:#b18c3c;background:#fffdf6}.reference select{width:100%;margin-bottom:12px}#relatedPanel{min-width:0}.reference .picture{height:460px}.badge{font-weight:650;color:#225346}.progress{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:8px}.notice{color:#225346;margin:12px 0;line-height:1.5}.notice:empty{display:none}.record{padding:10px 0;border-top:1px solid var(--line)}.end-actions{margin-top:16px;display:flex;gap:12px;flex-wrap:wrap}@media(max-width:1000px){.pair.with-related{grid-template-columns:1fr 1fr}#relatedPanel{grid-column:1/-1}.reference .picture{height:360px}}@media(max-width:800px){.pair.with-related{grid-template-columns:1fr}}
+</style>
+<header><div><h1>Paragon · JPEG / TIFF Master review</h1><p>Review source files with their earlier decisions. Keep item names and metadata.</p></div><nav><a href="/retained/">All remaining work</a> · <a href="/drain-review">Earlier version reviews</a></nav></header>
+<main>
+<div class="toolbar"><select id="scope" aria-label="Pair status"><option value="remaining">Remaining pairs</option><option value="saved">Saved / already resolved</option></select><select id="pairChoice" aria-label="JPEG / TIFF pair"></select><button id="previous">Previous</button><button id="next">Next</button><button id="refresh">Refresh decisions</button></div>
+<div class="progress"><div id="counts" class="counts" aria-live="polite">Loading current decisions…</div><div id="position" class="counts"></div></div>
+<div id="notice" class="notice" role="status"></div>
+<div id="content"><p>Loading stored comparison evidence…</p></div>
+</main>
+<dialog id="viewer"><div class="dialogtop"><span id="zoomLabel"></span><div><button id="native">Actual preview pixels</button> <button id="close">Close</button></div></div><div class="zoomarea"><img id="large" alt="Full comparison preview"></div></dialog>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let index,current,rows=[],dirty=false,serial=0,saving=false,loading=false,relatedAt=0;
+const image=p=>'/retained/image?path='+encodeURIComponent(p);
+const when=value=>value?new Date(value).toLocaleString():'';
+const shortPath=p=>p.replace('/media/vladimir/Elements/restore/archive/','');
+async function api(url,options){const r=await fetch(url,options),d=await r.json();if(!r.ok)throw Error(d.error||'Request failed');return d;}
+function filter(){
+ rows=index.pairs.filter(p=>$('#scope').value==='remaining'?!p.resolved:p.resolved);
+ $('#pairChoice').innerHTML='<option value="" disabled>Choose a comparison</option>'+rows.map(p=>`<option value="${esc(p.key)}">${esc(p.name)}${p.label!==p.name.replace(/\.[^.]+$/,'')?' · '+esc(p.label):''}${p.left_unresolved?' · left unresolved':''}</option>`).join('');
+ $('#counts').textContent=`${index.total-index.remaining} completed · ${index.remaining} remaining · ${index.total} file comparisons (not a count of distinct objects)`;
+}
+async function loadIndex(){index=await api('/retained/api/hires');filter();}
+function canLeave(){return !saving&&!loading&&(!dirty||confirm('Discard your unsaved Master choice or note?'));}
+function nextAfter(key,before,after){
+ const position=before.findIndex(p=>p.key===key);
+ return position<0?undefined:before.slice(position+1).find(p=>after.some(r=>r.key===p.key))?.key;
+}
+function controls(){
+ const busy=saving||loading;
+ for(const id of ['scope','pairChoice','refresh'])$('#'+id).disabled=busy;
+ for(const id of ['save','unresolved'])if($('#'+id))$('#'+id).disabled=busy||!current?.can_choose;
+ document.querySelectorAll('input[name=master],#confirmed,#note').forEach(el=>el.disabled=busy||!current?.can_choose);
+ const at=current?rows.findIndex(p=>p.key===current.pair.key):-1;
+ $('#previous').disabled=busy||at<=0;
+ $('#next').disabled=busy||at<0;
+ $('#next').textContent=at===rows.length-1?'End of list':'Next';
+ $('#position').textContent=at>=0?`Comparison ${at+1} of ${rows.length} in this view`:'End of list';
+}
+function preview(asset,kind){return `<div class="picture"><img src="${image(asset.path)}" alt="${esc(kind)} · ${esc(asset.name)}" data-preview="${esc(asset.path)}"></div>`;}
+function card(asset,kind){
+ const checked=current.selected_master_path===asset.path;
+ return `<article class="card candidate ${checked?'selected':''}"><div class="top"><h3>${kind}</h3><span>${asset.width} × ${asset.height}</span></div>${preview(asset,kind)}<div class="body"><strong>${esc(asset.name)}</strong><div class="path">${esc(asset.path)}</div><label class="choice"><input type="radio" name="master" value="${esc(asset.path)}" ${checked?'checked':''} ${current.can_choose?'':'disabled'}>Use this ${kind==='Current JPEG'?'JPEG':'TIFF'} as the one Master</label></div></article>`;
+}
+function referenceCard(){
+ const related=current.related_saved_masters||[];
+ if(!related.length)return '';
+ const r=related[relatedAt],a=r.asset;
+ const href=r.pair_key?'/retained/similarity#'+encodeURIComponent(r.pair_key):'/retained/#'+encodeURIComponent(r.case_key);
+ return `<article class="card reference"><div class="top"><h3>Related saved Master</h3><span class="badge">Already selected</span></div>${preview(a,'Related saved Master')}<div class="body">${related.length>1?`<label for="relatedChoice">Compare a saved Master (${related.length})</label><select id="relatedChoice">${related.map((v,i)=>`<option value="${i}" ${i===relatedAt?'selected':''}>${esc(v.asset.name)}</option>`).join('')}</select>`:''}<strong>${esc(a.name)}</strong><p class="muted">Saved ${esc(when(r.reviewed_at))} · ${esc(r.strength)} visual similarity lead</p><div class="path">${esc(a.path)}</div><p class="muted">Comparison only. Check whether these are different objects, different views, or extra copies of the same item. Its saved Master choice remains intact.</p><a href="${href}" target="_blank" rel="noopener">Inspect saved decision</a></div></article>`;
+}
+function earlierDecisions(c){
+ const files=c.earlier_files||[];
+ const status=state=>({selected_master:'Selected Master',redundant:'Redundant',noise_drain:'Proposed for drain',retain:'Retained',member:'Member',carrier_section:'Carrier section'}[state]||state);
+ return `<details><summary>${files.length} earlier file decision${files.length===1?'':'s'} in this case</summary>${files.length?files.map(f=>`<div class="record"><strong>${esc(f.registered?'Registered for drain':status(f.state))}</strong><div class="path">${esc(shortPath(f.path))}</div><span class="muted">${esc(f.evidence.join(' · '))}</span></div>`).join(''):'<p>No earlier decisions on other files in this case.</p>'}<p><a href="/retained/#${encodeURIComponent(c.pair.case_key)}" target="_blank" rel="noopener">Inspect all files and saved decisions for this case</a></p></details>`;
+}
+function bindPreviews(){document.querySelectorAll('[data-preview]').forEach(el=>el.onclick=()=>{$('#zoomLabel').textContent=el.dataset.preview;$('#large').src=image(el.dataset.preview)+'&full=1';$('.zoomarea').classList.remove('native');$('#viewer').showModal();});}
+function render(){
+ const c=current,t=c.pair.comparison,m=c.metadata,related=c.related_saved_masters||[];
+ $('#content').innerHTML=`<section class="identity"><h2>${esc(c.name)}</h2><p class="badge">${c.resolved?`Already resolved · saved ${esc(when(c.reviewed_at))}`:c.left_unresolved?`Previously left unresolved · ${esc(when(c.reviewed_at))}`:'These two source files still await a Master choice.'}</p><p><strong>Name and metadata stay unchanged.</strong> Only the selected source image changes.</p>${c.existing_inventory?`<p class="muted">Existing item: ${esc(c.existing_inventory)}. This records a source-version proposal; its accessioned Master and catalogue stay unchanged.</p>`:''}${earlierDecisions(c)}<details><summary>Existing item metadata</summary><dl>${Object.entries({Title:m.title,Date:m.date,Description:m.description,Attribution:m.provenance}).map(([k,v])=>`<dt>${k}</dt><dd>${esc(v||'Not recorded — remains blank')}</dd>`).join('')}</dl></details></section>${related.length?`<section class="review-context"><strong>A similar image already has a saved Master.</strong><p>Compare the saved Master on the right before making another choice. Similarity alone does not establish that these files belong to the same object. If identity is uncertain, leave this comparison unresolved and record a short note.</p></section>`:''}<div class="pair ${related.length?'with-related':''}">${card(c.source,'Current JPEG')}${card(c.target,'Higher-resolution TIFF')}<div id="relatedPanel" ${related.length?'':'hidden'}>${referenceCard()}</div></div><p class="evidence">${t.area_ratio.toFixed(1)}× as many pixels · Shared embedded document IDs · Frame proportions differ by ${(t.aspect_relative_difference*100).toFixed(2)}%. Confirm the visible content and edges.</p><details class="muted"><summary>Stored comparison details</summary><p>pHash / dHash / aHash distances: ${esc(t.indexed_hashes.distance.join(' / '))}. ${t.algorithm_count} Czkawka algorithm${t.algorithm_count===1?'':'s'} found this pair.</p><p>Evidence: remaining-similarity-report.json. Candidate files and their original metadata are untouched.</p></details><section class="form"><label class="confirm"><input id="confirmed" type="checkbox" ${c.can_choose?'':'disabled'}>These two files show the same item and full frame. The unselected file adds no content that needs separate preservation.</label><p class="muted">Other saved file decisions stay intact. A redundant choice does not authorize deletion. Accession is separate.</p><label for="note">Short note (optional)</label><textarea id="note" maxlength="1000" ${c.can_choose?'':'disabled'}>${esc(c.saved_note)}</textarea><div class="actions"><span id="message" role="status">${c.resolved?'Saved decision; this comparison is excluded from the remaining list.':c.left_unresolved?'Your earlier unresolved review is saved. No Master was selected.':'No Master selected for this pair.'}</span><button id="unresolved" ${c.can_choose?'':'disabled'}>Leave unresolved and next</button><button id="save" class="primary" ${c.can_choose?'':'disabled'}>Save Master and next</button></div></section>`;
+ bindPreviews();bindRelated();
+ document.querySelectorAll('input[name=master]').forEach(el=>el.onchange=()=>{dirty=true;document.querySelectorAll('.card.candidate').forEach(card=>card.classList.toggle('selected',card.querySelector('input').checked));$('#message').textContent='Unsaved Master choice. Name and metadata will stay unchanged.';});
+ for(const id of ['confirmed','note'])$('#'+id).oninput=()=>dirty=true;
+ $('#save').onclick=()=>save('add');$('#unresolved').onclick=()=>save('unresolved');
+ $('#pairChoice').value=c.pair.key;dirty=false;controls();
+}
+function bindRelated(){if($('#relatedChoice'))$('#relatedChoice').onchange=()=>{relatedAt=Number($('#relatedChoice').value);$('#relatedPanel').innerHTML=referenceCard();bindPreviews();bindRelated();};}
+function renderEnd(){
+ current=null;dirty=false;
+ const remaining=$('#scope').value==='remaining';
+ $('#content').innerHTML=`<section class="identity"><h2>End of this list</h2><p>${remaining?(index.remaining?`${index.remaining} comparisons are still unresolved. Earlier or skipped comparisons stay available; you have not been sent back to the beginning.`:'All comparisons in this shortlist are resolved.'):'You have reached the end of the saved comparisons.'}</p><p>Your saved choices are retained.</p><div class="end-actions">${rows.length?`<button id="restart">${remaining?'Review remaining comparisons':'Review saved comparisons'}</button>`:''}<a href="/retained/">All remaining work</a></div></section>`;
+ $('#pairChoice').value='';if($('#restart'))$('#restart').onclick=()=>{if(canLeave())openPair(rows[0]?.key);};
+ history.replaceState(null,'','#end');controls();
+}
+async function openPair(key){
+ const request=++serial;loading=true;controls();
+ if(!key){loading=false;renderEnd();return;}
+ try{
+  const before=[...rows],c=await api('/retained/api/hires-case?key='+encodeURIComponent(key));
+  if(request!==serial)return;
+  if(c.resolved&&$('#scope').value==='remaining'){
+   await loadIndex();if(request!==serial)return;
+   $('#notice').textContent=`${c.name} already has a saved decision and was removed from remaining comparisons.`;
+   return openPair(nextAfter(key,before,rows));
+  }
+  current=c;relatedAt=0;render();history.replaceState(null,'','#'+encodeURIComponent(key));
+ }catch(e){if(request!==serial)return;current=null;$('#content').innerHTML='<p class="error">'+esc(e.message)+'</p>';controls();}
+ finally{if(request===serial){loading=false;controls();}}
+}
+async function save(action){
+ if(saving||loading||!current?.can_choose)return;
+ const selected=$('input[name=master]:checked')?.value||'';
+ if(action==='add'&&(!selected||!$('#confirmed').checked)){$('#message').textContent='Choose one Master and confirm the same item and full frame.';$('#message').className='error';return;}
+ const key=current.pair.key,name=current.name,before=[...rows];
+ saving=true;controls();$('#save').disabled=$('#unresolved').disabled=true;
+ try{
+  await api('/retained/api/hires-decision',{method:'POST',headers:{'Content-Type':'application/json','X-Review-Token':index.token},body:JSON.stringify({key,previous_reviews:current.previous_reviews,action,selected_master_path:selected,same_object_confirmed:$('#confirmed').checked,note:$('#note').value})});
+  dirty=false;
+  $('#notice').textContent=action==='add'?`Master choice saved for ${name}.`:`${name} was left unresolved. It remains available for a later review.`;
+  await loadIndex();await openPair(nextAfter(key,before,rows));
+ }catch(e){if($('#message')){$('#message').textContent=e.message;$('#message').className='error';$('#save').disabled=$('#unresolved').disabled=false;}else $('#notice').textContent=e.message;}
+ finally{saving=false;controls();}
+}
+$('#pairChoice').onchange=()=>{if(canLeave())openPair($('#pairChoice').value);else $('#pairChoice').value=current?.pair.key||'';};
+$('#scope').onchange=()=>{if(canLeave()){filter();openPair(rows[0]?.key);}else $('#scope').value=current?.resolved?'saved':'remaining';};
+$('#previous').onclick=()=>{if(canLeave()&&current)openPair(rows[rows.findIndex(p=>p.key===current.pair.key)-1]?.key);};
+$('#next').onclick=()=>{if(canLeave()&&current)openPair(nextAfter(current.pair.key,rows,rows));};
+$('#refresh').onclick=async()=>{if(!canLeave())return;const key=current?.pair.key,before=[...rows];try{await loadIndex();await openPair(rows.some(p=>p.key===key)?key:nextAfter(key,before,rows));}catch(e){$('#notice').textContent=e.message;}};
+$('#close').onclick=()=>$('#viewer').close();$('#native').onclick=()=>{$('.zoomarea').classList.toggle('native');};
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
+(async()=>{try{await loadIndex();const key=decodeURIComponent(location.hash.slice(1)),match=index.pairs.find(p=>p.key===key);if(match?.resolved){$('#scope').value='saved';filter();}if(key==='end')renderEnd();else if(key&&!match){$('#pairChoice').value='';$('#content').innerHTML='<p class="error">This comparison is not in the current shortlist. Choose a comparison from the list above.</p>';controls();}else await openPair(match?key:rows[0]?.key);}catch(e){$('#content').innerHTML='<p class="error">'+esc(e.message)+'</p>';}})();
+</script>
+</html>
