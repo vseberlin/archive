@@ -40,6 +40,10 @@ artifacts as policy.
 
 ## Active Entrypoints
 
+- Consolidated reconciliation interface: `reconciliation_workbench.py`.
+  See [input, startup and test instructions](reconciliation_workbench.md).
+  Uses prepared evidence and readable decisions; does not deploy or replace
+  existing unit workbenches automatically.
 - Avantmedia image and metadata review:
   `/mnt/volume/iss-archive-work/avantmedia-305-review/workbench.py`
 - TFA remaining image review:

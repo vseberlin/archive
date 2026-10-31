@@ -32,6 +32,11 @@ architecture does not belong in that file.
 
 ## Current Simplified Path
 
+- `reconciliation_workbench.py`: bounded shared object/candidate review over
+  prepared inputs; separate metadata choices, file-authoritative decisions,
+  image/PDF comparison. See `tools/archive-preservation/reconciliation_workbench.md`.
+  Existing deployed unit interfaces and decisions remain in place; complex
+  unit formats require an explicit evidence mapping before use.
 - `md_export_discovery.py`: bounded museum-digital evidence capture.
 - `tiff_metadata.py` and `tiff_accession.py`: safe TIFF metadata write/readback
   helpers.
