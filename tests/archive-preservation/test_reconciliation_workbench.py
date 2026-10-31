@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import threading
 import unittest
@@ -39,6 +40,150 @@ class WorkbenchTests(unittest.TestCase):
         data = json.loads(self.input.read_text())
         fn(data)
         self.input.write_text(json.dumps(data))
+
+    def csv_unit(self, profile="bibliothek", adopt=False):
+        data = json.loads(self.input.read_text())
+        obj = data["objects"][0]
+        key = "object_key" if profile == "bibliothek" else "md_object_id"
+        self.input.unlink()
+        row = {key: obj["id"], "title": obj["title"], "description": "Catalogue describes a book",
+               "object_url": "https://berlin.museum-digital.de/object/123"}
+        (self.root / "objects.csv").write_bytes(workbench.csv_payload([row], list(row)))
+        rows = [{key: obj["id"], "candidate_id": c["id"], "eligible": str(c["eligible"]).lower(),
+                 "role": c["role"], "members_json": json.dumps(c["members"]),
+                 "basis": "Visual inspection", "comparison": "Wrong attachment: unrelated newspaper page"}
+                for c in obj["candidates"]]
+        if profile == "collection-591":
+            for row in rows:
+                members = json.loads(row["members_json"])
+                for member in members:
+                    member["source_path"] = member.pop("path")
+                row["members_json"] = json.dumps(members)
+        (self.root / "candidates.csv").write_bytes(workbench.csv_payload(rows, list(rows[0])))
+        initial = {key: obj["id"], "selected_candidate_id": "scan", "decision": "selected_master",
+                   "actor": "Earlier curator", "decided_at": "2026-10-01T12:00:00Z",
+                   "note": "Earlier accepted choice", "deletion_authorized": "false"}
+        (self.root / "master-decisions.csv").write_bytes(workbench.csv_payload([initial], list(initial)))
+        if adopt:
+            self.input.write_text(json.dumps({"format": workbench.FORMAT, "read_only": False,
+                                             "csv_profile": profile, "completion_receipts": []}))
+        return workbench.Workbench(self.root, "Test curator")
+
+    def test_accession_completion_receipt_freezes_both_csv_units(self):
+        app = self.csv_unit(adopt=True)
+        self.assertFalse(app.snapshot()["read_only"])
+        (self.root / "accession-completion.json").write_text("{}")
+        self.assertTrue(app.snapshot()["read_only"])
+        with self.assertRaisesRegex(workbench.ReviewError, "frozen"):
+            app.save({**self.payload(), "revision": app.snapshot()["revision"]})
+
+    def test_collection591_completion_receipt_freezes_explicit_adoption(self):
+        app = self.csv_unit(profile="collection-591", adopt=True)
+        self.assertFalse(app.snapshot()["read_only"])
+        (self.root / "accession-completion.json").write_text("{}")
+        self.assertTrue(app.snapshot()["read_only"])
+        with self.assertRaisesRegex(workbench.ReviewError, "frozen"):
+            app.save(self.payload())
+
+    def test_csv_preserves_object_and_candidate_judgment_evidence(self):
+        app = self.csv_unit()
+        obj = app.snapshot("demo:image")["object"]
+        self.assertEqual(obj["description"], "Catalogue describes a book")
+        self.assertEqual(obj["provenance"], "https://berlin.museum-digital.de/object/123")
+        self.assertEqual(obj["candidates"][0]["basis"], "Visual inspection")
+        self.assertIn("unrelated newspaper", obj["candidates"][0]["comparison"])
+
+    def test_unadopted_csv_cannot_be_edited_even_without_receipts(self):
+        app = self.csv_unit()
+        self.assertTrue(app.snapshot()["read_only"])
+        before = (self.root / "master-decisions.csv").read_bytes()
+        with self.assertRaisesRegex(workbench.ReviewError, "frozen"):
+            app.save(self.payload())
+        self.assertEqual(before, (self.root / "master-decisions.csv").read_bytes())
+
+    def test_bibliothek_handoff_uses_one_authority_and_refuses_stale_consumer_csv(self):
+        app = self.csv_unit(adopt=True)
+        payload = self.payload(cid="alternative", note="Compared against newspaper mismatch")
+        app.save(payload)
+        self.assertTrue(workbench.checked_legacy_handoff(self.root, "bibliothek"))
+        with (self.root / "master-decisions.csv").open(newline="") as f:
+            rows = list(csv.DictReader(f))
+        self.assertEqual(rows[0]["selected_candidate_id"], "alternative")
+        self.assertEqual(rows[0]["note"], payload["note"])
+        self.assertEqual(rows[0]["actor"], "Test curator")
+        self.assertEqual(rows[0]["decision"], "selected_master")
+        self.assertEqual(rows[0]["deletion_authorized"], "false")
+        rows[0]["selected_candidate_id"] = "scan"
+        (self.root / "master-decisions.csv").write_bytes(workbench.csv_payload(rows, list(rows[0])))
+        with self.assertRaisesRegex(workbench.ReviewError, "CSV.*disagree"):
+            workbench.checked_legacy_handoff(self.root, "bibliothek")
+        app.repair_projection()
+        self.assertTrue(workbench.checked_legacy_handoff(self.root, "bibliothek"))
+
+    def test_collection591_handoff_preserves_exact_disposition_semantics(self):
+        app = self.csv_unit(profile="collection-591", adopt=True)
+        app.save(self.payload())
+        self.assertTrue(workbench.checked_legacy_handoff(self.root, "collection-591"))
+        rows = list(csv.DictReader(io.StringIO((self.root / "candidate-dispositions.csv").read_text())))
+        self.assertEqual([r["disposition"] for r in rows], ["selected_master", "redundant", "redundant"])
+        self.assertEqual(json.loads(rows[0]["source_paths_json"]), [str(self.root / "original.png")])
+        with self.assertRaisesRegex(workbench.ReviewError, "mapping"):
+            workbench.checked_legacy_handoff(self.root, "bibliothek")
+
+    def test_incomplete_legacy_projection_blocks_consumer_until_repaired(self):
+        app = self.csv_unit(adopt=True)
+        original = workbench.atomic
+        def interrupted(path, payload):
+            if path.name == "candidate-dispositions.csv":
+                raise OSError("Interrupted legacy projection")
+            original(path, payload)
+        with mock.patch.object(workbench, "atomic", side_effect=interrupted):
+            with self.assertRaisesRegex(workbench.ReviewError, "Choices were saved"):
+                app.save(self.payload())
+        with self.assertRaisesRegex(workbench.ReviewError, "CSV.*disagree"):
+            workbench.checked_legacy_handoff(self.root, "bibliothek")
+        app.repair_projection()
+        self.assertTrue(workbench.checked_legacy_handoff(self.root, "bibliothek"))
+
+    def load_unit_module(self, folder, filename):
+        directory = PATH.parents[2] / "work-area" / folder
+        spec = importlib.util.spec_from_file_location("test_unit_" + folder.replace("-", "_"), directory / filename)
+        module = importlib.util.module_from_spec(spec)
+        with mock.patch.object(sys, "path", [str(directory), str(PATH.parent), *sys.path]):
+            spec.loader.exec_module(module)
+        return module
+
+    def check_actual_consumer_gate(self, profile, filename, function):
+        app = self.csv_unit(profile=profile, adopt=True)
+        app.save(self.payload())
+        module = self.load_unit_module(profile, filename)
+        (self.root / "master-decisions.csv").write_text("wrong,csv\n")
+        with mock.patch.object(module, "ROOT", self.root), mock.patch.object(module, "Review") as review:
+            with self.assertRaisesRegex(ValueError, "decision schema|CSV.*disagree"):
+                getattr(module, function)()
+            review.assert_not_called()
+
+    def test_actual_bibliothek_accession_consumer_refuses_broken_handoff(self):
+        self.check_actual_consumer_gate("bibliothek", "accession_bibliothek.py", "preflight")
+
+    def test_actual_collection591_accession_consumer_refuses_broken_handoff(self):
+        self.check_actual_consumer_gate("collection-591", "prepare_accession_591.py", "build_plan")
+
+    def test_legacy_bibliothek_screen_cannot_write_after_adoption(self):
+        app = self.csv_unit(adopt=True)
+        app.save(self.payload())
+        module = self.load_unit_module("bibliothek", "workbench_bibliothek.py")
+        with mock.patch.object(module, "ROOT", self.root):
+            with self.assertRaisesRegex(ValueError, "legacy workbench is read-only"):
+                module.Review.__new__(module.Review).save("demo:image", "scan", "old screen")
+
+    def test_legacy_collection591_screen_cannot_write_after_adoption(self):
+        app = self.csv_unit(profile="collection-591", adopt=True)
+        app.save(self.payload())
+        module = self.load_unit_module("collection-591", "workbench_591.py")
+        with mock.patch.object(module, "ROOT", self.root):
+            with self.assertRaisesRegex(ValueError, "legacy workbench is read-only"):
+                module.Review.__new__(module.Review).save("demo:image", "scan", "old screen")
 
     def test_one_master_and_separate_metadata_survive_restart_with_sources_unchanged(self):
         result = self.app.save(self.payload(metadata_choices={"Title": "local"}))
@@ -205,7 +350,8 @@ class WorkbenchTests(unittest.TestCase):
         original = path.read_bytes()
         app = workbench.Workbench(self.root, "Test")
         self.assertEqual(app.snapshot(obj["id"])["decision"]["selected_candidate_id"], "scan")
-        app.save(self.payload(note="Updated review note"))
+        with self.assertRaisesRegex(workbench.ReviewError, "frozen"):
+            app.save(self.payload(note="Updated review note"))
         self.assertEqual(path.read_bytes(), original)
 
     def test_http_origin_token_scope_and_functional_save(self):

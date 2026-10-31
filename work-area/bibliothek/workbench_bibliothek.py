@@ -109,6 +109,8 @@ class Review:
                 'accession_performed': False, 'deletion_authorized': False}
 
     def save(self, key, candidate_id, note):
+        if (ROOT / 'reconciliation-decisions.jsonl').exists() or (ROOT / 'reconciliation-decisions.jsonl').is_symlink():
+            raise ValueError('This unit uses consolidated decisions; the legacy workbench is read-only')
         if key not in self.by_id or len(note) > 2000:
             raise ValueError('Invalid object or note')
         with LOCK:

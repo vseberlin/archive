@@ -73,6 +73,8 @@ class Review:
     def dispositions(self,d):
         return [{'md_object_id':c['md_object_id'],'candidate_id':c['candidate_id'],'disposition':('selected_master' if d[c['md_object_id']]['selected_candidate_id']==c['candidate_id'] else 'redundant') if d[c['md_object_id']]['selected_candidate_id'] else 'unresolved','source_paths_json':json.dumps([m['source_path'] for m in json.loads(c['members_json'])],ensure_ascii=False),'deletion_authorized':'false'} for c in self.candidates]
     def save(self,oid,cid,note):
+        if (ROOT/'reconciliation-decisions.jsonl').exists() or (ROOT/'reconciliation-decisions.jsonl').is_symlink():
+            raise ValueError('This unit uses consolidated decisions; the legacy workbench is read-only')
         assert oid in self.by_id,'Unknown object'
         assert len(note)<=2000,'Note is too long'
         with LOCK:

@@ -14,6 +14,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -21,6 +22,9 @@ from xml.etree import ElementTree as ET
 from PIL import Image, ImageOps
 from prepare_bibliothek import ROOT, SOURCE, guard, read_csv, csv_bytes, now
 from workbench_bibliothek import Review
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/archive-preservation'))
+from reconciliation_workbench import checked_legacy_handoff
 
 TARGET = Path('/mnt/volume/iss-archive/units/bibliothek')
 DIRS = ('00_MANIFESTS', 'masters', 'export', 'metadata', 'documents', 'db-restore')
@@ -89,6 +93,7 @@ def assert_inputs(plan):
 
 
 def preflight(allow_existing=False):
+    consolidated_revision = checked_legacy_handoff(ROOT, 'bibliothek')
     review=Review()
     check=review.check()
     require(check['objects']==check['resolved_objects']==3, 'Exactly three resolved objects required')
@@ -108,6 +113,9 @@ def preflight(allow_existing=False):
             p=review.checked_path(m)
             inputs[str(p)]=[int(m['size_bytes']),int(m['mtime_ns'])]
     evidence=dict(EVIDENCE)
+    if (ROOT/'reconciliation-decisions.jsonl').exists():
+        evidence['reconciliation-decisions.jsonl']='00_MANIFESTS/reconciliation-decisions.jsonl'
+        evidence['reconciliation-input.json']='metadata/reconciliation-input.json'
     for c in review.candidates:
         for m in json.loads(c['members_json']):
             p=Path(m['technical_path'])
@@ -159,6 +167,8 @@ def preflight(allow_existing=False):
     plan=dict(input_stamps=inputs,objects=objects,masters=masters,evidence=evidence,
         candidates=review.candidates,dispositions=read_csv('candidate-dispositions.csv'))
     assert_inputs(plan)
+    require(checked_legacy_handoff(ROOT, 'bibliothek') == consolidated_revision,
+            'Consolidated decisions changed during accession planning')
     return plan
 
 
@@ -454,7 +464,9 @@ def resume(authorization):
         '00_MANIFESTS/derivatives.csv','00_MANIFESTS/source-disposition.csv','00_MANIFESTS/payload-checksums.csv'}
     actual={str(p.relative_to(TARGET)) for p in TARGET.rglob('*') if p.is_file()}
     require(actual==expected,'Interrupted output is not the expected post-XLSX checkpoint')
-    require(len(catalog)==len(checksums)==27,'Interrupted payload count differs')
+    handoff_files = sum(name in plan['evidence'] for name in
+                        ('reconciliation-decisions.jsonl', 'reconciliation-input.json'))
+    require(len(catalog)==len(checksums)==27+handoff_files,'Interrupted payload count differs')
     require({r['relative_path'] for r in catalog}=={r['relative_path'] for r in checksums},'Payload checksum mapping differs')
     require(read('00_MANIFESTS/master-representations.csv')==plan['objects'],'Saved object metadata differs')
     by_path={r['relative_path']:r for r in catalog}
@@ -477,7 +489,7 @@ def resume(authorization):
     assert_inputs(plan)
     from datetime import datetime,timezone
     started=datetime.fromtimestamp(min(int(r['mtime_ns']) for r in checksums)/1e9,timezone.utc).isoformat()
-    print('Resuming remaining catalogue controls; 27 finalized payload stamps and stored hashes reused.',flush=True)
+    print(f'Resuming remaining catalogue controls; {len(catalog)} finalized payload stamps and stored hashes reused.',flush=True)
     finish(plan,catalog,checksums,sources,started,authorization)
 
 

@@ -18,8 +18,10 @@ function selectMaster(id){draft.selected_candidate_id=id;changed();}
 function renderObject(){const o=current.object,readOnly=current.read_only;mode="side";linked=true;opacity=.5;panes=[];active=0;
  const nav=el("div",{class:"toolbar"}),order=overview.objects,idx=order.findIndex(x=>x.id===o.id);nav.append(el("button",{disabled:idx===0,onclick:()=>navigate(order[idx-1].id)},"← Previous"),el("button",{disabled:idx===order.length-1,onclick:()=>navigate(order[idx+1].id)},"Next →"));
  const root=$("review");root.replaceChildren(el("div",{class:"heading"},el("div",{},el("span",{class:"eyebrow"},o.inventory||o.id),el("h2",{},o.title||o.id),el("p",{class:"muted"},o.provenance||"Local evidence · no external catalogue link supplied")),nav));
+ if(o.description)root.append(el("p",{class:"description"},o.description));
+ if(o.source_record)root.append(el("details",{},el("summary",{},"Original catalogue evidence"),el("pre",{class:"source-record"},JSON.stringify(o.source_record,null,2))));
  if(readOnly)root.append(el("p",{class:"notice"},"This unit is completed or read-only. Earlier choices are retained; editing is disabled."));
- if(!overview.projection_agrees)root.append(el("p",{class:"notice"},"The derived disposition CSV is absent or out of date. Readable decisions remain authoritative; the next successful save rebuilds it."));
+ if(!overview.projection_agrees||!overview.legacy_handoff_agrees)root.append(el("p",{class:"notice"},"A derived review or accession CSV is absent or out of date. Readable decisions remain authoritative; refresh the projections before accession."));
  const status=el("div",{},el("span",{class:"badge"},draft.selected_candidate_id?"One Master selected":"Master unresolved"),el("span",{class:"badge"},`${o.candidates.length} candidate representations`));root.append(status);
  const toolbar=el("div",{class:"toolbar"});for(const [key,label] of [["side","Side by side"],["overlay","Overlay"],["difference","Difference"]])toolbar.append(el("button",{"data-mode":key,"aria-pressed":String(key==="side"),onclick:()=>setMode(key)},label));
  toolbar.append(el("span",{class:"spacer"}),el("label",{},el("input",{type:"checkbox",checked:true,onchange:e=>{linked=e.target.checked;}}),"Link views"),el("button",{onclick:()=>changeZoom(1/1.4),"aria-label":"Zoom out"},"−"),el("button",{onclick:()=>changeZoom(1.4),"aria-label":"Zoom in"},"+"),el("button",{onclick:resetView},"Fit"),el("button",{onclick:()=>panes.forEach((_,i)=>loadImage(i,4000))},"Load detail"));root.append(toolbar);
@@ -60,7 +62,10 @@ function candidateCard(c,readOnly){
  const radio=el("input",{type:"radio",name:"master",value:c.id,checked:chosen,disabled:readOnly||!eligible(c)||!c.available,onchange:()=>selectMaster(c.id)});
  const card=el("article",{class:"candidate"+(chosen?" chosen":""),"data-candidate":c.id},
   el("label",{},radio,el("span",{},c.label||c.id),el("span",{class:"badge"},eligible(c)?`${c.members.length} member(s)`:`Comparison only · ${c.role}`)),
-  el("p",{class:"muted"},c.evidence||"No additional comparison evidence supplied."));
+  el("p",{class:"muted"},c.evidence||"Prepared candidate; review its source evidence below."));
+ if(c.comparison)card.append(el("p",{class:"notice"},c.comparison));
+ if(c.basis)card.append(el("p",{class:"muted"},"Basis: "+c.basis));
+ if(c.source_record)card.append(el("details",{},el("summary",{},"Original candidate evidence"),el("pre",{class:"source-record"},JSON.stringify(c.source_record,null,2))));
  if(!c.available)card.append(el("p",{class:"notice"},c.unavailable_reason));
  const buttons=el("div",{class:"choices"});
  for(let i=0;i<2;i++)buttons.append(el("button",{onclick:()=>choosePane(i,c.id)},`Compare in ${i?"B":"A"}`));

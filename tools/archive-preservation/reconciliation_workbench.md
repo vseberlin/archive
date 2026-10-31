@@ -61,7 +61,7 @@ and complete representations. This tool does not infer completeness, object
 identity, or quality from a filename, extension, resolution, similarity score,
 or museum-digital membership.
 
-### Direct prepared CSV input
+### Direct prepared CSV input (read-only)
 
 Without a manifest, the tool reads Bibliothek/Collection-591-style files:
 
@@ -77,10 +77,66 @@ the preparation already established a complete representation. Elements sources
 are automatically guarded. Other external source roots require the explicit
 manifest below. No unmanifested file scanning occurs.
 
-Existing choices are imported as the initial review state without rewriting
-the original CSV. Once this workbench saves decisions, its readable file is the
-authority for this interface. Changes to the legacy CSV will invalidate an open
-form but will **not** silently replace saved consolidated decisions.
+CSV-only imports are always read-only, including units with no visible completion
+receipt. Existing choices are imported for inspection without rewriting their
+CSV. Editing requires the explicit adoption manifest below. Object descriptions,
+`object_url`/`md_url`, candidate `basis`/`match_basis`, and
+`comparison`/`quality_note` are retained and displayed; the full original rows
+remain expandable evidence. A known wrong attachment is not silently reduced
+to an empty generic evidence field.
+
+### Adopt Bibliothek or Collection 591 explicitly
+
+For an unfinished unit whose handoff permits continued reconciliation, place
+this small `reconciliation-input.json` in its existing work root:
+
+```json
+{
+  "format": "archive-reconciliation-1",
+  "csv_profile": "bibliothek",
+  "read_only": false,
+  "completion_receipts": ["/absolute/existing/final-unit/00_MANIFESTS/accession-completion.json"]
+}
+```
+
+Use `"collection-591"` for the other supported CSV profile. The profile reads
+the existing objects, candidates and decisions; do not supply a second object
+list or `initial_decisions`. Preserve the actual unit receipt paths. Conventional
+receipts in the work root freeze editing even when this manifest says writable.
+Omit `read_roots` to retain automatic Elements protection, or explicitly list
+all approved external evidence roots. A manifest never authorizes reopening an
+already completed unit.
+
+After the first successful save:
+
+- `reconciliation-decisions.jsonl` is the single decision authority.
+- `master-decisions.csv` and `candidate-dispositions.csv` are derived consumer
+  projections, refreshed on save or `--refresh-projection`. They preserve the
+  consumer's field names, candidate order, note/actor/time, and disposition rules.
+  Bibliothek marks ineligible candidates excluded; Collection 591 retains its
+  existing redundant/unresolved semantics. These differences are intentional.
+- Both legacy screens refuse writes when consolidated authority is present.
+- Bibliothek accession `preflight` and Collection 591 `build_plan` check that
+  both CSVs agree with JSONL and that source stamps still match. They reject
+  unresolved Masters, stale/missing projections and unsupported profiles. A
+  second revision check rejects changes during planning. The existing plans
+  retain the authority and adoption manifest as evidence and stamp those inputs.
+- An interruption after JSONL replacement leaves decisions saved, but blocks
+  accession until projections are refreshed. No check silently repairs files.
+
+Deploy the modified consumer/legacy-screen files together with the shared
+workbench module in this repository layout (or provide its tools directory on
+the deployed Python path). A source commit alone does not update workstation
+scripts. Stop the old writer before adoption. Never manually alternate edits
+between JSONL and the CSV projections.
+
+This handoff does **not** relax each existing accession script's approved scope:
+Bibliothek still requires its specific MD acceptance receipt, and Collection
+591 still requires the approved MD representations, documentation decisions and
+metadata evidence. New choices that do not meet those existing requirements are
+refused by accession. Neither profile maps new metadata choices into the legacy
+accession model; unsupported metadata handoffs fail before saving. Other units
+need their own explicit checked consumer mapping before adoption.
 
 ### Explicit input manifest
 
@@ -146,7 +202,7 @@ than silently creating or discarding decisions.
 
 Set `read_only: true` for completed units. List their actual existing completion
 receipt paths; receipt presence freezes editing even if its contents are invalid.
-`accession-receipt.json` or `publication.json` directly in the work root also
+`accession-receipt.json`, `accession-completion.json` or `publication.json` directly in the work root also
 freezes edits. The workbench cannot discover unknown external completion
 locations: a unit mapping must declare them correctly. An input file is not
 permission to reopen a completed archive.
@@ -184,6 +240,10 @@ The tool writes only these fixed names in the approved work root:
   non-authorizing decisions.
 - `reconciliation-dispositions.csv`: rebuildable member-level projection.
 - `.reconciliation.lock`: interprocess lock for cooperating writers.
+
+Explicitly adopted CSV profiles additionally maintain the existing
+`master-decisions.csv` and `candidate-dispositions.csv` as checked projections,
+as described above. Unadopted CSV imports never write them.
 
 It retains no new history database, schema, generations, or journal. JSONL is
 replaced atomically under thread/file locks. A revision over prepared inputs and

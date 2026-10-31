@@ -6,12 +6,16 @@ import io
 import json
 import re
 import shutil
+import sys
 from collections import Counter
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from prepare_591 import ROOT, SOURCE, guard, read_csv
 from workbench_591 import Review, atomic
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'tools/archive-preservation'))
+from reconciliation_workbench import checked_legacy_handoff
 
 TARGET = Path('/mnt/volume/iss-archive/units/aeb')
 DIRS = ('00_MANIFESTS', 'masters', 'export', 'metadata', 'documents', 'db-restore')
@@ -105,6 +109,7 @@ def source_row(**values):
 
 
 def build_plan():
+    consolidated_revision = checked_legacy_handoff(ROOT, 'collection-591')
     mount = guard()
     require(TARGET.parent.resolve() == Path('/mnt/volume/iss-archive/units'), 'Unexpected archive path')
     require(not TARGET.exists() and not TARGET.is_symlink(), 'AEB output already exists; refusing overwrite')
@@ -230,7 +235,11 @@ def build_plan():
                                   preservation_basis='One unchanged original selected by saved documentation decision.',
                                   drain_state='retain_mixed_project_source' if document['relationship'] == 'mixed' else 'retain_source_no_deletion_authority',
                                   notes='Proposed destination only. Relationship: ' + document['relationship'] + '. ' + document['description']))
-    for name, relative in EVIDENCE.items():
+    evidence = dict(EVIDENCE)
+    if (ROOT / 'reconciliation-decisions.jsonl').exists():
+        evidence['reconciliation-decisions.jsonl'] = '00_MANIFESTS/reconciliation-decisions.jsonl'
+        evidence['reconciliation-input.json'] = 'metadata/reconciliation-input.json'
+    for name, relative in evidence.items():
         size, mtime = checked_input(ROOT / name)
         snapshots[str(ROOT / name)] = [size, mtime]
         files.append(file_row(relative_path=relative, file_role='reconciliation_evidence', title=name,
@@ -265,6 +274,8 @@ def build_plan():
                    evidence_files=sum(r['file_role'] == 'reconciliation_evidence' for r in files),
                    planned_previews=109, source_disposition_rows=122, protected_usb_source_rows=13,
                    planned_catalogue_rows=len(files) + len(derivatives), copied_bytes=payload_bytes)
+    require(checked_legacy_handoff(ROOT, 'collection-591') == consolidated_revision,
+            'Consolidated decisions changed during accession planning')
     return dict(unit='aeb', collection='591', target=str(TARGET), structure=list(DIRS), summary=summary,
                 objects=objects, files=files, derivatives=derivatives, documents=documents,
                 source_disposition=sources, generated_payloads=generated, controls=CONTROLS,

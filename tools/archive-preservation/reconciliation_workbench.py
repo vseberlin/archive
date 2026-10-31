@@ -138,9 +138,16 @@ class Workbench:
             config = json.loads(self.evidence(manifest.name))
             require(config.get("format") == FORMAT, "Unsupported reconciliation input format")
             require(isinstance(config.get("read_only"), bool), "Input must explicitly declare read_only")
-            self.config = config
-            self.objects = config["objects"]
-            self.initial = config.get("initial_decisions", [])
+            if "csv_profile" in config:
+                require(config["csv_profile"] in ("bibliothek", "collection-591"), "Unsupported CSV handoff profile")
+                require("objects" not in config and "initial_decisions" not in config,
+                        "CSV adoption must use the unit's prepared evidence and existing decisions")
+                base, self.objects, self.initial = self.load_csv(config["csv_profile"])
+                self.config = {**base, **config}
+            else:
+                self.config = config
+                self.objects = config["objects"]
+                self.initial = config.get("initial_decisions", [])
         else:
             self.config, self.objects, self.initial = self.load_csv()
         require(isinstance(self.objects, list) and self.objects, "No prepared objects")
@@ -183,7 +190,9 @@ class Workbench:
                     path = Path(member.get("path", ""))
                     require(path.is_absolute(), "Member paths must be absolute")
                     require(str(path) not in seen, "Duplicate representation member")
-                    require(path not in {self.root / n for n in (DECISIONS, PROJECTION, ".reconciliation.lock")},
+                    require(path not in {self.root / n for n in (
+                        DECISIONS, PROJECTION, ".reconciliation.lock",
+                        "master-decisions.csv", "candidate-dispositions.csv")},
                             "Source member overlaps a workbench output")
                     seen.add(str(path))
                     self.checked_scope(path)
@@ -201,21 +210,34 @@ class Workbench:
             require(path.is_absolute(), "Completion receipt paths must be absolute")
             self.receipts.append(path)
         # These conventional unit receipts freeze editing whenever present, even if malformed.
-        self.receipts += [self.root / "accession-receipt.json", self.root / "publication.json"]
+        self.receipts += [self.root / name for name in (
+            "accession-receipt.json", "accession-completion.json", "publication.json")]
         self.frozen = bool(self.config.get("read_only")) or any(p.exists() or p.is_symlink() for p in self.receipts)
 
-    def load_csv(self):
+    def load_csv(self, profile=None):
         """Read simple Bibliothek/591-style prepared evidence, never legacy DBs."""
         rows = self.csv("objects.csv")
         candidates = self.csv("candidates.csv")
         initial = self.csv("master-decisions.csv", optional=True)
+        self.legacy_rows = initial
+        self.legacy_candidates = candidates
+        if profile:
+            key = "object_key" if profile == "bibliothek" else "md_object_id"
+            required = {key, "selected_candidate_id", "decision", "actor", "decided_at", "note", "deletion_authorized"}
+            require(initial and all(required <= row.keys() for row in initial), "Incomplete legacy decision schema")
+            require(all(row.get(key) for row in rows + candidates + initial), "CSV profile/object keys disagree")
+            require(len(initial) == len(rows) and {r[key] for r in initial} == {r[key] for r in rows},
+                    "Legacy decisions must cover exactly the prepared objects")
+            require(bool(candidates), "CSV handoff requires prepared candidates")
         require(not (self.root / "master-candidates.csv").exists(),
                 "This unit needs an explicit reconciliation-input.json adapter; refusing to guess its representation rules")
         objects = []
         for row in rows:
             oid = row.get("object_key") or row.get("md_object_id")
             obj = {"id": oid, "title": row.get("title", ""), "inventory": row.get("inventory", ""),
-                   "provenance": row.get("md_url", ""), "candidates": [], "metadata": []}
+                   "description": row.get("description", ""),
+                   "provenance": row.get("object_url") or row.get("md_url", ""),
+                   "source_record": dict(row), "candidates": [], "metadata": []}
             for c in candidates:
                 if (c.get("object_key") or c.get("md_object_id")) != oid:
                     continue
@@ -228,13 +250,16 @@ class Workbench:
                     m["pages"] = int(m.get("pages") or 1)
                 obj["candidates"].append({"id": c["candidate_id"], "label": c.get("label") or c["candidate_id"],
                     "eligible": flag(c["eligible"]), "complete": flag(c["eligible"]),
-                    "role": c.get("role", "candidate"), "evidence": c.get("evidence", ""), "members": members})
+                    "role": c.get("role", "candidate"), "evidence": c.get("evidence", ""),
+                    "basis": c.get("basis") or c.get("match_basis", ""),
+                    "comparison": c.get("comparison") or c.get("quality_note", ""),
+                    "source_record": dict(c), "members": members})
             objects.append(obj)
         known = {o["id"] for o in objects}
         require(all((c.get("object_key") or c.get("md_object_id")) in known for c in candidates),
                 "Candidate belongs to an unknown object")
         require(not any(flag(r.get("deletion_authorized")) for r in initial), "Existing decisions carry deletion authority")
-        config = {"title": self.root.name, "read_only": False,
+        config = {"title": self.root.name, "read_only": True,
                   "read_roots": [str(ELEMENTS)] if any(
                       Path(m["path"]).is_relative_to(ELEMENTS)
                       for o in objects for c in o["candidates"] for m in c["members"]) else []}
@@ -341,6 +366,53 @@ class Workbench:
         expected = self.projection(decisions)
         if not path.exists() or path.read_bytes() != expected:
             atomic(path, expected)
+        for name, (rows, fields) in self.legacy_projection(decisions).items():
+            path = self.root / name
+            require(not path.is_symlink(), "Unsafe legacy handoff file")
+            payload = csv_payload(rows, fields)
+            if not path.exists() or path.read_bytes() != payload:
+                atomic(path, payload)
+
+    def legacy_projection(self, decisions):
+        """The two adopted consumers retain their exact existing CSV meanings."""
+        profile = self.config.get("csv_profile")
+        if not profile:
+            return {}
+        key = "object_key" if profile == "bibliothek" else "md_object_id"
+        rows = []
+        for original in self.legacy_rows:
+            row = dict(original)
+            choice = decisions[row[key]]
+            require(not choice["metadata_choices"], "Legacy accession has no metadata-choice mapping")
+            row.update(selected_candidate_id=choice["selected_candidate_id"],
+                       decision="selected_master" if choice["selected_candidate_id"] else "unresolved",
+                       note=choice["note"], actor=choice["actor"], decided_at=choice["decided_at"],
+                       deletion_authorized="false")
+            rows.append(row)
+        dispositions = []
+        for candidate in self.legacy_candidates:
+            oid = candidate[key]
+            selected = decisions[oid]["selected_candidate_id"]
+            status = ("selected_master" if selected == candidate["candidate_id"] else "redundant") if selected else "unresolved"
+            if profile == "bibliothek" and candidate["eligible"] != "true":
+                status = "excluded"
+            members = json.loads(candidate["members_json"])
+            paths = [m["path" if profile == "bibliothek" else "source_path"] for m in members]
+            dispositions.append({key: oid, "candidate_id": candidate["candidate_id"], "disposition": status,
+                                 "source_paths_json": json.dumps(paths), "deletion_authorized": "false"})
+        return {"master-decisions.csv": (rows, list(rows[0])),
+                "candidate-dispositions.csv": (dispositions, list(dispositions[0]))}
+
+    def legacy_agrees(self, decisions):
+        for name, (expected, _) in self.legacy_projection(decisions).items():
+            path = self.root / name
+            require(not path.is_symlink(), "Unsafe legacy handoff file")
+            if not path.exists():
+                return False
+            with path.open(encoding="utf-8-sig", newline="") as handle:
+                if list(csv.DictReader(handle)) != expected:
+                    return False
+        return True
 
     def snapshot(self, oid=None):
         with self.lock:
@@ -370,6 +442,8 @@ class Workbench:
             require(not projection.is_symlink(), "Unsafe projection file")
             return {"title": self.config.get("title", self.root.name), "objects": records, "revision": revision,
                     "read_only": self.frozen, "actor": self.actor,
+                    "legacy_handoff": self.config.get("csv_profile"),
+                    "legacy_handoff_agrees": self.legacy_agrees(decisions),
                     "projection_agrees": projection.exists() and projection.read_bytes() == self.projection(decisions)}
 
     def save(self, payload):
@@ -393,6 +467,7 @@ class Workbench:
             row.update(actor=self.actor, decided_at=datetime.now(timezone.utc).isoformat(), deletion_authorized=False)
             decisions[oid] = row
             self.validate(decisions)
+            self.legacy_projection(decisions)  # Refuse an unsupported handoff before committing.
             # Essential provenance and member ordering travel with the readable choice.
             for object_id, saved in decisions.items():
                 selected = self.by_candidate.get(saved["selected_candidate_id"])
@@ -440,6 +515,41 @@ class Workbench:
             require(not as_text or path.suffix.lower() == ".pdf", "Text comparison requires a PDF")
             with RENDER_LIMIT:
                 return render(str(path), member["size_bytes"], member["mtime_ns"], page, edge, as_text)
+
+
+def checked_legacy_handoff(root, profile):
+    """Read-only gate used by the existing accession consumers after adoption.
+
+    JSONL is authority. Both consumer CSVs must be its current projections;
+    incomplete recovery or an independent legacy edit blocks accession planning.
+    No completion, source or archive mutation is authorized by this check.
+    """
+    root = Path(root)
+    path = root / DECISIONS
+    if not path.exists() and not path.is_symlink():
+        return False  # Original, unadopted unit workflow is unchanged.
+    app = Workbench(root, "Accession handoff check")
+    # A successful consolidated save has already created this lock. The check
+    # opens it read-only and never creates state in an accession --check path.
+    fd = os.open(app.root / ".reconciliation.lock", os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "r") as handle:
+        fcntl.flock(handle, fcntl.LOCK_SH)
+        try:
+            app.load()
+            require(app.config.get("csv_profile") == profile,
+                    "No explicit consolidated handoff mapping for this accession consumer")
+            decisions, revision = app.read_decisions()
+            require(all(r["selected_candidate_id"] for r in decisions.values()), "Unresolved Master decisions")
+            require(app.legacy_agrees(decisions),
+                    "Consolidated decisions and accession CSVs disagree; refresh projections before accession")
+            for candidate in app.by_candidate.values():
+                for member in candidate["members"]:
+                    app.checked_member(member)
+            app.load()
+            require(app.read_decisions()[1] == revision, "Handoff evidence changed during validation")
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+    return revision
 
 
 @lru_cache(maxsize=12)
