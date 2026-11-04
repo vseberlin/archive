@@ -79,6 +79,56 @@ museum-digital.
 `people` is off by default: a person in similar photos is weak evidence that
 the same person is in this one.
 
+## face_index.py — person proposals and same-person clusters
+
+Face embeddings are biometric data (GDPR Art. 9). The index, crops and outputs
+are internal review evidence: never publish them, never offer public face
+search.
+
+Additional approval needed: `opencv-python-headless` (sface backend) or
+`insightface` + `onnxruntime` (arcface backend), and `faces.sqlite` plus
+`crops/` under the same work root.
+
+Model files (not committed; place in `--models`, default `./models`):
+
+```sh
+mkdir -p models && cd models
+curl -LO https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+curl -LO https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx
+```
+
+Backends: `sface` (OpenCV YuNet + SFace, Apache-2.0, default) and `arcface`
+(InsightFace `buffalo_l`/`buffalo_s`; more accurate, but its pretrained
+weights are licensed for non-commercial research only — check before use).
+
+```sh
+$PY face_index.py --work-root $W index-reference --capture $CAP
+$PY face_index.py --work-root $W evaluate
+$PY face_index.py --work-root $W index-new --manifest new-images.csv
+$PY face_index.py --work-root $W propose --allowlist public-figures.csv --threshold 0.45
+$PY face_index.py --work-root $W cluster --allowlist public-figures.csv
+```
+
+How it decides:
+
+- **Seeds**: a reference image with exactly one face ≥ `--min-face-px` (40)
+  and exactly one person linked by a *depicted* event (`--depicted-events`,
+  regex on `event_type_name`; photographers/creators are excluded).
+- **Propose**: each new face is matched against all seeds (best similarity per
+  person). A name is proposed only if similarity ≥ threshold, the lead over the
+  second person ≥ `--margin`, and the person is on `--allowlist` (CSV column
+  `name`). A confident match to someone not on the allowlist is reported as
+  `withheld`, without a name.
+- **Cluster**: mutual-kNN graph (top `--k`, similarity ≥ `--link`), connected
+  components ≥ `--min-size`. Faces from the same image are never linked. A
+  cluster gets a `name_hint` only from allowlisted seeds inside it.
+- **Evaluate**: leave-one-image-out over seeds of people with ≥ 2 seeds; prints
+  precision/coverage per threshold. Pick the threshold from this sweep on your
+  own material, not from defaults.
+
+Allowlist: public figures and Personen der Zeitgeschichte only. Everyone else
+stays unnamed in clusters until a reviewer decides.
+
 ## Hardware
 
 ViT-B-32 on an old 4-core CPU: roughly 3–10 images/s for embedding, so the
