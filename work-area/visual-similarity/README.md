@@ -135,3 +135,28 @@ ViT-B-32 on an old 4-core CPU: roughly 3–10 images/s for embedding, so the
 11,170-record reference is an overnight job, run once. kNN itself is a
 11,170 × 512 matrix product, effectively instant. `--model pixel` is a
 dependency-free smoke-test backend, useless for real proposals.
+
+## vision_pilot.py — structured descriptions via `claude -p` (Pro subscription)
+
+Pilot for the Claude vision route without an API key: each image is downscaled
+to `--max-side` (1568) under the work root, one headless Claude Code call reads
+it (Read tool only, empty working directory) and returns JSON validated against
+the schema in the script: visible text, German description, tags, place
+(candidate id or abstain, with quoted evidence), date range with evidence.
+
+Calls draw from the subscription usage limits. The run appends to
+`vision-<name>.jsonl`, skips finished images, and exits with code 3 on a usage
+limit; restart it later. Images leave the workstation: keep rights- or
+GDPR-sensitive units out of the manifest.
+
+```sh
+claude login   # once, with the Pro account
+$PY vision_pilot.py describe --work-root $W --manifest pilot-400.csv --name eval400 \
+    --vocabulary tfa-schlagworte.txt
+$PY vision_pilot.py score --results $W/vision-eval400.jsonl --truth pilot-400-truth.csv
+```
+
+Manifest: `image_id,path` plus optional context `inventory,unit,konvolut,place_candidates`
+(`id|label; id|label`). For evaluation, never put the answers being scored into
+the context. Truth CSV: `image_id,tags(;-separated),place_id,year`. Compare
+`score` output against the same matched baselines as the kNN evaluation.
