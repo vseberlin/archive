@@ -1,0 +1,32 @@
+--- a/Archive-tools/reference_batch.py
++++ b/Archive-tools/reference_batch.py
+@@ -1740,7 +1740,7 @@
+         row.update(status=status, stop_reason=stop, discovery_rounds=discoveries,
+                    retrieval_continuations=continuations, unretrieved_candidates=deferred,
+                    coverage_incomplete=bool(deferred or pending or any(
+-                       r.get('access_issues') or r.get('retrieval_coverage',{}).get('omitted_deferred_count') or any(
++                       r.get('retrieval_coverage',{}).get('omitted_deferred_count') or any(
+                        c.get('omitted_by_record_limit') for c in r.get('retrieval_coverage',{}).get('record_limits',[])) for r in row['rounds'])),
+                    uninspected_candidates=pending, evidence_history=history, sources_used=sorted(used), queries_used=query_count,
+                    research_routing=item['research_routing'])
+@@ -1877,11 +1877,6 @@
+                     require(saved['queries'] == queries, 'Retrieval inputs changed; prepare a new prefix')
+                     pool, documents, issues = saved['pool'], saved['documents'], saved['issues']
+                     deferred = saved.get('deferred_candidates',[])
+-                    # These exact media URLs were observed when this checkpoint was
+-                    # created. Restore them for CDN continuation after a restart;
+-                    # Fetcher.validate still enforces public HTTP(S) addresses.
+-                    self.fetcher.observed_media.update(u for c in deferred for u in
+-                        [c.get('candidate_image_url'), *c.get('image_variants',[])] if u)
+                     r.update(saved['search'])
+                     used.update(r['sources_used']); budget[0] = r['queries_remaining']
+                     for c in pool:
+@@ -1972,7 +1967,7 @@
+         row['retrieval_continuations'] = continuations
+         row['unretrieved_candidates'] = deferred
+         row['coverage_incomplete'] = bool(deferred or pending or any(
+-            r.get('access_issues') or r.get('retrieval_coverage',{}).get('omitted_deferred_count') or any(
++            r.get('retrieval_coverage',{}).get('omitted_deferred_count') or any(
+             c.get('omitted_by_record_limit') for c in r.get('retrieval_coverage',{}).get('record_limits',[])) for r in row['rounds']))
+         row['uninspected_candidates'] = pending
+         if final:

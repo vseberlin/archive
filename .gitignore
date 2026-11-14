@@ -68,3 +68,6 @@ tools/archive-preservation/copyhash
 *.orig
 *.swp
 *~
+
+# Explicitly approved public benchmark measurements (no raw archive data)
+!/docs/reference-v12-building-benchmark-20261114.json

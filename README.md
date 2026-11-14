@@ -93,3 +93,9 @@ The existing `tools/archive-preservation/requirements.txt` belongs to the legacy
 harness; it is not a complete installation recipe for every unit script.
 Avantmedia's tests depend on local scan evidence, which is intentionally absent
 from Git. Do not run accession or drain executors as a test.
+
+The [six-photo V11/V12 comparison report](docs/reference-v12-building-benchmark-20261114.md) includes
+per-photo benchmark results, evidence-quality limitations, reproduction commands
+and the exact pilot-source reconstruction patch. This report and its selected
+measurements are an explicitly authorized publication exception to the runtime
+data boundary; private images and raw logs remain excluded.

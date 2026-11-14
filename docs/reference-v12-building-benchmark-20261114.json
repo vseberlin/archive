@@ -1,0 +1,563 @@
+{
+  "description": "User-authorized publication of the completed six-photo pilot; selected measurements, not raw research receipts.",
+  "date": "2026-11-14",
+  "baseline_commit": "52ad782ce4275c85f1a1fe1829755f6382d54e0c",
+  "release_commit": "e55c04f306f65c4d3fe6fb5e3e378f0c3ac3930c",
+  "runner_sha256": {
+    "v11": "d6f1f1ef14493f100cb4f3d8489c86b9f49f96d1938f45b99d0ad15ab11434a1",
+    "v12": "9093a7257de2123503328212a9889cc5bd77ae08b00ab408a7cdbfb825582d15"
+  },
+  "release_runner_sha256": "fd78c03b30576961e42c5c2b427ffffaa558b54e9022631e99fd9798236e38f9",
+  "settings": {
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "mode": "adaptive",
+    "blind_pilot": true,
+    "max_rounds": 2,
+    "max_item_tokens": 500000
+  },
+  "max_average_tokens": 500000,
+  "native_crops": true,
+  "eligible_primary_buildings_count": 13,
+  "cohort": [
+    {
+      "case": 1,
+      "filename": "C09-T211_001.tif",
+      "expected": {
+        "identity": "Franziskaner-Klosterkirche / Graues Kloster",
+        "location": "Klosterstraße 73A, Berlin-Mitte",
+        "scorable": true,
+        "source": "https://denkmaldatenbank.berlin.de/daobj.php?obj_dok_nr=09011276",
+        "basis": "Distinctive ruined polygonal Gothic choir and sidewall geometry; official site record. Exposure date unknown."
+      }
+    },
+    {
+      "case": 2,
+      "filename": "ELB_13.tif",
+      "expected": {
+        "identity": "Pfefferberg",
+        "location": "Schönhauser Allee 176, Berlin",
+        "scorable": true,
+        "source": "https://industriekultur.berlin/ort/pfefferberg-brauerei/",
+        "basis": "Previously visually checked reference: arched ground floor, urn parapet and facade geometry; source captions. Exposure date unknown."
+      }
+    },
+    {
+      "case": 3,
+      "filename": "M02_T009_002.tif",
+      "expected": {
+        "identity": "Schering building",
+        "location": "Müllerstraße 170–171, Berlin-Wedding",
+        "scorable": true,
+        "source": "https://www.moderne-regional.de/treppen-haeuser/",
+        "basis": "Previously visually checked historic reference: projecting concrete grid, entrance and neighbouring facade. Exposure date unknown."
+      }
+    },
+    {
+      "case": 4,
+      "filename": "M02_T009_001.tif",
+      "expected": {
+        "identity": null,
+        "location": null,
+        "scorable": false,
+        "basis": "Partial Schering hypothesis remains provisional; excluded from identity accuracy denominator."
+      }
+    },
+    {
+      "case": 5,
+      "filename": "ELB_31.tif",
+      "expected": {
+        "identity": null,
+        "location": null,
+        "scorable": false,
+        "basis": "Courtyard has no independent identification; assess evidence and new leads, not assumed identity."
+      }
+    },
+    {
+      "case": 6,
+      "filename": "ELB_46.tif",
+      "expected": {
+        "identity": null,
+        "location": null,
+        "scorable": false,
+        "basis": "Passage has no independent identification; assess evidence and new leads, not assumed identity."
+      }
+    }
+  ],
+  "totals": {
+    "v11": {
+      "completed": 6,
+      "tokens": 2726453,
+      "queries": 60,
+      "fetched_pages": 9,
+      "downloaded_images": 42,
+      "inspected_images": 34,
+      "document_records": 7,
+      "supported_field_count": 3,
+      "tentative_field_count": 3,
+      "unique_document_pages": 7,
+      "unique_images_across_cohort": 42
+    },
+    "v12": {
+      "completed": 6,
+      "tokens": 2496256,
+      "queries": 47,
+      "fetched_pages": 15,
+      "downloaded_images": 66,
+      "inspected_images": 52,
+      "document_records": 20,
+      "supported_field_count": 3,
+      "tentative_field_count": 1,
+      "unique_document_pages": 14,
+      "unique_images_across_cohort": 66
+    }
+  },
+  "trials": [
+    {
+      "case": 1,
+      "file": "C09-T211_001.tif",
+      "version": "v11",
+      "status": "compared",
+      "stop_reason": "identified",
+      "tokens": 199175,
+      "queries": 5,
+      "discovery_rounds": 1,
+      "comparison_batches": 1,
+      "retrieval_continuations": 0,
+      "downloaded_images": 5,
+      "inspected_images": 5,
+      "document_records": 1,
+      "images_with_captions": 5,
+      "catalogue_field_types": [
+        "inventory_number"
+      ],
+      "supported_field_count": 1,
+      "tentative_field_count": 1,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": null
+    },
+    {
+      "case": 1,
+      "file": "C09-T211_001.tif",
+      "version": "v12",
+      "status": "compared",
+      "stop_reason": "identified",
+      "tokens": 250097,
+      "queries": 5,
+      "discovery_rounds": 1,
+      "comparison_batches": 1,
+      "retrieval_continuations": 0,
+      "downloaded_images": 6,
+      "inspected_images": 6,
+      "document_records": 2,
+      "images_with_captions": 6,
+      "catalogue_field_types": [
+        "inventory_number",
+        "title"
+      ],
+      "supported_field_count": 1,
+      "tentative_field_count": 1,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": 0
+    },
+    {
+      "case": 2,
+      "file": "ELB_13.tif",
+      "version": "v11",
+      "status": "compared",
+      "stop_reason": "identified",
+      "tokens": 464323,
+      "queries": 8,
+      "discovery_rounds": 2,
+      "comparison_batches": 2,
+      "retrieval_continuations": 0,
+      "downloaded_images": 6,
+      "inspected_images": 6,
+      "document_records": 1,
+      "images_with_captions": 6,
+      "catalogue_field_types": [
+        "inventory_number"
+      ],
+      "supported_field_count": 2,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": null
+    },
+    {
+      "case": 2,
+      "file": "ELB_13.tif",
+      "version": "v12",
+      "status": "compared",
+      "stop_reason": "identified",
+      "tokens": 260928,
+      "queries": 4,
+      "discovery_rounds": 1,
+      "comparison_batches": 1,
+      "retrieval_continuations": 0,
+      "downloaded_images": 8,
+      "inspected_images": 6,
+      "document_records": 4,
+      "images_with_captions": 6,
+      "catalogue_field_types": [
+        "artist"
+      ],
+      "supported_field_count": 2,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 2,
+      "remaining_url_candidates": 0
+    },
+    {
+      "case": 3,
+      "file": "M02_T009_002.tif",
+      "version": "v11",
+      "status": "compared",
+      "stop_reason": "round_limit",
+      "tokens": 501013,
+      "queries": 12,
+      "discovery_rounds": 2,
+      "comparison_batches": 2,
+      "retrieval_continuations": 0,
+      "downloaded_images": 4,
+      "inspected_images": 4,
+      "document_records": 1,
+      "images_with_captions": 3,
+      "catalogue_field_types": [
+        "material"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": null
+    },
+    {
+      "case": 3,
+      "file": "M02_T009_002.tif",
+      "version": "v12",
+      "status": "compared",
+      "stop_reason": "round_limit",
+      "tokens": 414995,
+      "queries": 10,
+      "discovery_rounds": 2,
+      "comparison_batches": 2,
+      "retrieval_continuations": 0,
+      "downloaded_images": 1,
+      "inspected_images": 1,
+      "document_records": 6,
+      "images_with_captions": 1,
+      "catalogue_field_types": [
+        "inventory_number"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": 0
+    },
+    {
+      "case": 4,
+      "file": "M02_T009_001.tif",
+      "version": "v11",
+      "status": "compared",
+      "stop_reason": "usage_limit",
+      "tokens": 552039,
+      "queries": 11,
+      "discovery_rounds": 2,
+      "comparison_batches": 3,
+      "retrieval_continuations": 0,
+      "downloaded_images": 16,
+      "inspected_images": 8,
+      "document_records": 1,
+      "images_with_captions": 16,
+      "catalogue_field_types": [
+        "material",
+        "title"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 2,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": null
+    },
+    {
+      "case": 4,
+      "file": "M02_T009_001.tif",
+      "version": "v12",
+      "status": "compared",
+      "stop_reason": "usage_limit",
+      "tokens": 543367,
+      "queries": 10,
+      "discovery_rounds": 2,
+      "comparison_batches": 4,
+      "retrieval_continuations": 1,
+      "downloaded_images": 28,
+      "inspected_images": 16,
+      "document_records": 4,
+      "images_with_captions": 14,
+      "catalogue_field_types": [
+        "material"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": 34
+    },
+    {
+      "case": 5,
+      "file": "ELB_31.tif",
+      "version": "v11",
+      "status": "compared",
+      "stop_reason": "retrieval_failed",
+      "tokens": 479622,
+      "queries": 12,
+      "discovery_rounds": 2,
+      "comparison_batches": 2,
+      "retrieval_continuations": 0,
+      "downloaded_images": 2,
+      "inspected_images": 2,
+      "document_records": 1,
+      "images_with_captions": 2,
+      "catalogue_field_types": [
+        "inventory_number"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": null
+    },
+    {
+      "case": 5,
+      "file": "ELB_31.tif",
+      "version": "v12",
+      "status": "compared",
+      "stop_reason": "retrieval_failed",
+      "tokens": 510057,
+      "queries": 12,
+      "discovery_rounds": 2,
+      "comparison_batches": 2,
+      "retrieval_continuations": 0,
+      "downloaded_images": 4,
+      "inspected_images": 4,
+      "document_records": 2,
+      "images_with_captions": 3,
+      "catalogue_field_types": [
+        "artist",
+        "inventory_number",
+        "material",
+        "title"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": 0
+    },
+    {
+      "case": 6,
+      "file": "ELB_46.tif",
+      "version": "v11",
+      "status": "compared",
+      "stop_reason": "usage_limit",
+      "tokens": 530281,
+      "queries": 12,
+      "discovery_rounds": 2,
+      "comparison_batches": 3,
+      "retrieval_continuations": 0,
+      "downloaded_images": 9,
+      "inspected_images": 9,
+      "document_records": 2,
+      "images_with_captions": 9,
+      "catalogue_field_types": [
+        "artist",
+        "inventory_number",
+        "material"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": null
+    },
+    {
+      "case": 6,
+      "file": "ELB_46.tif",
+      "version": "v12",
+      "status": "compared",
+      "stop_reason": "usage_limit",
+      "tokens": 516812,
+      "queries": 6,
+      "discovery_rounds": 1,
+      "comparison_batches": 5,
+      "retrieval_continuations": 2,
+      "downloaded_images": 19,
+      "inspected_images": 19,
+      "document_records": 2,
+      "images_with_captions": 19,
+      "catalogue_field_types": [
+        "artist",
+        "inventory_number",
+        "material"
+      ],
+      "supported_field_count": 0,
+      "tentative_field_count": 0,
+      "remaining_downloaded_candidates": 0,
+      "remaining_url_candidates": 0
+    }
+  ],
+  "scoring": {
+    "method": "Analyst inspection of final guarded fields against predeclared source-checked labels; not model confidence. No user metadata adoption.",
+    "versions": {
+      "v11": {
+        "known_identity_cases": 3,
+        "correct_supported": 2,
+        "unresolved_known": 1,
+        "false_supported": 0,
+        "identity_accuracy": 0.6666666666666666,
+        "unscored_cases": 3
+      },
+      "v12": {
+        "known_identity_cases": 3,
+        "correct_supported": 2,
+        "unresolved_known": 1,
+        "false_supported": 0,
+        "identity_accuracy": 0.6666666666666666,
+        "unscored_cases": 3
+      }
+    },
+    "rows": [
+      {
+        "case": 1,
+        "version": "v11",
+        "identity_scored": true,
+        "correct_supported_identity": true,
+        "false_supported_identity": false,
+        "reason": "Independent expected identity matched."
+      },
+      {
+        "case": 1,
+        "version": "v12",
+        "identity_scored": true,
+        "correct_supported_identity": true,
+        "false_supported_identity": false,
+        "reason": "Independent expected identity matched."
+      },
+      {
+        "case": 2,
+        "version": "v11",
+        "identity_scored": true,
+        "correct_supported_identity": true,
+        "false_supported_identity": false,
+        "reason": "Independent expected identity matched."
+      },
+      {
+        "case": 2,
+        "version": "v12",
+        "identity_scored": true,
+        "correct_supported_identity": true,
+        "false_supported_identity": false,
+        "reason": "Independent expected identity matched."
+      },
+      {
+        "case": 3,
+        "version": "v11",
+        "identity_scored": true,
+        "correct_supported_identity": false,
+        "false_supported_identity": false,
+        "reason": "Known Schering building remained unresolved."
+      },
+      {
+        "case": 3,
+        "version": "v12",
+        "identity_scored": true,
+        "correct_supported_identity": false,
+        "false_supported_identity": false,
+        "reason": "Known Schering building remained unresolved."
+      },
+      {
+        "case": 4,
+        "version": "v11",
+        "identity_scored": false,
+        "correct_supported_identity": null,
+        "false_supported_identity": null,
+        "reason": "No independently established identity; excluded from accuracy denominator."
+      },
+      {
+        "case": 4,
+        "version": "v12",
+        "identity_scored": false,
+        "correct_supported_identity": null,
+        "false_supported_identity": null,
+        "reason": "No independently established identity; excluded from accuracy denominator."
+      },
+      {
+        "case": 5,
+        "version": "v11",
+        "identity_scored": false,
+        "correct_supported_identity": null,
+        "false_supported_identity": null,
+        "reason": "No independently established identity; excluded from accuracy denominator."
+      },
+      {
+        "case": 5,
+        "version": "v12",
+        "identity_scored": false,
+        "correct_supported_identity": null,
+        "false_supported_identity": null,
+        "reason": "No independently established identity; excluded from accuracy denominator."
+      },
+      {
+        "case": 6,
+        "version": "v11",
+        "identity_scored": false,
+        "correct_supported_identity": null,
+        "false_supported_identity": null,
+        "reason": "No independently established identity; excluded from accuracy denominator."
+      },
+      {
+        "case": 6,
+        "version": "v12",
+        "identity_scored": false,
+        "correct_supported_identity": null,
+        "false_supported_identity": null,
+        "reason": "No independently established identity; excluded from accuracy denominator."
+      }
+    ]
+  },
+  "first_discovery_controls": [
+    {
+      "case": 1,
+      "first_discovery_prompts_identical": true,
+      "fingerprints_identical": true
+    },
+    {
+      "case": 2,
+      "first_discovery_prompts_identical": true,
+      "fingerprints_identical": true
+    },
+    {
+      "case": 3,
+      "first_discovery_prompts_identical": true,
+      "fingerprints_identical": true
+    },
+    {
+      "case": 4,
+      "first_discovery_prompts_identical": true,
+      "fingerprints_identical": true
+    },
+    {
+      "case": 5,
+      "first_discovery_prompts_identical": true,
+      "fingerprints_identical": true
+    },
+    {
+      "case": 6,
+      "first_discovery_prompts_identical": true,
+      "fingerprints_identical": true
+    }
+  ],
+  "limitations": [
+    "One stochastic trial per version and input, not a population accuracy estimate.",
+    "Live web results may change; paired runs use identical settings but do not hold retrieved references fixed.",
+    "Only three independently identified inputs are scored for identity; other inputs are evidence-quality cases.",
+    "Initial launcher terminated while the first two blind calls continued. Both original calls completed with valid schemas and usage; receipts were reconstructed from their actual CLI outputs without issuing new calls. Exit codes and wall times are unavailable for those two recovered calls. Detached supervision resumed using the same fingerprints and cached completed calls.",
+    "Retrieval and model decisions in the adaptive pilot are unchanged; these follow-ups concern portal resume and coverage-status reporting.",
+    "Blind pilot removes initial routing; one V12 trial pursued the truck rather than the building.",
+    "Catalogue-field extraction includes noisy source fragments.",
+    "Source photographs and raw receipts are private, so the published package is not a standalone dataset."
+  ]
+}
