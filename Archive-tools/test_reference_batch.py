@@ -438,10 +438,6 @@ class RefactorTests(unittest.TestCase):
                 self.runner.native_details(self.item,[{'label':'base','x':0,'y':0,'w':.5,'h':.5}],'001')
             source.assert_not_called()
 
-    def test_crop_from_preview_is_never_upscaled(self):
-        paths=rb.make_crops(self.preview,[{'label':'detail','x':0,'y':0,'w':.5,'h':.5}],self.root/'detail')
-        with Image.open(paths[0]) as image:self.assertEqual(image.width,200)
-
     def test_completed_call_reused_and_orphan_attempt_retained(self):
         (self.root/'test-instructions.txt').write_text('Instructions')
         old=self.root/'test-001-discover-events.jsonl';old.write_text('{"type":"turn.started"}\n')
@@ -977,7 +973,9 @@ class ResearchQualityTests(unittest.TestCase):
             calls.append((stem,list(images)))
             if stem.endswith('adaptive'):
                 return self.adaptive_search([{'label':'sign','x':.1,'y':.1,'w':.4,'h':.4}])
-            return receipt(comparison(['R1'],more=False)) # unresolved must not stop early
+            value=comparison(['R1'],more=False)
+            value['next']={'reason':'Unresolved inscription','search_terms':['inscription facade'],'place_names':[]}
+            return receipt(value) # an actionable question survives needs_more_references=false
         pool=[{'image_sha256':'a','local_image':str(self.preview),'record_url':'https://museum.example/article'}]
         with patch.object(self.runner,'call',side_effect=call), \
              patch.object(self.runner,'research_input',return_value=(self.preview,'test')), \
@@ -1117,8 +1115,12 @@ class ReviewFixTests(unittest.TestCase):
     def test_document_only_round_skips_blind_call_and_can_support_bound_record(self):
         self.runner.settings['visual_verification']=True
         result=self.answer(('D1',));result['comparisons']=[];record={}
+        url='https://museum.example/photo-record'
+        self.item['document_bindings']=[{'object_id':self.item['object_id'],
+            'preview_sha256':self.item['preview_sha256'],'record_url':url,
+            'fields':['depicted_object'],'explanation':'Reviewer matched the photograph inventory mark to this record.'}]
         with patch.object(self.runner,'call',return_value=receipt(result)) as call:
-            out=self.runner.compare_verified(self.item,[],[],[],self.preview,'docs',record,[{'id':'D1'}])
+            out=self.runner.compare_verified(self.item,[],[],[],self.preview,'docs',record,[{'id':'D1','record_url':url}])
         self.assertEqual(call.call_count,1);self.assertTrue(record['visual_check']['skipped'])
         self.assertEqual(out['result']['depicted_object']['status'],'supported')
         self.runner.check_result(out['result'],[],[{'id':'D1'}])
@@ -1188,7 +1190,7 @@ class ReviewFixTests(unittest.TestCase):
              patch.object(self.runner.fetcher,'record',return_value=[]), \
              patch.object(self.runner,'gather',return_value=(pool,docs,[])):
             row=self.runner.process(self.item,1)
-        self.assertEqual(row['status'],'compared');self.assertEqual(row['stop_reason'],'round_limit')
+        self.assertEqual(row['status'],'compared');self.assertEqual(row['stop_reason'],'search_exhausted')
         self.assertEqual(row['comparison']['result']['depicted_object']['status'],'tentative')
         self.assertEqual(row['comparison']['raw_result']['depicted_object']['status'],'supported')
         self.assertIn('Objekt: vorläufig',row['comparison']['result']['summary'])
@@ -1226,5 +1228,203 @@ class ReviewFixTests(unittest.TestCase):
               {'id':'R3','record_url':'c','visual_verdict':'different'}]
         kept,_=rb.retain_evidence(result,refs,[])
         self.assertEqual([r['id'] for r in kept],['R2','R1'])
+
+class FollowupReviewTests(unittest.TestCase):
+    setUp = RefactorTests.setUp
+    answer = ReviewFixTests.answer
+    visual = ResearchQualityTests.visual
+    adaptive_search = ResearchQualityTests.adaptive_search
+
+    def binding(self, fields):
+        return {'object_id':self.item['object_id'], 'preview_sha256':self.item['preview_sha256'],
+                'record_url':'https://museum.example/record', 'fields':fields,
+                'explanation':'Reviewer matched the input inventory mark to this photograph record.'}
+
+    def test_generic_document_cannot_identify_rejected_or_unseen_candidate(self):
+        for verdict in ('different','insufficient','compatible'):
+            for cited in (['D1'],['R1','D1']):
+                with self.subTest(verdict=verdict,cited=cited):
+                    value=self.answer(cited);value['comparisons']=self.answer()['comparisons']
+                    out=receipt(value)
+                    refs=[{'id':'R1','record_url':'page'}];docs=[{'id':'D1','record_url':'page'}]
+                    rb.verify_assessments(out,self.visual(verdict)['result'],refs,docs)
+                    self.runner.check_result(out['result'],refs,docs)
+                    self.assertEqual(out['result']['depicted_object']['status'],'tentative')
+                    self.assertFalse(self.runner.goal_met(out['result']))
+        out=receipt(self.answer(['D1']))
+        rb.verify_assessments(out,{'comparisons':[]},[],[{'id':'D1','record_url':'page'}])
+        self.assertEqual(out['result']['depicted_object']['status'],'tentative')
+
+    def test_document_binding_is_field_and_input_specific(self):
+        binding=self.binding(['depicted_object'])
+        self.assertEqual(rb.document_bindings([binding],[self.item]),[binding])
+        for key,value in [('object_id','other'),('preview_sha256','changed'),('explanation',''),
+                          ('fields',['invented']),('record_url','file:///tmp/record')]:
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                rb.document_bindings([{**binding,key:value}],[self.item])
+        out=receipt(self.answer(['D1']))
+        out['result']['location']=assessment('supported',['D1'],'Berlin')
+        refs=[{'id':'R1','record_url':binding['record_url']}]
+        docs=[{'id':'D1','record_url':binding['record_url']}]
+        rb.verify_assessments(out,self.visual('different')['result'],refs,docs,[binding])
+        self.assertEqual(out['result']['depicted_object']['status'],'supported')
+        self.assertEqual(out['result']['location']['status'],'tentative')
+        self.assertEqual(out['raw_result']['location']['status'],'supported')
+
+    def test_prepare_freezes_bindings_and_rejects_them_in_blind_pilot(self):
+        previews=self.root/'previews';previews.mkdir()
+        preview=previews/'input.jpg';preview.write_bytes(self.preview.read_bytes())
+        record={**self.item,'candidate_id':'candidate','preview_path':str(preview),
+                'result':{'title':{'value':'Building'},'description':{'value':'Facade'}}}
+        rb.write(self.root/'model-proposals.json',{'metadata_adopted':False,'records':[record]})
+        rb.write(self.root/'workbench-input.json',{'objects':[{'id':self.item['object_id'],'candidates':[]}]})
+        (self.root/'decisions.jsonl').write_text(json.dumps({'object_id':self.item['object_id']})+'\n')
+        binding=self.binding(['depicted_object']);path=self.root/'binding.json';rb.write(path,[binding])
+        self.runner.args=types.SimpleNamespace(prefix='prepared',model='test-model',object_id=[self.item['object_id']],
+            pilot_only=False,blind_pilot=False,document_bindings=path,compare_effort='high',max_rounds=2,
+            max_item_tokens=None,max_average_tokens=None,web_search=True,native_crops=False,
+            discovery_mode='adaptive',expected=None)
+        self.runner.prepare()
+        rb.write(path,[])
+        plan=rb.read(self.root/'prepared-plan.json')
+        self.assertEqual(plan['items'][0]['document_bindings'],[binding])
+        self.assertEqual(plan['version'],11)
+        self.assertEqual(plan['settings']['max_item_tokens'],500000)
+        self.runner.args.prefix='blind';self.runner.args.blind_pilot=True
+        with self.assertRaisesRegex(ValueError,'incompatible with blind pilot'):self.runner.prepare()
+
+    def test_document_from_matching_page_can_support_object_but_other_page_cannot(self):
+        refs=[{'id':'R1','record_url':'matched','image_provenance':{'associated_with_page':True}}]
+        for page,expected in [('matched','supported'),('other','tentative')]:
+            out=receipt(self.answer(['D1']))
+            rb.verify_assessments(out,self.visual('matching')['result'],refs,[{'id':'D1','record_url':page}])
+            self.assertEqual(out['result']['depicted_object']['status'],expected)
+
+    def test_reference_photo_dates_do_not_date_input_even_for_matching_building(self):
+        for verdict in ('different','matching'):
+            for ids in (['R1'],['D1']):
+                out=receipt(self.answer(['R1'],False))
+                out['result']['photograph_date']=assessment('supported',ids,'1972')
+                out['result']['date_basis']={'kind':'photo_record','explanation':'Reference caption','reference_ids':ids}
+                refs=[{'id':'R1','record_url':'page'}];docs=[{'id':'D1','record_url':'page'}]
+                rb.verify_assessments(out,self.visual(verdict)['result'],refs,docs)
+                self.runner.check_result(out['result'],refs,docs)
+                self.runner.settings['research_goal']='dating'
+                self.assertFalse(self.runner.goal_met(out['result']))
+                self.assertIsNone(out['result']['photograph_date']['value'])
+
+    def test_explicit_photograph_record_binding_can_date_input(self):
+        binding=self.binding(['photograph_date'])
+        out=receipt(self.answer([],False))
+        out['result']['photograph_date']=assessment('supported',['D1'],'1972')
+        out['result']['date_basis']={'kind':'photo_record','explanation':'Bound photograph record','reference_ids':['D1']}
+        docs=[{'id':'D1','record_url':binding['record_url']}]
+        rb.verify_assessments(out,{'comparisons':[]},[],docs,[binding])
+        self.runner.check_result(out['result'],[],docs)
+        self.assertEqual(out['result']['photograph_date']['status'],'supported')
+        again=deepcopy(out)
+        rb.verify_assessments(out,{'comparisons':[]},[],docs,[binding])
+        self.assertEqual(out,again)
+
+    def test_visible_time_bound_cannot_be_supported_and_rejected_images_cannot_supply_it(self):
+        for verdict,expected in [('matching','tentative'),('different','unresolved')]:
+            out=receipt(self.answer(['R1'],False))
+            out['result']['photograph_date']=assessment('supported',['R1'],'After 1972')
+            out['result']['date_basis']={'kind':'visible_time_bound','explanation':'Sign','reference_ids':['R1']}
+            rb.verify_assessments(out,self.visual(verdict)['result'],[{'id':'R1','record_url':'page'}],[])
+            self.assertEqual(out['result']['photograph_date']['status'],expected)
+
+    def run_queue(self, mode='adaptive', tokens=500000, goal=False, followup=True):
+        self.runner.settings.update(discovery_mode=mode,visual_verification=True,max_item_tokens=tokens)
+        pool=[{'image_sha256':str(i),'cid':f'C{i}','local_image':str(self.preview),
+               'source_id':'museum','record_url':f'https://museum.example/{i}'} for i in range(8)]
+        calls=[];gathers=[]
+        def gather(*args):
+            gathers.append(True)
+            return (deepcopy(pool),[],[]) if len(gathers)==1 else ([],[],[])
+        def call(stem,prompt,schema,images=(),**kw):
+            calls.append((stem,prompt))
+            if schema is rb.DISCOVERY:return receipt(self.discovery)
+            if stem.endswith('adaptive'):return self.adaptive_search()
+            if stem.endswith('shortlist'):return receipt({'picks':[], 'next':{'reason':'','search_terms':[],'place_names':[]}})
+            ids=[f'R{i+1}' for i in range(len(images)-1)]
+            if stem.endswith('visual'):
+                return receipt({'comparisons':[{'reference_id':rid,'verdict':'matching' if goal else 'different',
+                    'matches':'geometry','conflicts':'','limitation':''} for rid in ids],
+                    'paired_crops':[],'unresolved_feature':'windows'})
+            value=self.answer(ids,goal)
+            # Only the first batch asks a question. Later inspection must preserve it.
+            if followup and '-r1-' in stem:
+                value['needs_more_references']=True
+                value['next']={'reason':'Unresolved ornament','search_terms':['chimney diamond ornament'],'place_names':[]}
+            return receipt(value)
+        with patch.object(self.runner,'call',side_effect=call), \
+             patch.object(self.runner.fetcher,'record',return_value=[]), \
+             patch.object(self.runner,'retrieve',side_effect=RefactorTests.fake_retrieve(self)) as retrieve, \
+             patch.object(self.runner,'gather',side_effect=gather):
+            row=self.runner.process(self.item,1)
+        return row,calls,retrieve.call_count
+
+    def test_pending_inspection_preserves_second_discovery_and_features(self):
+        row,calls,_=self.run_queue()
+        searches=[(stem,prompt) for stem,prompt in calls if stem.endswith('adaptive')]
+        self.assertEqual(len(searches),2)
+        self.assertIn('chimney diamond ornament',searches[1][1])
+        self.assertEqual(row['discovery_rounds'],2)
+        self.assertEqual([r['inspection_only'] for r in row['rounds']],[False,True,False])
+        self.assertEqual(row['uninspected_candidates'],[])
+        inspect=next(prompt for stem,prompt in calls if stem.endswith('r2-compare'))
+        self.assertIn('FEATURES: ["windows"]',inspect)
+
+    def test_portal_pending_inspection_preserves_second_retrieval(self):
+        row,calls,retrievals=self.run_queue('portals')
+        self.assertEqual(retrievals,2)
+        self.assertEqual(row['discovery_rounds'],2)
+        self.assertEqual(row['rounds'][2]['queries']['priority_queries'],['chimney diamond ornament'])
+
+    def test_last_discovery_still_inspects_remaining_images_without_extra_search(self):
+        self.runner.settings['max_rounds']=1
+        row,calls,_=self.run_queue()
+        self.assertEqual(row['discovery_rounds'],1)
+        self.assertEqual(len(row['rounds']),2)
+        self.assertEqual(row['uninspected_candidates'],[])
+        self.assertEqual(row['stop_reason'],'round_limit')
+        self.assertEqual(sum(stem.endswith('adaptive') for stem,_ in calls),1)
+
+    def test_pending_loop_stops_on_goal_budget_or_no_question(self):
+        for kwargs,stop in [({'goal':True},'identified'),({'tokens':250},'usage_limit'),
+                            ({'followup':False},'search_exhausted')]:
+            with self.subTest(kwargs=kwargs):
+                row,calls,_=self.run_queue(**kwargs)
+                self.assertEqual(row['stop_reason'],stop)
+                self.assertEqual(sum(stem.endswith('adaptive') for stem,_ in calls),1)
+                self.assertLessEqual(len(row['rounds']),2)
+
+    def test_overview_has_input_banner_and_details_have_numbered_banners(self):
+        self.runner.settings.update(native_crops=True,discovery_mode='adaptive')
+        self.item['preview_recipe']={'visual_checked':True}
+        with patch.object(rb,'protected_source',return_value=self.preview), \
+             patch.object(rb,'labelled',wraps=rb.labelled) as labelled:
+            self.runner.research_input(self.item,'overview')
+            self.runner.native_details(self.item,[{'label':'window','x':0,'y':0,'w':.5,'h':.5}],'detail')
+        self.assertEqual([c.args[1] for c in labelled.call_args_list],['INPUT','INPUT native detail 1'])
+
+    def test_oversize_content_length_fails_before_body_read_and_is_cached(self):
+        url='https://museum.example/large.jpg'
+        with patch.object(self.runner.fetcher,'validate'),patch.object(rb.urllib.request,'build_opener') as opener:
+            response=opener.return_value.open.return_value.__enter__.return_value
+            response.headers={'Content-Length':'13000000'}
+            with self.assertRaisesRegex(ValueError,'12 MB'):self.runner.fetcher.fetch(url)
+            response.read.assert_not_called()
+            with self.assertRaisesRegex(ValueError,'12 MB'):self.runner.fetcher.fetch(url)
+            self.assertEqual(opener.call_count,1)
+        meta=rb.read(next(self.root.glob('test-http-*.json')))
+        self.assertGreater(meta['retry_after']-rb.time.time(),300)
+
+    def test_layout_modifiers_do_not_hide_main_photographs(self):
+        for cls in ('sidebar-right','footer-fixed','related-layout'):
+            page=rb.Page();page.feed(f'<div class="{cls}"><img src="/main.jpg"></div>')
+            self.assertEqual([p['src'] for p in rb.ranked_page_images(page.images,'')],['/main.jpg'])
+
 
 if __name__=='__main__':unittest.main()

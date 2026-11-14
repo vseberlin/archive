@@ -792,7 +792,7 @@ list; full findings remain in the original research record.
 
 ## Bounded reference research
 
-Current runner: `reference_batch.py` (v10). The older runner under
+Current runner: `reference_batch.py` (v11). The older runner under
 `work-area/visual-similarity` is retained history. The versioned
 `berlin-photo-reference-sources.json` contains the 19-source website registry;
 use `--registry /home/vladimir/archive/Archive-tools/berlin-photo-reference-sources.json`
@@ -881,9 +881,56 @@ v10 addresses both follow-up reviews of commit `655bda5`:
   hard billing caps; reasoning still defaults to low. Goal completion reports
   `identified`, `located`, or `dated`.
 
-Prepare a fresh v10 prefix. Regression tests, saved-response replay and a real
+The v10 validation used fresh prefixes. Regression tests, saved-response replay and a real
 derivative download under an injected original failure verify these changes;
 they do not establish a new model-recognition accuracy estimate.
+
+v11 addresses the reviews in `e679b1c` and `a0e187e`:
+
+- `--max-rounds` counts discovery rounds. Bounded inspection batches drain downloaded
+  candidates without consuming the next search. Features, pending-page documents and
+  actionable follow-up questions survive inspection. Token, query and download limits
+  still apply; each discovery has at most 12 candidates, with a finite overall batch
+  ceiling recorded in the plan. Receipts distinguish `discovery_rounds` from the
+  comparison batches in `rounds`.
+- General page text alone cannot establish a supported claim. It needs a visually
+  matching photograph from that page, or an explicit reviewer binding to INPUT.
+  Documentary evidence can remain independent of an incidental rejected photograph.
+- A reference photograph's date cannot date INPUT, even when it depicts the same
+  building. `photo_record` requires a reviewed photograph binding; unbound dates move
+  to limitations. Visible time clues remain tentative. Overview banners read `INPUT`;
+  native detail crops have distinct numbered labels.
+- Layout modifiers such as `sidebar-right` retain article images. Oversized HTTP
+  responses are rejected before reading the body when Content-Length is provided;
+  the byte limit still applies without that header. Oversize failures are cached for
+  24 hours within the prefix, allowing observed smaller variants to be tried.
+
+Prepare a fresh v11 prefix. An optional `--document-bindings /absolute/private/file.json`
+at **prepare** freezes reviewer-supplied evidence links in the plan. The file is a JSON
+list with this structure (use the exact object ID, preview hash and retrieved record URL):
+
+```json
+[
+  {
+    "object_id": "OBJECT_ID_FROM_PLAN",
+    "preview_sha256": "SHA256_FROM_PLAN",
+    "record_url": "https://museum.example/photograph-record",
+    "fields": ["depicted_object", "photograph_date"],
+    "explanation": "Reviewer matched the photograph inventory mark to this record."
+  }
+]
+```
+
+Bindings describe evidence links, not catalogue adoption. They apply only to delivered
+documents with that exact URL and listed fields; they do not fetch a record automatically
+or establish an answer without its contents. For `photograph_date`, bind the exact
+photograph, not merely its subject. Bindings are incompatible with `--blind-pilot`, and
+model output cannot create them. Keep the file and plans outside Git.
+
+The batch still stops when an individual image reaches its token threshold, or the
+batch-average threshold is exceeded after at least three items. This cost safeguard
+is unchanged; use `--limit 3` for a measured pilot. No new recognition-accuracy claim
+follows from the offline regression checks.
 
 `reference_batch.py` v7 uses subject-specific routing for adaptive visual web discovery.
 The shared `research_routes.py` contract covers buildings/places, machinery and

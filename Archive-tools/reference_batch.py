@@ -52,7 +52,7 @@ DEFAULT_REGISTRY = Path('/home/vladimir/Downloads/berlin-photo-reference-sources
 EXTRA_DOMAINS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org', 'www.wikidata.org'}
 COMMONS_HOSTS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org'}
 
-VERSION = 10
+VERSION = 11
 NUMBER = {'type': 'number', 'minimum': 0, 'maximum': 1}
 STATUS = {'type': 'string', 'enum': ['supported', 'tentative', 'unresolved', 'contradicted']}
 SUBJECTS = ['building', 'public_event', 'industry_or_schoeneweide', 'shop_sign_or_address',
@@ -191,18 +191,6 @@ def crop_boxes(boxes):
     return out
 
 
-def make_crops(preview, boxes, prefix):
-    im = open_rgb(preview); paths = []
-    for i, b in enumerate(crop_boxes(boxes)):
-        box = (int(b['x']*im.width), int(b['y']*im.height),
-               int((b['x']+b['w'])*im.width), int((b['y']+b['h'])*im.height))
-        c = im.crop(box)
-        c.thumbnail((900, 900))  # Never imply that upscaling reveals new detail.
-        name = chr(65+i)
-        paths.append(save_jpeg(labelled(c, f'INPUT detail {name}: {b["label"]}'), Path(f'{prefix}-crop-{name}.jpg')))
-    return paths
-
-
 def contact_sheet(candidates, path, cols=6):
     rows = math.ceil(len(candidates)/cols)
     sheet = Image.new('RGB', (cols*TILE, rows*(TILE+30)), 'white')
@@ -235,8 +223,7 @@ class Page(HTMLParser):
         tokens = (a.get('class', '')+' '+a.get('id', '')).lower().split()
         layout = {'html', 'body', 'main', 'article'}
         decoration = any(t in {'related', 'related-posts', 'related-content', 'recommendations',
-                         'footer', 'sidebar', 'bzi-suggest-more-section'} or
-                         t.startswith(('related-', 'recommended-', 'footer-', 'sidebar-')) for t in tokens)
+                         'recommended-posts', 'footer', 'sidebar', 'bzi-suggest-more-section'} for t in tokens)
         excluded = tag not in layout and (any(n['excluded'] for n in self.stack) or
                     tag in ('footer', 'nav', 'aside') or decoration)
         if tag not in self.VOID:
@@ -400,6 +387,8 @@ class Fetcher:
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'ArchiveReferenceResearch/2.0 (historical photograph research)'})
             with urllib.request.build_opener(Redirect).open(req, timeout=18) as r:
+                length = r.headers.get('Content-Length', '')
+                require(not length.isdecimal() or int(length) <= 12_000_000, 'Response exceeds 12 MB limit')
                 data = r.read(12_000_001)
                 require(len(data) <= 12_000_000, 'Response exceeds 12 MB limit')
                 m = {'url': url, 'final_url': r.url, 'content_type': r.headers.get('Content-Type', ''),
@@ -408,7 +397,7 @@ class Fetcher:
         except urllib.error.HTTPError as e:
             self._fail(url, meta, f'HTTP {e.code}: {e.reason}', e.code in (404, 410)); raise
         except Exception as e:
-            self._fail(url, meta, str(e), False); raise
+            self._fail(url, meta, str(e), str(e)=='Response exceeds 12 MB limit'); raise
     def image(self, url):
         data, receipt = self.fetch(url)
         with Image.open(io.BytesIO(data)) as im:
@@ -767,7 +756,26 @@ def retain_evidence(result, refs, documents):
     return ranked, docs
 
 
-def verify_assessments(receipt, visual, refs, documents):
+def document_bindings(bindings, items):
+    """Validate reviewer evidence links against the exact prepared INPUT, never model output."""
+    fields = {'depicted_object', 'location', 'event', 'photograph_date'}
+    require(isinstance(bindings, list), 'Document bindings must be a JSON list')
+    by_id = {item['object_id']: item for item in items}
+    for binding in bindings:
+        require(isinstance(binding, dict), 'Invalid document binding')
+        item = by_id.get(binding.get('object_id'))
+        require(item is not None and binding.get('preview_sha256') == item['preview_sha256'],
+                'Document binding does not match a prepared INPUT')
+        require(isinstance(binding.get('explanation'), str) and bool(binding['explanation'].strip()),
+                'Document binding needs a reviewer explanation')
+        require(isinstance(binding.get('fields'), list) and bool(binding['fields']) and
+                all(isinstance(f, str) and f in fields for f in binding['fields']), 'Invalid bound fields')
+        url = urllib.parse.urlsplit(binding.get('record_url', ''))
+        require(url.scheme in ('http', 'https') and bool(url.hostname), 'Binding needs a record URL')
+    return bindings
+
+
+def verify_assessments(receipt, visual, refs, documents, bindings=()):
     """Apply one conservative assessment to fields, hypotheses and the displayed summary."""
     import copy
     receipt.setdefault('raw_result', copy.deepcopy(receipt['result']))
@@ -776,6 +784,16 @@ def verify_assessments(receipt, visual, refs, documents):
     verdicts = {c['reference_id']:c['verdict'] for c in visual['comparisons']}
     strong = {r['id'] for r in refs if verdicts.get(r['id'])=='matching' and
               r.get('image_provenance', {}).get('associated_with_page', True)}
+    matching_pages = {r['record_url'] for r in refs if r['id'] in strong and r.get('record_url')}
+    contextual = {d['id'] for d in documents if d.get('record_url') in matching_pages}
+    def bound(field):
+        return {d['id'] for d in documents for b in bindings if
+                d.get('record_url') == b['record_url'] and field in b['fields']}
+    def supported(field, cited):
+        # Independently reviewed INPUT bindings can stand without incidental images.
+        if cited & bound(field): return True
+        image_ids = cited & ids
+        return bool(image_ids & strong) if image_ids else bool(cited & contextual)
     for ref in refs: ref['visual_verdict'] = verdicts.get(ref['id'], 'insufficient')
     date = value['date_basis']; date_ids = set(date['reference_ids'])
     input_bound = date['kind']=='visible_time_bound' and 'INPUT' in date_ids
@@ -786,23 +804,32 @@ def verify_assessments(receipt, visual, refs, documents):
         if old['value']: value['limitations'].append('Date context only: '+old['value']+'; '+old['explanation'])
         value['photograph_date'] = {'status':'unresolved', 'value':None,
             'explanation':date['explanation'], 'reference_ids':[]}
-    elif input_bound:
+    elif date['kind']=='visible_time_bound':
         claim = value['photograph_date']
         if claim['status']=='supported': claim['status']='tentative'
         claim['explanation'] += ' Visible date text is a tentative time clue, not a verified exposure date.'
+        if not input_bound and not date_ids & (strong | bound('photograph_date')):
+            value['photograph_date'] = {'status':'unresolved', 'value':None,
+                'explanation':'The time clue is not linked to INPUT by verified evidence.', 'reference_ids':[]}
+    elif date['kind']=='photo_record' and not (date_ids & bound('photograph_date') and
+            set(value['photograph_date']['reference_ids']) & bound('photograph_date')):
+        old = value['photograph_date']
+        if old['value']: value['limitations'].append('Unbound reference-photo date: '+old['value'])
+        value['photograph_date'] = {'status':'unresolved', 'value':None,
+            'explanation':'No independently reviewed record binds this date to the INPUT photograph.',
+            'reference_ids':[]}
     for field in ('depicted_object', 'location', 'event'):
-        claim = value[field]; cited = set(claim['reference_ids']); image_ids = cited & ids
-        if claim['status']=='supported' and ((image_ids and not image_ids & strong) or
-                (not image_ids and not cited & docs)):
+        claim = value[field]; cited = set(claim['reference_ids'])
+        if claim['status']=='supported' and not supported(field, cited):
             claim['status']='tentative'
-            claim['explanation'] += ' Caption-blind inspection did not establish a distinctive visual match.'
+            claim['explanation'] += ' No distinctive visual match or independently reviewed INPUT document binding supports this claim.'
     for hypothesis in value['hypotheses']:
         field = hypothesis.get('field') or next((k for k in
             ('depicted_object','location','event','photograph_date') if
             receipt['raw_result'][k].get('value') and receipt['raw_result'][k]['value'] in hypothesis['candidate']), 'depicted_object')
-        cited = set(hypothesis['reference_ids']); image_ids = cited & ids
+        cited = set(hypothesis['reference_ids'])
         if hypothesis['status']=='supported' and (value[field]['status']!='supported' or
-                (image_ids and not image_ids & strong) or (not image_ids and not cited & docs)):
+                (not cited & bound(field) if field=='photograph_date' else not supported(field, cited))):
             hypothesis['status']='tentative'
             hypothesis['assessment'] += ' Not supported by the final verified '+field+' assessment.'
     labels = {'depicted_object':'Objekt', 'location':'Ort', 'event':'Ereignis', 'photograph_date':'Aufnahmedatum'}
@@ -865,6 +892,12 @@ class Runner:
         require(items, 'No matching images to prepare')
         if self.args.object_id:
             require(set(self.args.object_id) == {i['object_id'] for i in items}, 'Unknown requested object ID')
+        bindings_path = getattr(self.args, 'document_bindings', None)
+        if bindings_path:
+            require(not self.args.blind_pilot, 'Document bindings are prior evidence; incompatible with blind pilot')
+            bindings = document_bindings(read(bindings_path), items)
+            for item in items:
+                item['document_bindings'] = [b for b in bindings if b['object_id']==item['object_id']]
         if self.args.blind_pilot:
             require(self.args.pilot_only or self.args.object_id, 'Blind mode is only for an isolated pilot')
             for item in items:
@@ -896,6 +929,7 @@ class Runner:
                 'max_web_tool_calls': {'adaptive': 8, 'portals': 4, 'direct': 0}[self.args.discovery_mode],
                 'search_queries_per_adaptive_round': 6,
                 'contact_sheet_candidates': MAX_POOL, 'image_attempts_per_round': MAX_IMAGE_ATTEMPTS,
+                'max_comparison_batches': self.args.max_rounds*(MAX_POOL+1),
                 'reference_images': 8 if self.args.discovery_mode == 'adaptive' else (1 if self.args.discovery_mode == 'direct' else self.policy()['refs']),
                 'input_crops': 2, 'wikidata_places': 1,
                 'records_per_round': 4 if self.args.discovery_mode == 'adaptive' else 6, 'source_policy': self.policy(),
@@ -1129,7 +1163,8 @@ Do not continue identification research solely to fill an unrelated date or loca
         result = self.call(stem+'-compare', prompt, DATED_COMPARISON, [*images, *pairs],
                            effort=self.settings['compare_effort'], timeout=300)
         if not result['errors']:
-            verify_assessments(result, visual['result'], refs, documents)
+            bindings = document_bindings(item.get('document_bindings', []), [item])
+            verify_assessments(result, visual['result'], refs, documents, bindings)
         if result.get('receipt_path'): write(Path(result['receipt_path']), result)
         return result
 
@@ -1149,7 +1184,10 @@ or when this photograph was taken. A creation date, event date or reference-phot
 depicted_object identifies a named work/building/object or a specific technical machine type, not a generic scene.
 For machinery distinguish function/type, manufacturer, model and installation site; proving one does not prove the others.
 If only a generic description is possible, keep depicted_object unresolved and put the description in observations.
-A document may support a claim without an image, but explain how its text binds to this exact object/photo.
+A general candidate document needs a matching image from its page. A document may independently
+support only the fields listed in REVIEWER DOCUMENT BINDINGS. Explain the link to this exact INPUT.
+For photo_record dates, a visual match of the same building is insufficient: require a reviewer binding
+for photograph_date. Dates of other reference photographs belong in limitations, never INPUT's date.
 Cite supplied R or D IDs in assessments. Only photograph_date may additionally cite INPUT for a
 visible_time_bound (a tentative time clue, never a supported exposure date). Hypotheses must name their field.
 comparisons contains R image IDs ONLY. If no R images are supplied, comparisons MUST be [].
@@ -1165,7 +1203,8 @@ FEATURES: {compact(features)}
 INPUT CONTEXT: {compact(baseline(item))}
 PREVIOUS ROUNDS: {compact(history)}
 IMAGE CAPTIONS: {compact(captions)}
-DOCUMENTARY EVIDENCE: {compact(docs)}"""
+DOCUMENTARY EVIDENCE: {compact(docs)}
+REVIEWER DOCUMENT BINDINGS: {compact(item.get("document_bindings", []))}"""
 
     @staticmethod
     def rank_records(records, description):
@@ -1434,7 +1473,7 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
         for i, box in enumerate(crop_boxes(boxes)[:2]):
             x, y, w, h = (box[k] for k in 'xywh')
             crop = im.crop((int(x*im.width), int(y*im.height), int((x+w)*im.width), int((y+h)*im.height)))
-            paths.append(save_jpeg(labelled(crop, f'{label_prefix} {i+1}',
+            paths.append(save_jpeg(labelled(crop, 'INPUT' if label_prefix=='INPUT' else f'{label_prefix} {i+1}',
                                            1800 if self.settings.get('discovery_mode') in ('adaptive', 'direct') else 900),
                                    self.path(f'{stem}-native-{i+1}.jpg')))
         require(stamp(source) == before, 'Source changed during native crop read')
@@ -1498,7 +1537,7 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
         require(digest(Path(item['preview_path'])) == item['preview_sha256'], 'Input preview changed')
         if self.settings['native_crops']:
             paths, note = self.native_details(item, [{'label': 'full positive research view',
-                'x': 0, 'y': 0, 'w': 1, 'h': 1}], stem+'-overview')
+                'x': 0, 'y': 0, 'w': 1, 'h': 1}], stem+'-overview', label_prefix='INPUT')
             return paths[0], note
         return Path(item['preview_path']), 'Cached visually checked research preview'
 
@@ -1512,15 +1551,20 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                'input_path': str(input_img), 'input_sha256': digest(input_img),
                'input_recipe': item.get('preview_recipe', {}), 'initial_routing': item['research_routing']}
         history = []; seen = set(); pending = []; carry = []; carry_docs = []; crops = []; used = set(); final = None
-        status = 'no_results'; stop = 'round_limit'; query_count = 0
-        for rnd in range(1, st['max_rounds']+1):
-            if not self.within_budget(row): status = 'usage_limit'; stop = 'usage_limit'; break
-            rs = f'{stem}-r{rnd}'; r = {'round': rnd}; row['rounds'].append(r)
+        status = 'no_results'; stop = 'round_limit'; query_count = 0; discoveries = 0; features = []; followup = None
+        # Each discovery downloads at most MAX_POOL candidates. Even one new image
+        # per inspection batch fits this finite ceiling; search has its own counter.
+        for rnd in range(1, st['max_rounds']*(MAX_POOL+1)+1):
             inspection_only = bool(pending)
+            if not inspection_only and discoveries >= st['max_rounds']: break
+            if not self.within_budget(row): status = 'usage_limit'; stop = 'usage_limit'; break
+            if not inspection_only:
+                discoveries += 1; followup = None
+            rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'discovery_round': discoveries}; row['rounds'].append(r)
             search = self.call(rs+'-adaptive', self.adaptive_prompt(item, history), ADAPTIVE_SEARCH,
                 [input_img, *crops, *[ref['labelled_image'] for ref in carry]], web=True, effort=st['compare_effort'], timeout=360,
                 query_limit=6, web_call_limit=8) if not inspection_only else {
-                    'result':{'research_routing':item['research_routing'],'visual_features':[],
+                    'result':{'research_routing':item['research_routing'],'visual_features':features,
                               'crop_boxes':[], 'records':[], 'queries_reported':[], 'limitations':[]},
                     'errors':[], 'usage':None, 'skipped':True, 'provenance_available':True}
             r['inspection_only'] = inspection_only
@@ -1536,7 +1580,8 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                 search['errors'].append('integration_error: search events lack URL provenance')
                 if search.get('receipt_path'): write(Path(search['receipt_path']), search)
                 status = 'integration_error'; stop = 'integration_error'; break
-            discovery = search['result']; observed = {url_provenance_key(u): u for u in search.get('observed_urls', [])}
+            discovery = search['result']; features = discovery['visual_features']
+            observed = {url_provenance_key(u): u for u in search.get('observed_urls', [])}
             actions = {url_provenance_key(u): u for u in search.get('action_urls', [])}
             if discovery['crop_boxes'] and st['native_crops']:
                 with Image.open(input_img) as overview, Image.open(item['preview_path']) as preview:
@@ -1572,7 +1617,8 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                     candidates.extend(self.fetcher.record(entry))
                     entry['url_provenance']['page_fetched'] = True
                 except Exception as e: issues.append({'source': entry['url'], 'error': str(e)})
-            pool, documents, failures = self.gather(candidates, item, seen, rnd); issues += failures
+            pool, documents, failures = self.gather(candidates, item, seen, rnd) if not inspection_only else ([], [], [])
+            issues += failures
             pool = [{**c, 'cid':f'C{i+1}'} for i,c in enumerate(pending+pool)]
             r.update(pool=[self.slim(c) for c in pool], access_issues=issues)
             write(self.path(rs+'-retrieval.json'), {'records': entries, 'rejected_urls': rejected,
@@ -1614,6 +1660,7 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                     if compared.get('receipt_path'): write(Path(compared['receipt_path']), compared)
                     status = 'failed'; stop = 'comparison_failed'; break
                 result = compared['result']; status = 'compared'; stop = 'round_limit'
+                if has_next(result['next']): followup = result['next']
                 final = {'comparison': compared, 'references': refs, 'documents': docs}
                 history.append({'round': rnd, 'comparison': result,
                                 'unresolved_visual_feature': (r.get('visual_details', r.get('visual_check', {})).get('result') or {}).get('unresolved_feature'),
@@ -1622,11 +1669,14 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                 if not (issues and not pool and not documents) and self.goal_met(result):
                     stop = self.goal_stop(); break
                 carry, carry_docs = retain_evidence(result, refs, docs)
+                pending_pages = {p['record_url'] for p in pending}
+                carry_docs = list({d['id']:d for d in carry_docs +
+                    [d for d in docs if d['record_url'] in pending_pages]}.values())[:6]
                 if issues and not pool and not documents:
                     stop = 'retrieval_failed'
-                elif not pending and not entries and not has_next(result['next']) and not result['needs_more_references']:
+                elif not pending and not has_next(followup):
                     stop = 'search_exhausted'; break
-        row.update(status=status, stop_reason=stop, uninspected_candidates=pending, evidence_history=history, sources_used=sorted(used), queries_used=query_count,
+        row.update(status=status, stop_reason=stop, discovery_rounds=discoveries, uninspected_candidates=pending, evidence_history=history, sources_used=sorted(used), queries_used=query_count,
                    research_routing=item['research_routing'])
         if final:
             row.update(final)
@@ -1713,11 +1763,15 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
         queries['candidate_queries'] = list(dict.fromkeys(reviewer_candidates(item)+queries['candidate_queries']))
         features = d['visual_features']
         seen = set(); pending = []; carry = []; carry_docs = []; final = None; history = []; crops = []
-        used = set(); budget = [self.policy()['queries']]; status = 'no_results'
-        for rnd in range(1, st['max_rounds']+1):
-            rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'queries': queries}; row['rounds'].append(r)
+        used = set(); budget = [self.policy()['queries']]; status = 'no_results'; discoveries = 0; followup = None
+        for rnd in range(1, st['max_rounds']*(MAX_POOL+1)+1):
+            inspection_only = bool(pending)
+            if not inspection_only and discoveries >= st['max_rounds']: break
             if not self.within_budget(row): status = 'usage_limit'; break
-            if rnd > 1 and not pending and not crops and d['crop_boxes']:
+            if not inspection_only:
+                discoveries += 1; followup = None
+            rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'discovery_round': discoveries, 'queries': queries}; row['rounds'].append(r)
+            if discoveries > 1 and not inspection_only and not crops and d['crop_boxes']:
                 try: crops, note = self.native_details(item, d['crop_boxes'], stem)
                 except Exception as e: crops, note = [], 'Native crop unavailable: '+str(e)
                 row['crop_note'] = note; row['crops'] = [str(p) for p in crops]
@@ -1738,7 +1792,6 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                         queries = merge_queries(queries, fresh)
                         r['queries'] = queries; features = fresh['visual_features']
                 if not self.within_budget(row): status = 'usage_limit'; break
-            inspection_only = bool(pending)
             r['inspection_only'] = inspection_only
             if inspection_only:
                 pool, documents, issues = pending, [], []
@@ -1788,7 +1841,7 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                 history.append({'round': rnd, 'outcome': status,
                                 'rejected_record_urls': [p['record_url'] for p in pool][:MAX_POOL]})
                 nxt = (r.get('shortlist', {}).get('result') or {}).get('next')
-                if rnd < st['max_rounds'] and budget[0] > 0:
+                if discoveries < st['max_rounds'] and budget[0] > 0:
                     # A pixel-only shortlist suggests visual search terms, not a new research goal.
                     # Only a completed comparison may prioritize a specific follow-up question.
                     if has_next(nxt): queries = merge_queries(queries, nxt)
@@ -1821,13 +1874,21 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
             for ref in refs: ref['image_delivered'] = True
             final = {'comparison': compare, 'references': refs, 'documents': docs, 'final_round': rnd}
             status = 'compared'; res = compare['result']
+            if has_next(res['next']): followup = res['next']
             history.append(round_memory(rnd, res, refs+docs))
             if self.goal_met(res): row['stop_reason'] = self.goal_stop(); break
             if not self.within_budget(row): status = 'usage_limit'; break
-            if not (rnd < st['max_rounds'] and (pending or (res['needs_more_references'] and has_next(res['next']) and budget[0] > 0))): break
+            if not (pending or (discoveries < st['max_rounds'] and
+                    has_next(followup) and budget[0] > 0)):
+                row['stop_reason'] = 'round_limit' if discoveries >= st['max_rounds'] else 'search_exhausted'
+                break
             carry, carry_docs = retain_evidence(res, refs, docs)
-            queries = merge_queries(queries, res['next'], followup=True)
+            pending_pages = {p['record_url'] for p in pending}
+            carry_docs = list({d['id']:d for d in carry_docs +
+                [d for d in docs if d['record_url'] in pending_pages]}.values())[:6]
+            if has_next(followup): queries = merge_queries(queries, followup, followup=True)
         row['status'] = status
+        row['discovery_rounds'] = discoveries
         row['uninspected_candidates'] = pending
         if final:
             row.update(final)
@@ -1947,7 +2008,7 @@ def main():
     p.add_argument('--research-root', type=Path, default=DEFAULT_WORK)
     p.add_argument('--work-root', type=Path, default=DEFAULT_REVIEW)
     p.add_argument('--registry', type=Path, default=DEFAULT_REGISTRY)
-    p.add_argument('--prefix', required=True, help='new prefix for v10; existing run artifacts are retained')
+    p.add_argument('--prefix', required=True, help='new prefix for v11; existing run artifacts are retained')
     p.add_argument('--model', default='gpt-6-astra')
     p.add_argument('--limit', type=int, default=0)
     p.add_argument('--retry-failed', action='store_true', help='explicitly retry failed calls on this invocation; retain all attempts')
@@ -1961,7 +2022,8 @@ def main():
     g.add_argument('--blind-pilot', action='store_true', help='withhold prior identities and human hints from pilot prompts')
     g.add_argument('--expected', type=Path, help='held-out human verified JSON: objects keyed by object_id; never sent to model')
     g.add_argument('--compare-effort', choices=['low', 'medium', 'high'], default='low')
-    g.add_argument('--max-rounds', type=int, choices=[1, 2], default=2)
+    g.add_argument('--max-rounds', type=int, choices=[1, 2], default=2, help='discovery rounds; bounded pending-image inspection does not consume these')
+    g.add_argument('--document-bindings', type=Path, help='reviewer JSON linking records to exact INPUT previews and supported fields; frozen during prepare')
     g.add_argument('--max-item-tokens', type=int, default=None, help='between-call cutoff; adaptive 150k (low/medium) or 500k (high), other modes 30k or 120k; 0 disables')
     g.add_argument('--max-average-tokens', type=int, default=None, help='batch average cutoff; defaults to mode/effort allowance; 0 disables')
     g.add_argument('--web-search', action=argparse.BooleanOptionalAction, default=True,

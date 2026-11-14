@@ -111,3 +111,34 @@ These are between-call stopping thresholds, not predicted consumption or hard ca
 ## Recommended next step
 
 Address F1 first because it directly limits investigation of new visual clues. Add the documentary-binding cases from F2, then compare direct-reference and adaptive runs on the same small image set. The successful mechanical tests do not yet establish the recognition accuracy of a new live batch.
+
+## Implementation follow-up: v11
+
+The source follow-up separates discovery rounds from bounded inspection batches in
+both adaptive and portal modes. A first pool of eight images is inspected and a
+second search still runs when an actionable question remains, including when the
+inspection-only comparison supplies no new question. Features and documents for
+pending photographs remain available. Goal completion, token limits and exhaustion
+of actionable questions stop the loop; the plan records a finite batch ceiling.
+
+General documents need a matching image from their page to support identification.
+An independent document may instead use a reviewer-provided binding to the exact
+INPUT preview and specified fields, frozen with `prepare --document-bindings`.
+These bindings cannot be created by model output. A `photo_record` date requires a
+binding to the photograph itself: matching its building alone cannot establish
+its exposure date. Unbound reference-photo dates are retained only in limitations.
+This also addresses N3 from the companion review.
+
+The overview is labelled `INPUT`, distinct from numbered details. Layout modifier
+classes no longer exclude article photographs. Content-Length permits oversized
+downloads to be rejected before reading their bodies; oversize failures use a
+24-hour cache within the run prefix. The unused preview-crop helper was removed.
+The existing batch-wide stop on an item token limit remains a cost safeguard.
+
+Validation on 2026-11-14: 186 targeted tests passed (113 reference-runner tests),
+including new production-path regressions for both search modes, documentary
+binding, date rejection, preparation, labels and download limits. Seven saved
+live comparisons (six direct controls and one adaptive result) were replayed through
+the new guard without changing field statuses or raw model output. The replay did
+not modify those receipts. No new paid recognition run or accuracy measurement
+was performed.
