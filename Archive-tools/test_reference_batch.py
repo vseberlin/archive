@@ -1127,7 +1127,9 @@ class ReviewFixTests(unittest.TestCase):
 
     def test_visible_input_date_remains_tentative_not_exposure_date(self):
         value=self.answer((),False);value['photograph_date']=assessment('supported',['INPUT'],'1. Mai 1972')
-        value['date_basis']={'kind':'visible_time_bound','explanation':'Visible banner text','reference_ids':['INPUT']}
+        value['observations']=[{'reference_id':'INPUT','description':'Banner in INPUT reads 1. Mai 1972'}]
+        value['date_basis']={'kind':'visible_time_bound','explanation':'Visible banner text','reference_ids':['INPUT'],
+                             'input_observation':'Banner in INPUT reads 1. Mai 1972'}
         out=receipt(value);rb.verify_assessments(out,{'comparisons':[]},[],[])
         self.assertEqual(out['result']['photograph_date']['status'],'tentative')
         self.assertEqual(out['result']['photograph_date']['value'],'1. Mai 1972')
@@ -1288,7 +1290,7 @@ class FollowupReviewTests(unittest.TestCase):
         rb.write(path,[])
         plan=rb.read(self.root/'prepared-plan.json')
         self.assertEqual(plan['items'][0]['document_bindings'],[binding])
-        self.assertEqual(plan['version'],11)
+        self.assertEqual(plan['version'],12)
         self.assertEqual(plan['settings']['max_item_tokens'],500000)
         self.runner.args.prefix='blind';self.runner.args.blind_pilot=True
         with self.assertRaisesRegex(ValueError,'incompatible with blind pilot'):self.runner.prepare()
@@ -1327,7 +1329,7 @@ class FollowupReviewTests(unittest.TestCase):
         self.assertEqual(out,again)
 
     def test_visible_time_bound_cannot_be_supported_and_rejected_images_cannot_supply_it(self):
-        for verdict,expected in [('matching','tentative'),('different','unresolved')]:
+        for verdict,expected in [('matching','unresolved'),('different','unresolved')]:
             out=receipt(self.answer(['R1'],False))
             out['result']['photograph_date']=assessment('supported',['R1'],'After 1972')
             out['result']['date_basis']={'kind':'visible_time_bound','explanation':'Sign','reference_ids':['R1']}
@@ -1425,6 +1427,137 @@ class FollowupReviewTests(unittest.TestCase):
         for cls in ('sidebar-right','footer-fixed','related-layout'):
             page=rb.Page();page.feed(f'<div class="{cls}"><img src="/main.jpg"></div>')
             self.assertEqual([p['src'] for p in rb.ranked_page_images(page.images,'')],['/main.jpg'])
+
+
+class EvidenceCoverageTests(unittest.TestCase):
+    setUp = RefactorTests.setUp
+    answer = ReviewFixTests.answer
+    visual = ResearchQualityTests.visual
+    adaptive_search = ResearchQualityTests.adaptive_search
+
+    def test_event_and_location_require_the_appropriate_visual_relationship(self):
+        for relation,event,location in [('same_object_or_site','tentative','supported'),
+                ('same_technical_type','tentative','tentative'),('same_event','supported','supported'),
+                ('same_photograph','supported','supported'),('unestablished','tentative','tentative')]:
+            for ids in (['R1'],['D1']):
+                with self.subTest(relation=relation,ids=ids):
+                    result=self.answer(['R1']);result['event']=assessment('supported',ids,'Opening ceremony')
+                    result['location']=assessment('supported',ids,'Berlin')
+                    visual=self.visual('matching')['result'];visual['comparisons'][0]['relationship']=relation
+                    out=receipt(result);refs=[{'id':'R1','record_url':'page'}];docs=[{'id':'D1','record_url':'page'}]
+                    rb.verify_assessments(out,visual,refs,docs)
+                    self.runner.check_result(out['result'],refs,docs)
+                    self.assertEqual(out['result']['event']['status'],event)
+                    self.assertEqual(out['result']['location']['status'],location)
+
+    def test_event_binding_remains_independent_of_an_incidental_reference(self):
+        out=receipt(self.answer(['R1'],False));out['result']['event']=assessment('supported',['D1'],'Ceremony')
+        rb.verify_assessments(out,self.visual('different')['result'],[{'id':'R1','record_url':'page'}],
+            [{'id':'D1','record_url':'record'}],[{'record_url':'record','fields':['event']}])
+        self.assertEqual(out['result']['event']['status'],'supported')
+
+    def test_input_time_clue_requires_a_specific_input_observation(self):
+        for observation,expected in [('', 'unresolved'),('Different text','unresolved'),
+                ('INPUT banner reads 1972','tentative')]:
+            out=receipt(self.answer([],False))
+            out['result']['observations']=[{'reference_id':'INPUT','description':'INPUT banner reads 1972'}]
+            out['result']['photograph_date']=assessment('supported',['INPUT'],'After 1972')
+            out['result']['date_basis']={'kind':'visible_time_bound','reference_ids':['INPUT'],
+                'explanation':'A visible clue','input_observation':observation}
+            rb.verify_assessments(out,{'comparisons':[]},[],[])
+            self.runner.check_result(out['result'],[])
+            self.assertEqual(out['result']['photograph_date']['status'],expected)
+
+    def gallery(self, count):
+        return [{'source_id':'museum','title':'Gallery','record_url':'https://museum.example/gallery',
+                 'candidate_image_url':f'https://museum.example/{i}.jpg'} for i in range(count)]
+
+    def test_gather_reports_bounded_deferred_urls_without_marking_them_seen(self):
+        seen=set()
+        with patch.object(self.runner.fetcher,'image',side_effect=lambda url:{'image_sha256':'hash:'+url}):
+            pool,_,issues=self.runner.gather(self.gallery(100),{},seen,1)
+            coverage=self.runner.gather_coverage
+            self.assertEqual(len(pool),8);self.assertEqual(issues,[])
+            self.assertEqual(coverage['deferred_count'],92)
+            self.assertEqual(len(coverage['deferred']),rb.MAX_DEFERRED)
+            self.assertEqual(coverage['omitted_deferred_count'],44)
+            self.assertNotIn('https://museum.example/8.jpg',seen)
+            more,_,_=self.runner.gather(coverage['deferred'],{},seen,2)
+            self.assertEqual(more[0]['candidate_image_url'],'https://museum.example/8.jpg')
+
+    def test_record_image_limit_is_reported_and_footer_widgets_excluded(self):
+        body=('<title>Gallery</title>'+''.join(f'<img src="/{i}.jpg">' for i in range(30))+
+              '<div class="footer-widgets"><img src="/unrelated.jpg"></div>').encode()
+        meta={'content_type':'text/html','final_url':'https://museum.example/gallery'}
+        with patch.object(self.runner.fetcher,'fetch',return_value=(body,meta)):
+            rows=self.runner.fetcher.record({'source_id':'museum','url':meta['final_url'],'relevance':'facade'})
+        self.assertEqual(rows[0]['gallery_coverage'],{'observed_candidates':30,'emitted_candidates':24,'omitted_by_record_limit':6})
+        self.assertFalse(any(r.get('candidate_image_url','').endswith('unrelated.jpg') for r in rows))
+
+    def gallery_pipeline(self, mode):
+        self.runner.settings.update(discovery_mode=mode,visual_verification=True,max_rounds=1,max_item_tokens=500000)
+        active=[];searches=[]
+        compare=self.runner.compare_verified
+        def compared(item,refs,*args,**kw):
+            active[:]=refs
+            return compare(item,refs,*args,**kw)
+        def call(stem,prompt,schema,images=(),**kw):
+            if schema is rb.DISCOVERY:return receipt(self.discovery)
+            if stem.endswith('adaptive'):
+                searches.append(stem);return self.adaptive_search()
+            if stem.endswith('shortlist'):return receipt({'picks':[],'next':{'reason':'','search_terms':[],'place_names':[]}})
+            target=[r['id'] for r in active if r['candidate_image_url'].endswith('/8.jpg')]
+            if stem.endswith('visual'):
+                return receipt({'comparisons':[{'reference_id':r['id'],'verdict':'matching' if r['id'] in target else 'different',
+                    'relationship':'same_object_or_site','matches':'facade geometry','conflicts':'','limitation':''} for r in active],
+                    'paired_crops':[],'unresolved_feature':'facade'})
+            result=self.answer([r['id'] for r in active],False)
+            if target:result['depicted_object']=assessment('supported',target,'Ninth gallery building')
+            return receipt(result)
+        with patch.object(self.runner,'call',side_effect=call), \
+             patch.object(self.runner,'compare_verified',side_effect=compared), \
+             patch.object(self.runner.fetcher,'record',return_value=self.gallery(15)), \
+             patch.object(self.runner,'retrieve',side_effect=RefactorTests.fake_retrieve(self,self.gallery(15))), \
+             patch.object(self.runner.fetcher,'image',side_effect=lambda url:{'image_sha256':'hash:'+url,'local_image':str(self.preview)}):
+            row=self.runner.process(self.item,1)
+        self.assertEqual(row['stop_reason'],'identified')
+        self.assertEqual(row['discovery_rounds'],1)
+        self.assertEqual(row['retrieval_continuations'],1)
+        self.assertEqual(row['rounds'][0]['retrieval_coverage']['deferred_count'],7)
+        self.assertEqual(row['comparison']['result']['depicted_object']['value'],'Ninth gallery building')
+        self.assertLessEqual(len(row['rounds']),(1+rb.MAX_CONTINUATIONS)*(rb.MAX_POOL+1))
+
+    def test_adaptive_reaches_ninth_gallery_image_without_new_search(self):
+        self.gallery_pipeline('adaptive')
+
+    def test_portals_reaches_ninth_gallery_image_without_new_search(self):
+        self.gallery_pipeline('portals')
+
+    def test_cached_portal_restores_observed_deferred_cdn_urls(self):
+        self.runner.settings.update(discovery_mode='portals',max_rounds=1)
+        queries={k:self.discovery[k] for k in ('subject','search_terms','place_names','candidate_queries')}
+        urls=['https://media.example/photo.jpg','https://media.example/large.jpg']
+        rb.write(self.runner.path('001-r1-retrieval.json'),{'queries':queries,'pool':[],
+            'documents':[{'record_url':'https://museum.example/record','excerpt':'A photograph record'}],
+            'issues':[],'deferred_candidates':[{'candidate_image_url':urls[0],'image_variants':urls}],
+            'search':{'sources_used':[],'queries_remaining':6}})
+        with patch.object(self.runner,'call',side_effect=[receipt(self.discovery),receipt(comparison(docs=['D1']))]):
+            self.runner.process(self.item,1)
+        self.assertTrue(set(urls)<=self.runner.fetcher.observed_media)
+
+    def test_failed_retrieval_is_incomplete_coverage_in_both_modes(self):
+        for mode in ('adaptive','portals'):
+            with self.subTest(mode=mode):
+                self.runner.args.prefix='failure-'+mode
+                self.runner.settings.update(discovery_mode=mode,visual_verification=True)
+                def call(stem,prompt,schema,images=(),**kw):
+                    return self.adaptive_search() if mode=='adaptive' else receipt(self.discovery)
+                with patch.object(self.runner,'call',side_effect=call), \
+                     patch.object(self.runner.fetcher,'record',side_effect=ValueError('HTTP 503')), \
+                     patch.object(self.runner,'retrieve',return_value=([],[{'source':'museum','error':'HTTP 503'}])):
+                    row=self.runner.process(self.item,1)
+                self.assertTrue(row['coverage_incomplete'])
+                self.assertEqual(row['status'],'access_limited')
 
 
 if __name__=='__main__':unittest.main()

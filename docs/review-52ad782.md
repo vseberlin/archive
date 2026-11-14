@@ -219,3 +219,36 @@ Address F1 and F2, expose the retrieval truncation in F3, and establish the smal
 direct-versus-automatic benchmark. Then test a bounded DDB v2 adapter against the
 same examples. Add Sickle only after a specific relevant OAI-PMH collection has
 demonstrated useful records and usable linked images.
+
+## Implementation follow-up — v12, 14 November 2026
+
+F1–F3 are addressed. Visual comparisons now declare their relationship to INPUT;
+site matches cannot support event claims, and technical-type matches cannot
+support installation locations. A visible time bound requires a specific INPUT
+observation or independent reviewer binding. Reference-only date clues remain
+limitations rather than proposed photograph dates.
+
+Candidates deferred by per-record, pool or attempt limits remain available for
+up to two bounded retrieval continuations, before further discovery. Receipts
+record deferred URLs, overflow and the parser's 24-image truncation. Unattempted
+URLs do not become seen. Cached portal resumes restore observed media URLs, and
+access failures mark coverage incomplete. Exact footer-widget tokens are
+excluded without suppressing layout containers.
+
+Validation: 195 relevant offline tests passed, including field-specific support,
+INPUT dating, overflow accounting, adaptive/portal continuation, cached CDN
+resume and failed-access coverage. A fresh paired six-photo building pilot
+completed all twelve live trials with identical high-effort settings and identical
+first-discovery prompts. Both versions correctly supported two of three
+independently checked identities; three unknown identities were left unscored.
+V12 downloaded/inspected more references (66/52 versus 42/34), but both produced
+three supported INPUT fields. This is evidence of improved retrieval coverage,
+not improved recognition accuracy. One V12 trial drifted from a facade toward a
+truck; generic harvested metadata also included noisy source text. These remain
+limitations. Live-web/model variation and the small sample preclude causal or
+population claims. Private receipts, images and the full comparison report stay
+outside Git; no catalogue metadata was adopted.
+
+The live candidate was frozen before the final portal-resume and access-coverage
+follow-ups. Those two changes were tested offline and do not change adaptive
+retrieval or model decisions. No new adapter or harvesting subsystem was added.

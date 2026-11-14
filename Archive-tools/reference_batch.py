@@ -52,7 +52,7 @@ DEFAULT_REGISTRY = Path('/home/vladimir/Downloads/berlin-photo-reference-sources
 EXTRA_DOMAINS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org', 'www.wikidata.org'}
 COMMONS_HOSTS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org'}
 
-VERSION = 11
+VERSION = 12
 NUMBER = {'type': 'number', 'minimum': 0, 'maximum': 1}
 STATUS = {'type': 'string', 'enum': ['supported', 'tentative', 'unresolved', 'contradicted']}
 SUBJECTS = ['building', 'public_event', 'industry_or_schoeneweide', 'shop_sign_or_address',
@@ -80,12 +80,13 @@ COMPARISON = obj(observations=arr(obj(description=S, reference_id={'type': 'stri
 BOX = obj(label=S, x=NUMBER, y=NUMBER, w=NUMBER, h=NUMBER)
 VISUAL = obj(comparisons=arr(obj(reference_id=S,
     verdict={'type': 'string', 'enum': ['matching', 'compatible', 'different', 'insufficient']},
+    relationship={'type':'string','enum':['same_photograph','same_object_or_site','same_technical_type','same_event','unestablished']},
     matches=S, conflicts=S, limitation=S)),
     paired_crops=arr(obj(reference_id=S, reason=S, input_box=BOX, reference_box=BOX)),
     unresolved_feature=S)
 DATED_COMPARISON = {**COMPARISON, 'properties': {**COMPARISON['properties'],
     'date_basis': obj(kind={'type':'string', 'enum':['photo_record','visible_time_bound','historical_context','none']},
-                      explanation=S, reference_ids=arr(S))},
+                      explanation=S, reference_ids=arr(S), input_observation=S)},
     'required': [*COMPARISON['required'], 'date_basis']}
 DATED_COMPARISON['properties']['hypotheses'] = arr(obj(candidate=S, status=STATUS,
     assessment=S, reference_ids=arr(S), field={'type':'string',
@@ -94,6 +95,8 @@ CHILD = None
 
 MAX_POOL = 12          # bounded contact sheet; preserve source/viewpoint diversity
 MAX_IMAGE_ATTEMPTS = 18
+MAX_DEFERRED = 48      # URL metadata only; bounded continuation, never new discovery
+MAX_CONTINUATIONS = 2 # per image, sharing the existing token/attempt limits
 MAX_REFS = 4           # references per comparison call
 MAX_CROPS = 3
 TILE = 256
@@ -223,7 +226,8 @@ class Page(HTMLParser):
         tokens = (a.get('class', '')+' '+a.get('id', '')).lower().split()
         layout = {'html', 'body', 'main', 'article'}
         decoration = any(t in {'related', 'related-posts', 'related-content', 'recommendations',
-                         'recommended-posts', 'footer', 'sidebar', 'bzi-suggest-more-section'} for t in tokens)
+                         'recommended-posts', 'footer', 'footer-widgets', 'footer-widget',
+                         'sidebar', 'bzi-suggest-more-section'} for t in tokens)
         excluded = tag not in layout and (any(n['excluded'] for n in self.stack) or
                     tag in ('footer', 'nav', 'aside') or decoration)
         if tag not in self.VOID:
@@ -575,6 +579,8 @@ class Fetcher:
             absolute = urllib.parse.urljoin(receipt['final_url'], image['src'])
             if absolute in seen or re.search(r'logo|icon|pixel|banner|sprite|karte_|map|button|footer|sponsor', absolute, re.I): continue
             seen.add(absolute)
+            image_count += 1
+            if image_count > 24: continue
             variants = [urllib.parse.urljoin(receipt['final_url'], u) for u in image.get('variants', [image['src']])]
             self.observed_media.update([absolute, *variants])
             image_state = {'proposed_url': requested if image.get('discovered_image') else absolute,
@@ -593,8 +599,9 @@ class Fetcher:
                 'retrieval': 'record', 'query': url,
                 'caption_caution': ('Image opened independently; page association unverified.' if not image_state['associated_with_page']
                                     else '' if own else 'Page text is contextual; verify association to this image.')})
-            image_count += 1
-            if image_count >= 24: break
+        if out:
+            out[0]['gallery_coverage'] = {'observed_candidates':image_count,
+                'emitted_candidates':min(image_count,24), 'omitted_by_record_limit':max(0,image_count-24)}
         return out
 
 
@@ -784,20 +791,29 @@ def verify_assessments(receipt, visual, refs, documents, bindings=()):
     verdicts = {c['reference_id']:c['verdict'] for c in visual['comparisons']}
     strong = {r['id'] for r in refs if verdicts.get(r['id'])=='matching' and
               r.get('image_provenance', {}).get('associated_with_page', True)}
-    matching_pages = {r['record_url'] for r in refs if r['id'] in strong and r.get('record_url')}
-    contextual = {d['id'] for d in documents if d.get('record_url') in matching_pages}
+    relationships = {c['reference_id']:c.get('relationship','same_object_or_site') for c in visual['comparisons']}
+    def visual_support(field):
+        if field=='event': return {rid for rid in strong if relationships.get(rid) in ('same_event','same_photograph')}
+        if field=='location': return {rid for rid in strong if relationships.get(rid) in ('same_object_or_site','same_event','same_photograph')}
+        return {rid for rid in strong if relationships.get(rid)!='unestablished'}
     def bound(field):
         return {d['id'] for d in documents for b in bindings if
                 d.get('record_url') == b['record_url'] and field in b['fields']}
     def supported(field, cited):
         # Independently reviewed INPUT bindings can stand without incidental images.
         if cited & bound(field): return True
+        eligible = visual_support(field)
+        matching_pages = {r['record_url'] for r in refs if r['id'] in eligible and r.get('record_url')}
+        contextual = {d['id'] for d in documents if d.get('record_url') in matching_pages}
         image_ids = cited & ids
-        return bool(image_ids & strong) if image_ids else bool(cited & contextual)
+        return bool(image_ids & eligible) if image_ids else bool(cited & contextual)
     for ref in refs: ref['visual_verdict'] = verdicts.get(ref['id'], 'insufficient')
     date = value['date_basis']; date_ids = set(date['reference_ids'])
-    input_bound = date['kind']=='visible_time_bound' and 'INPUT' in date_ids
-    if not date_ids <= ids | docs | ({'INPUT'} if input_bound else set()):
+    input_cited = date['kind']=='visible_time_bound' and 'INPUT' in date_ids
+    observation = date.get('input_observation','').strip()
+    input_bound = input_cited and bool(observation) and any(
+        o.get('reference_id')=='INPUT' and o.get('description','').strip()==observation for o in value.get('observations',[]))
+    if not date_ids <= ids | docs | ({'INPUT'} if input_cited else set()):
         receipt['errors'].append('Date basis cites absent evidence')
     if date['kind'] in ('historical_context', 'none') or not date_ids:
         old = value['photograph_date']
@@ -808,9 +824,10 @@ def verify_assessments(receipt, visual, refs, documents, bindings=()):
         claim = value['photograph_date']
         if claim['status']=='supported': claim['status']='tentative'
         claim['explanation'] += ' Visible date text is a tentative time clue, not a verified exposure date.'
-        if not input_bound and not date_ids & (strong | bound('photograph_date')):
+        if not input_bound and not date_ids & bound('photograph_date'):
+            if claim['value']: value['limitations'].append('Unbound reference-only time clue: '+claim['value']+'; '+date['explanation'])
             value['photograph_date'] = {'status':'unresolved', 'value':None,
-                'explanation':'The time clue is not linked to INPUT by verified evidence.', 'reference_ids':[]}
+                'explanation':'The time clue lacks a specific INPUT observation or an independent photograph binding.', 'reference_ids':[]}
     elif date['kind']=='photo_record' and not (date_ids & bound('photograph_date') and
             set(value['photograph_date']['reference_ids']) & bound('photograph_date')):
         old = value['photograph_date']
@@ -929,7 +946,8 @@ class Runner:
                 'max_web_tool_calls': {'adaptive': 8, 'portals': 4, 'direct': 0}[self.args.discovery_mode],
                 'search_queries_per_adaptive_round': 6,
                 'contact_sheet_candidates': MAX_POOL, 'image_attempts_per_round': MAX_IMAGE_ATTEMPTS,
-                'max_comparison_batches': self.args.max_rounds*(MAX_POOL+1),
+                'max_comparison_batches': (self.args.max_rounds+MAX_CONTINUATIONS)*(MAX_POOL+1),
+                'deferred_candidate_limit': MAX_DEFERRED, 'retrieval_continuations': MAX_CONTINUATIONS,
                 'reference_images': 8 if self.args.discovery_mode == 'adaptive' else (1 if self.args.discovery_mode == 'direct' else self.policy()['refs']),
                 'input_crops': 2, 'wikidata_places': 1,
                 'records_per_round': 4 if self.args.discovery_mode == 'adaptive' else 6, 'source_policy': self.policy(),
@@ -1109,6 +1127,11 @@ Do not name or guess the site, object, artist or date. No web, shell or external
 Judge distinctive geometry and spatial relationships; generic resemblance is only compatible.
 Report matching, compatible, different or insufficient for each R ID, with concrete matches,
 conflicts and limitations. Different viewpoints or historical alterations alone are not disproof.
+Also state the relationship: same_photograph requires the same exposure/scene and viewpoint,
+including transient details; same_object_or_site establishes only the building/object/site;
+same_technical_type does not establish its installation location; same_event requires shared
+event-specific transient details visible in both photographs. Otherwise use unestablished.
+Explain those discriminating details in matches. A matching building cannot establish an event.
 Request at most two paired_crops when a specific detail could discriminate a match. Give one box
 on INPUT and its corresponding box on the named R image, normalized to the WHOLE labelled image
 including its banner. Never request a box for a feature outside the frame. State the single most
@@ -1157,6 +1180,10 @@ Caption names cannot erase visual contradictions. A compatible generic view does
 date_basis must distinguish photo_record, visible_time_bound, historical_context, or none and cite supplied
 evidence. Business occupancy, object creation or site history alone belongs in limitations, not a proposed
 photograph_date. Only a record bound to this photograph or a demonstrated visible time bound can date it.
+For visible_time_bound, cite INPUT and copy its specific visible clue observation verbatim into
+date_basis.input_observation. Include that observation in observations with reference_id INPUT.
+A sign/date visible only in a reference image is not an INPUT time bound; put it in limitations.
+For other date kinds set input_observation to an empty string.
 For the requested research goal, ask for further retrieval only about an unresolved distinguishing feature.
 Do not continue identification research solely to fill an unrelated date or location field."""
         prompt += '\nRESEARCH GOAL: '+self.settings.get('research_goal', 'identification')
@@ -1395,6 +1422,20 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
             groups.setdefault(c['source_id'], []).append(c)
         ordered = [g[n] for n in range(max(map(len, groups.values()), default=0)) for g in groups.values() if n < len(g)]
         documents = []; pool = []; issues = []; attempts = 0; per_record = {}
+        coverage = {'offered':len(candidates), 'downloaded':0, 'deferred':[], 'deferred_count':0,
+                    'omitted_deferred_count':0, 'reasons':{}, 'record_limits':
+                    [c['gallery_coverage'] for c in candidates if c.get('gallery_coverage')]}
+        self.gather_coverage = coverage
+        deferred_urls = set()
+        def defer(candidate, reason):
+            url = candidate.get('candidate_image_url')
+            if url in deferred_urls: return
+            deferred_urls.add(url)
+            coverage['deferred_count'] += 1
+            coverage['reasons'][reason] = coverage['reasons'].get(reason,0)+1
+            if len(coverage['deferred']) < MAX_DEFERRED:
+                coverage['deferred'].append({**candidate,'deferred_reason':reason})
+            else: coverage['omitted_deferred_count'] += 1
         document_keys = set()
         ordered.sort(key=lambda c: not c.get('discovered_image', False))
         for candidate in ordered:
@@ -1403,10 +1444,13 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
                 if key not in document_keys and len(documents) < 6:
                     documents.append(candidate); document_keys.add(key)
                 continue
-            if len(pool) >= MAX_POOL or attempts >= MAX_IMAGE_ATTEMPTS: continue
             url = candidate.get('candidate_image_url')
             # Decorations are excluded while parsing; seen photos do not consume slots.
-            if not url or url in seen or per_record.get(candidate['record_url'], 0) >= 8: continue
+            if not url or url in seen: continue
+            reason = ('pool_limit' if len(pool)>=MAX_POOL else 'attempt_limit' if attempts>=MAX_IMAGE_ATTEMPTS
+                      else 'per_record_limit' if per_record.get(candidate['record_url'],0)>=8 else None)
+            if reason:
+                defer(candidate, reason); continue
             choices = list(dict.fromkeys([url, *candidate.get('image_variants', [])]))
             image = None; failures = []
             for variant in choices:
@@ -1433,7 +1477,17 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
             per_record[candidate['record_url']] = per_record.get(candidate['record_url'], 0)+1
             pool.append({**candidate, **image, 'evidence_type': 'reference_photo',
                          'cid': f'C{len(pool)+1}', 'round': rnd})
+        coverage['downloaded'] = len(pool); coverage['attempts'] = attempts
         return pool, documents, issues
+
+    def gather_remaining(self, candidates, item, seen, rnd, record):
+        """Keep the public gather tuple while making its bounded coverage explicit."""
+        self.gather_coverage = {}
+        pool, documents, issues = self.gather(candidates, item, seen, rnd)
+        coverage = self.gather_coverage
+        record['retrieval_coverage'] = {k:v for k,v in coverage.items() if k!='deferred'}
+        record['deferred_candidates'] = [self.slim(c) for c in coverage.get('deferred',[])]
+        return pool, documents, issues, coverage.get('deferred',[])
 
     def check_result(self, result, refs, documents=()):
         allowed = {r['id'] for r in refs}; docs = {d['id'] for d in documents}
@@ -1482,7 +1536,7 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
     @staticmethod
     def slim(c):
         return {k: c.get(k) for k in ['cid', 'round', 'source_id', 'retrieval', 'query', 'record_url', 'record_id', 'title',
-                                      'image_url', 'local_image', 'image_sha256']}
+                                      'image_url', 'candidate_image_url', 'deferred_reason', 'local_image', 'image_sha256']}
 
     def adaptive_prompt(self, item, history):
         routing = item.get('research_routing') or classify(item.get('title',''), item.get('description',''))
@@ -1550,20 +1604,25 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                'started_at': now(), 'rounds': [], 'input_note': note,
                'input_path': str(input_img), 'input_sha256': digest(input_img),
                'input_recipe': item.get('preview_recipe', {}), 'initial_routing': item['research_routing']}
-        history = []; seen = set(); pending = []; carry = []; carry_docs = []; crops = []; used = set(); final = None
+        history = []; seen = set(); pending = []; deferred = []; continuations = 0
+        carry = []; carry_docs = []; crops = []; used = set(); final = None
         status = 'no_results'; stop = 'round_limit'; query_count = 0; discoveries = 0; features = []; followup = None
         # Each discovery downloads at most MAX_POOL candidates. Even one new image
         # per inspection batch fits this finite ceiling; search has its own counter.
-        for rnd in range(1, st['max_rounds']*(MAX_POOL+1)+1):
+        for rnd in range(1, (st['max_rounds']+MAX_CONTINUATIONS)*(MAX_POOL+1)+1):
             inspection_only = bool(pending)
-            if not inspection_only and discoveries >= st['max_rounds']: break
+            continuation = not pending and bool(deferred) and continuations < MAX_CONTINUATIONS
+            skip_search = inspection_only or continuation
+            if not skip_search and discoveries >= st['max_rounds']: break
             if not self.within_budget(row): status = 'usage_limit'; stop = 'usage_limit'; break
-            if not inspection_only:
+            if continuation: continuations += 1
+            if not skip_search:
                 discoveries += 1; followup = None
-            rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'discovery_round': discoveries}; row['rounds'].append(r)
+            rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'discovery_round': discoveries,
+                'retrieval_continuation':continuation}; row['rounds'].append(r)
             search = self.call(rs+'-adaptive', self.adaptive_prompt(item, history), ADAPTIVE_SEARCH,
                 [input_img, *crops, *[ref['labelled_image'] for ref in carry]], web=True, effort=st['compare_effort'], timeout=360,
-                query_limit=6, web_call_limit=8) if not inspection_only else {
+                query_limit=6, web_call_limit=8) if not skip_search else {
                     'result':{'research_routing':item['research_routing'],'visual_features':features,
                               'crop_boxes':[], 'records':[], 'queries_reported':[], 'limitations':[]},
                     'errors':[], 'usage':None, 'skipped':True, 'provenance_available':True}
@@ -1617,7 +1676,9 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                     candidates.extend(self.fetcher.record(entry))
                     entry['url_provenance']['page_fetched'] = True
                 except Exception as e: issues.append({'source': entry['url'], 'error': str(e)})
-            pool, documents, failures = self.gather(candidates, item, seen, rnd) if not inspection_only else ([], [], [])
+            if not inspection_only:
+                pool, documents, failures, deferred = self.gather_remaining(deferred+candidates, item, seen, rnd, r)
+            else: pool, documents, failures = [], [], []
             issues += failures
             pool = [{**c, 'cid':f'C{i+1}'} for i,c in enumerate(pending+pool)]
             r.update(pool=[self.slim(c) for c in pool], access_issues=issues)
@@ -1669,14 +1730,19 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                 if not (issues and not pool and not documents) and self.goal_met(result):
                     stop = self.goal_stop(); break
                 carry, carry_docs = retain_evidence(result, refs, docs)
-                pending_pages = {p['record_url'] for p in pending}
+                pending_pages = {p['record_url'] for p in pending+deferred}
                 carry_docs = list({d['id']:d for d in carry_docs +
                     [d for d in docs if d['record_url'] in pending_pages]}.values())[:6]
                 if issues and not pool and not documents:
                     stop = 'retrieval_failed'
-                elif not pending and not has_next(followup):
+                elif not pending and not (deferred and continuations<MAX_CONTINUATIONS) and not has_next(followup):
                     stop = 'search_exhausted'; break
-        row.update(status=status, stop_reason=stop, discovery_rounds=discoveries, uninspected_candidates=pending, evidence_history=history, sources_used=sorted(used), queries_used=query_count,
+        row.update(status=status, stop_reason=stop, discovery_rounds=discoveries,
+                   retrieval_continuations=continuations, unretrieved_candidates=deferred,
+                   coverage_incomplete=bool(deferred or pending or any(
+                       r.get('access_issues') or r.get('retrieval_coverage',{}).get('omitted_deferred_count') or any(
+                       c.get('omitted_by_record_limit') for c in r.get('retrieval_coverage',{}).get('record_limits',[])) for r in row['rounds'])),
+                   uninspected_candidates=pending, evidence_history=history, sources_used=sorted(used), queries_used=query_count,
                    research_routing=item['research_routing'])
         if final:
             row.update(final)
@@ -1762,16 +1828,21 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
         queries = {k: d[k] for k in ('subject', 'search_terms', 'place_names', 'candidate_queries')}
         queries['candidate_queries'] = list(dict.fromkeys(reviewer_candidates(item)+queries['candidate_queries']))
         features = d['visual_features']
-        seen = set(); pending = []; carry = []; carry_docs = []; final = None; history = []; crops = []
+        seen = set(); pending = []; deferred = []; continuations = 0
+        carry = []; carry_docs = []; final = None; history = []; crops = []
         used = set(); budget = [self.policy()['queries']]; status = 'no_results'; discoveries = 0; followup = None
-        for rnd in range(1, st['max_rounds']*(MAX_POOL+1)+1):
+        for rnd in range(1, (st['max_rounds']+MAX_CONTINUATIONS)*(MAX_POOL+1)+1):
             inspection_only = bool(pending)
-            if not inspection_only and discoveries >= st['max_rounds']: break
+            continuation = not pending and bool(deferred) and continuations < MAX_CONTINUATIONS
+            skip_search = inspection_only or continuation
+            if not skip_search and discoveries >= st['max_rounds']: break
             if not self.within_budget(row): status = 'usage_limit'; break
-            if not inspection_only:
+            if continuation: continuations += 1
+            if not skip_search:
                 discoveries += 1; followup = None
-            rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'discovery_round': discoveries, 'queries': queries}; row['rounds'].append(r)
-            if discoveries > 1 and not inspection_only and not crops and d['crop_boxes']:
+            rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'discovery_round': discoveries,
+                'queries': queries, 'retrieval_continuation':continuation}; row['rounds'].append(r)
+            if discoveries > 1 and not skip_search and not crops and d['crop_boxes']:
                 try: crops, note = self.native_details(item, d['crop_boxes'], stem)
                 except Exception as e: crops, note = [], 'Native crop unavailable: '+str(e)
                 row['crop_note'] = note; row['crops'] = [str(p) for p in crops]
@@ -1795,6 +1866,8 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
             r['inspection_only'] = inspection_only
             if inspection_only:
                 pool, documents, issues = pending, [], []
+            elif continuation:
+                pool, documents, issues, deferred = self.gather_remaining(deferred, item, seen, rnd, r)
             else:
                 checkpoint = self.path(rs+'-retrieval.json')
                 retry_search = checkpoint.exists() and getattr(self.args, 'retry_failed', False) and any(
@@ -1803,6 +1876,12 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                     saved = read(checkpoint)
                     require(saved['queries'] == queries, 'Retrieval inputs changed; prepare a new prefix')
                     pool, documents, issues = saved['pool'], saved['documents'], saved['issues']
+                    deferred = saved.get('deferred_candidates',[])
+                    # These exact media URLs were observed when this checkpoint was
+                    # created. Restore them for CDN continuation after a restart;
+                    # Fetcher.validate still enforces public HTTP(S) addresses.
+                    self.fetcher.observed_media.update(u for c in deferred for u in
+                        [c.get('candidate_image_url'), *c.get('image_variants',[])] if u)
                     r.update(saved['search'])
                     used.update(r['sources_used']); budget[0] = r['queries_remaining']
                     for c in pool:
@@ -1811,9 +1890,10 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                                      *c.get('image_variants', [])])
                 else:
                     candidates, issues = self.retrieve(queries, item, rnd, row, history, used, budget)
-                    pool, documents, image_issues = self.gather(candidates, item, seen, rnd)
+                    pool, documents, image_issues, deferred = self.gather_remaining(deferred+candidates, item, seen, rnd, r)
                     issues += image_issues
                     write(checkpoint, {'queries': queries, 'pool': pool, 'documents': documents, 'issues': issues,
+                                      'deferred_candidates':deferred,
                                       'search': {k: v for k, v in r.items() if k not in ('round', 'queries')}})
             r.update(pool=[self.slim(c) for c in pool], access_issues=issues)
             if not self.within_budget(row): status = 'usage_limit'; break
@@ -1878,17 +1958,22 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
             history.append(round_memory(rnd, res, refs+docs))
             if self.goal_met(res): row['stop_reason'] = self.goal_stop(); break
             if not self.within_budget(row): status = 'usage_limit'; break
-            if not (pending or (discoveries < st['max_rounds'] and
+            if not (pending or (deferred and continuations<MAX_CONTINUATIONS) or (discoveries < st['max_rounds'] and
                     has_next(followup) and budget[0] > 0)):
                 row['stop_reason'] = 'round_limit' if discoveries >= st['max_rounds'] else 'search_exhausted'
                 break
             carry, carry_docs = retain_evidence(res, refs, docs)
-            pending_pages = {p['record_url'] for p in pending}
+            pending_pages = {p['record_url'] for p in pending+deferred}
             carry_docs = list({d['id']:d for d in carry_docs +
                 [d for d in docs if d['record_url'] in pending_pages]}.values())[:6]
             if has_next(followup): queries = merge_queries(queries, followup, followup=True)
         row['status'] = status
         row['discovery_rounds'] = discoveries
+        row['retrieval_continuations'] = continuations
+        row['unretrieved_candidates'] = deferred
+        row['coverage_incomplete'] = bool(deferred or pending or any(
+            r.get('access_issues') or r.get('retrieval_coverage',{}).get('omitted_deferred_count') or any(
+            c.get('omitted_by_record_limit') for c in r.get('retrieval_coverage',{}).get('record_limits',[])) for r in row['rounds']))
         row['uninspected_candidates'] = pending
         if final:
             row.update(final)
@@ -2008,7 +2093,7 @@ def main():
     p.add_argument('--research-root', type=Path, default=DEFAULT_WORK)
     p.add_argument('--work-root', type=Path, default=DEFAULT_REVIEW)
     p.add_argument('--registry', type=Path, default=DEFAULT_REGISTRY)
-    p.add_argument('--prefix', required=True, help='new prefix for v11; existing run artifacts are retained')
+    p.add_argument('--prefix', required=True, help='new prefix for v12; existing run artifacts are retained')
     p.add_argument('--model', default='gpt-6-astra')
     p.add_argument('--limit', type=int, default=0)
     p.add_argument('--retry-failed', action='store_true', help='explicitly retry failed calls on this invocation; retain all attempts')

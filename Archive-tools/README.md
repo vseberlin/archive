@@ -792,7 +792,7 @@ list; full findings remain in the original research record.
 
 ## Bounded reference research
 
-Current runner: `reference_batch.py` (v11). The older runner under
+Current runner: `reference_batch.py` (v12). The older runner under
 `work-area/visual-similarity` is retained history. The versioned
 `berlin-photo-reference-sources.json` contains the 19-source website registry;
 use `--registry /home/vladimir/archive/Archive-tools/berlin-photo-reference-sources.json`
@@ -931,6 +931,33 @@ The batch still stops when an individual image reaches its token threshold, or t
 batch-average threshold is exceeded after at least three items. This cost safeguard
 is unchanged; use `--limit 3` for a measured pilot. No new recognition-accuracy claim
 follows from the offline regression checks.
+
+v12 addresses the evidence and coverage findings in `f904ad2` and `f6042b3`:
+
+- Blind comparisons distinguish the same photograph, object/site, technical type,
+  and event. A building match cannot validate a ceremony, and a machine-type match
+  cannot validate an installation location. Independent reviewer bindings remain
+  usable for the specific fields they establish.
+- A visible time bound must cite INPUT and supply a specific observation copied
+  into `date_basis.input_observation`, or use an independent photograph binding.
+  Dates/signs appearing only in references remain contextual limitations, even
+  when the building matches. Time clues stay tentative; exact exposure dates still
+  require the reviewed photograph-record binding.
+- Gathering records deferred URLs and cap reasons separately from access failures.
+  Up to 48 candidate records are retained for two bounded retrieval continuations
+  per image. These consume the existing token and per-fetch limits, and follow
+  pending-image inspection before another web search. They do not consume discovery
+  rounds. Remaining URLs, overflow counts and parser-level image truncation stay in
+  receipts; `coverage_incomplete` prevents treating a capped gallery as fully inspected.
+- The specific `footer-widgets`/`footer-widget` tokens exclude decoration while
+  preserving layout modifiers such as `footer-fixed`.
+
+Prepare a fresh v12 prefix. The six-building-photo before/after experiment uses
+isolated named-object plans for v11 and v12 with identical model/effort/budgets,
+withheld prior identities and saved expected answers outside the model prompts.
+The plans and research receipts stay in the private work area. Live web/model
+variation and incomplete ground truth must be reported alongside any differences;
+a supported field count alone is not recognition accuracy.
 
 `reference_batch.py` v7 uses subject-specific routing for adaptive visual web discovery.
 The shared `research_routes.py` contract covers buildings/places, machinery and

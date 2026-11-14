@@ -59,7 +59,7 @@ authorized accession. Marking a candidate redundant never authorizes deletion.
 ## Current photo research source
 
 The working research runner is [`Archive-tools/reference_batch.py`](Archive-tools/reference_batch.py)
-(v11). Its helpers, regression tests and review UI live alongside it. The older
+(v12). Its helpers, regression tests and review UI live alongside it. The older
 `work-area/visual-similarity/reference_batch.py` and its v2 notes are retained
 history; use the `Archive-tools` runner for current work.
 
