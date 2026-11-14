@@ -194,7 +194,7 @@ class RefactorTests(unittest.TestCase):
     def test_observed_commons_record_is_resolved_directly_not_searched(self):
         for url in ['https://commons.wikimedia.org/wiki/File:MIAG_Walzenstuhl_.jpg',
                     'https://commons.wikimedia.org/wiki/File%3AMIAG_Walzenstuhl_.jpg']:
-            with patch.object(self.runner.fetcher,'commons_api',return_value=[]) as api:
+            with patch.object(self.runner.fetcher,'commons_api',return_value=[{'candidate_image_url':'https://upload.wikimedia.org/a.jpg'}]) as api:
                 self.runner.fetcher.record({'url':url})
             self.assertEqual(api.call_args.args[0],{'titles':'File:MIAG_Walzenstuhl_.jpg','redirects':1})
 
@@ -245,12 +245,14 @@ class RefactorTests(unittest.TestCase):
         self.assertEqual(len(pool),2);self.assertEqual(len(issues),1)
         self.assertEqual(len({r['record_url'] for r in pool}),1)
 
-    def test_revisited_record_does_not_promote_decorations(self):
+    def test_revisited_record_reaches_remaining_photos_without_seen_slots(self):
         rows=[{'source_id':'museum','record_url':'https://museum.example/object','title':'Machine',
                'candidate_image_url':'https://museum.example/'+str(i)} for i in range(4)]
-        with patch.object(self.runner.fetcher,'image') as fetch:
+        with patch.object(self.runner.fetcher,'image',side_effect=lambda url:
+                          {'image_sha256':hashlib.sha256(url.encode()).hexdigest()}) as fetch:
             pool,docs,issues=self.runner.gather(rows,{},set(r['candidate_image_url'] for r in rows[:2]),2)
-        self.assertEqual(pool,[]);fetch.assert_not_called()
+        self.assertEqual([p['candidate_image_url'] for p in pool], [r['candidate_image_url'] for r in rows[2:]])
+        self.assertEqual(fetch.call_count,2)
 
     def test_named_candidate_drawing_survives_generic_type_references(self):
         result=comparison()
@@ -411,6 +413,7 @@ class RefactorTests(unittest.TestCase):
         self.assertEqual(row['status'],'access_limited')
 
     def test_document_only_processing_and_followup_keeps_prior_success(self):
+        self.runner.settings['research_goal']='location'  # Object identity alone does not finish this goal.
         doc={'source_id':'museum','record_url':'https://museum.example/object','title':'Jaguar',
              'evidence_type':'catalogue_record','excerpt':'B III 106','page_number':None}
         calls=[receipt(self.discovery),receipt(comparison(docs=['D1'],more=True)),receipt(None,errors=['timeout'])]
@@ -720,6 +723,305 @@ class RefactorTests(unittest.TestCase):
         self.assertFalse(later.get('priority_queries'))
         self.assertIn('crouching animal open mouth',later['search_terms'])
         self.assertEqual(rb.query_terms(later)[0][0],'Philipp Harth Jaguar')
+
+
+class ResearchQualityTests(unittest.TestCase):
+    setUp = RefactorTests.setUp
+    def visual(self, verdict='matching', boxes=()):
+        return receipt({'comparisons':[{'reference_id':'R1','verdict':verdict,
+            'matches':'window geometry','conflicts':'','limitation':'angle'}],
+            'paired_crops':list(boxes),'unresolved_feature':'roof ornament'})
+
+    def test_explicit_thumbnail_upgrades_only_with_observed_group_and_keeps_provenance(self):
+        body=b'<img src="/building-800x600.jpg" srcset="/building-800x600.jpg 800w, /building-2000x1500.jpg 2000w" alt="Facade">'
+        meta={'content_type':'text/html','final_url':'https://museum.example/article'}
+        requested='https://museum.example/building-800x600.jpg'
+        with patch.object(self.runner.fetcher,'fetch',return_value=(body,meta)):
+            rows=self.runner.fetcher.record({'source_id':'museum','url':meta['final_url'],
+                'image_url':requested,'relevance':'facade'})
+        photo=next(r for r in rows if r['evidence_type']=='reference_photo')
+        self.assertEqual(photo['candidate_image_url'],'https://museum.example/building-2000x1500.jpg')
+        self.assertEqual(photo['discovered_image_url'],requested)
+        self.assertEqual(photo['caption'],'Facade')
+
+    def test_commons_file_page_is_not_a_full_resolution_image_link(self):
+        page=rb.Page();page.feed('<a href="/wiki/File:Facade.jpg"><img alt="Facade" '
+            'src="https://upload.wikimedia.org/thumb/a/Facade.jpg/320px-Facade.jpg" '
+            'srcset="https://upload.wikimedia.org/thumb/a/Facade.jpg/640px-Facade.jpg 2x"></a>')
+        photos=rb.ranked_page_images(page.images,'facade')
+        self.assertEqual(len(photos),1)
+        self.assertTrue(photos[0]['src'].startswith('https://upload.wikimedia.org/'))
+        self.assertFalse(any('/wiki/' in u for u in photos[0]['variants']))
+        self.assertTrue(photos[0]['src'].endswith('/640px-Facade.jpg'))
+
+    def test_commons_category_uses_api_media_and_preserves_discovery_page(self):
+        url='https://commons.wikimedia.org/wiki/Category%3AFacades'
+        record={'record_url':'https://commons.wikimedia.org/wiki/File:Facade.jpg',
+                'candidate_image_url':'https://upload.wikimedia.org/a/Facade.jpg'}
+        with patch.object(self.runner.fetcher,'fetch',return_value=(b'<html/>',{'url':url})), \
+             patch.object(self.runner.fetcher,'commons_category',return_value=[record]) as api:
+            out=self.runner.fetcher.record({'url':url,'source_id':'commons','relevance':'facade'})
+        api.assert_called_once_with('Facades')
+        self.assertEqual(out[0]['discovery_page_url'],url)
+        self.assertTrue(out[0]['url_provenance']['page_fetched'])
+
+    def test_missing_commons_file_is_retrieval_failure_not_empty_success(self):
+        entry={'url':'https://commons.wikimedia.org/wiki/File:Missing.jpg',
+               'source_id':'commons','relevance':'facade','url_provenance':{'page_fetched':False}}
+        with patch.object(self.runner.fetcher,'commons_api',return_value=[]), \
+             self.assertRaisesRegex(ValueError,'no usable image record'):
+            self.runner.fetcher.record(entry)
+        self.assertFalse(entry['url_provenance']['page_fetched'])
+
+    def test_pdf_title_does_not_promote_search_hypothesis_to_document_evidence(self):
+        entry={'url':'https://museum.example/history.pdf','source_id':'museum',
+               'relevance':'This proves the address and date'}
+        with patch.object(self.runner.fetcher,'fetch',return_value=(b'%PDF-',{'content_type':'application/pdf'})), \
+             patch.object(rb.shutil,'which',return_value='/usr/bin/pdftotext'), \
+             patch.object(rb.subprocess,'run',return_value=types.SimpleNamespace(returncode=0,stdout=b'Unrelated historical text')):
+            doc=self.runner.fetcher.record(entry)[0]
+        self.assertEqual(doc['title'],'history.pdf')
+        self.assertEqual(doc['discovery_relevance'],entry['relevance'])
+        prompt=self.runner.compare_prompt(self.item,[],[],[],[{**doc,'id':'D1'}])
+        self.assertNotIn(entry['relevance'],prompt)
+
+    def test_blind_stage_cannot_see_captions_and_context_date_is_not_photo_date(self):
+        self.runner.settings['visual_verification']=True
+        ref={'id':'R1','labelled_image':str(self.preview),'title':'SECRET IDENTITY','caption':'SECRET CAPTION'}
+        result=comparison(['R1']);result['depicted_object']=assessment('supported',['R1'],'Site')
+        result['photograph_date']=assessment('tentative',['R1'],'1921–1945')
+        result['date_basis']={'kind':'historical_context','explanation':'Business occupancy','reference_ids':['R1']}
+        record={}
+        with patch.object(self.runner,'call',side_effect=[self.visual('different'),receipt(result)]) as call:
+            out=self.runner.compare_verified(self.item,[ref],[],[],self.preview,'r1',record)
+        blind=call.call_args_list[0].args[1]
+        self.assertNotIn('SECRET',blind)
+        self.assertIn('SECRET CAPTION',call.call_args_list[1].args[1])
+        self.assertEqual(out['result']['depicted_object']['status'],'tentative')
+        self.assertIsNone(out['result']['photograph_date']['value'])
+        self.assertEqual(out['raw_result']['photograph_date']['value'],'1921–1945')
+        self.assertEqual(rb.row_tokens({'rounds':[{**record,'comparison':out}]}),200)
+
+    def test_paired_crops_use_original_pixels_and_reject_modified_original(self):
+        self.runner.settings.update(native_crops=True)
+        original=self.root/'original.png';Image.new('RGB',(2000,1000),'blue').save(original)
+        overview=self.root/'R1.jpg';rb.save_jpeg(rb.labelled(rb.open_rgb(original),'R1',900),overview)
+        ref={'id':'R1','original_image':str(original),'labelled_image':str(overview),
+             'download_receipt':{'sha256':rb.digest(original)}}
+        box={'label':'window','x':.1,'y':.2,'w':.4,'h':.4}
+        req={'reference_id':'R1','reason':'windows','input_box':box,'reference_box':box}
+        with patch.object(self.runner,'native_details',return_value=([self.preview],'native')):
+            paths,notes=self.runner.paired_details(self.item,self.preview,[ref],[req],'paired')
+            self.assertEqual(len(paths),2)
+            with Image.open(paths[1]) as im:self.assertGreaterEqual(im.width,800)
+            original.write_bytes(b'changed')
+            paths,notes=self.runner.paired_details(self.item,self.preview,[ref],[req],'changed')
+        self.assertFalse(paths);self.assertIn('changed',notes[0]['error'])
+
+    def test_identification_goal_stops_even_when_date_or_location_remains_open(self):
+        result=comparison(['R1'],more=True)
+        result['depicted_object']=assessment('supported',['R1'],'Named sculpture')
+        self.assertTrue(self.runner.goal_met(result))
+        for goal in ('location','dating'):
+            self.runner.settings['research_goal']=goal
+            self.assertFalse(self.runner.goal_met(result))
+
+    def test_adaptive_identification_does_not_search_again_only_for_date(self):
+        self.runner.settings.update(discovery_mode='adaptive')
+        result=comparison(['R1'],more=True)
+        result['depicted_object']=assessment('supported',['R1'],'Named building')
+        result['next']={'reason':'Date still unknown','search_terms':['business occupancy'],'place_names':[]}
+        pool=[{'image_sha256':'a','local_image':str(self.preview),'record_url':'https://museum.example/article'}]
+        with patch.object(self.runner,'call',side_effect=[self.adaptive_search(),receipt(result)]) as call, \
+             patch.object(self.runner.fetcher,'record',return_value=[]), \
+             patch.object(self.runner,'gather',return_value=(pool,[],[])):
+            row=self.runner.process(self.item,1)
+        self.assertEqual(call.call_count,2)
+        self.assertEqual(row['stop_reason'],'identified')
+        self.assertEqual(len(row['rounds']),1)
+
+    def test_invalid_blind_reference_blocks_caption_comparison(self):
+        self.runner.settings['visual_verification']=True
+        ref={'id':'R1','labelled_image':str(self.preview)}
+        visual=self.visual();visual['result']['comparisons'][0]['reference_id']='R9'
+        with patch.object(self.runner,'call',return_value=visual) as call:
+            result=self.runner.compare_verified(self.item,[ref],[],[],self.preview,'r1',{})
+        self.assertTrue(result['errors']);call.assert_called_once()
+
+    def test_usage_limit_after_blind_check_prevents_another_paid_call(self):
+        self.runner.settings.update(visual_verification=True,max_item_tokens=50)
+        with patch.object(self.runner,'call',return_value=self.visual()) as call:
+            record={}
+            result=self.runner.compare_verified(self.item,[{'id':'R1','labelled_image':str(self.preview)}],
+                [],[],self.preview,'r1',record)
+        call.assert_called_once();self.assertEqual(result['stop_reason'],'usage_limit')
+        self.assertEqual(rb.row_tokens({'rounds':[{**record,'comparison':result}]}),100)
+
+    def test_detail_recheck_precedes_caption_comparison_and_is_counted(self):
+        self.runner.settings['visual_verification']=True
+        ref={'id':'R1','labelled_image':str(self.preview)}
+        result=comparison(['R1']);result['date_basis']={'kind':'none','explanation':'Unknown','reference_ids':[]}
+        record={}
+        with patch.object(self.runner,'paired_details',return_value=([self.preview,self.preview],[])), \
+             patch.object(self.runner,'call',side_effect=[self.visual(),self.visual(),receipt(result)]) as call:
+            out=self.runner.compare_verified(self.item,[ref],[],[],self.preview,'r1',record)
+        self.assertIn('visual-details',call.call_args_list[1].args[0])
+        self.assertIn('CAPTION-BLIND',call.call_args_list[2].args[1])
+        self.assertEqual(rb.row_tokens({'rounds':[{**record,'comparison':out}]}),300)
+    # Reuse fixtures without inheriting the older tests a second time.
+    def test_gallery_excludes_related_cards_and_keeps_caption_and_full_resolution(self):
+        page=rb.Page()
+        page.feed('<main><figure><a href="https://museum.example/original.jpg">'
+                  '<img src="https://museum.example/small.jpg" alt="East facade" '
+                  'srcset="https://museum.example/medium.jpg 800w, https://museum.example/large.jpg 1600w">'
+                  '</a><figcaption>Photographer, 1930</figcaption></figure>'
+                  '<section class="bzi-suggest-more-section"><img src="https://museum.example/related.jpg"></section>'
+                  '<footer><img src="https://museum.example/footer.jpg"></footer></main>')
+        photos=rb.ranked_page_images(page.images,'facade')
+        self.assertEqual(len(photos),1)
+        self.assertEqual(photos[0]['src'],'https://museum.example/original.jpg')
+        self.assertEqual(photos[0]['alt'],'East facade')
+        self.assertEqual(photos[0]['caption'],'Photographer, 1930')
+        self.assertEqual(len(photos[0]['variants']),4)
+
+    def test_larger_wordpress_variant_keeps_alt_and_gallery_caption_separate(self):
+        page=rb.Page();page.feed('<meta property="og:image" content="https://a/wp-content/uploads/harbour-scaled.jpg">'
+            '<figure><img src="https://a/wp-content/uploads/harbour-1024x682.jpg" alt="Harbour from river">'
+            '<img src="https://a/wp-content/uploads/warehouse.jpg" alt="Warehouse">'
+            '<figcaption>Gallery credit</figcaption></figure>')
+        photos=rb.ranked_page_images(page.images,'harbour')
+        harbour=next(p for p in photos if 'harbour' in p['src'])
+        self.assertEqual(len(photos),2)
+        self.assertEqual(harbour['alt'],'Harbour from river')
+        self.assertEqual(harbour['caption'],'')
+        self.assertEqual(harbour['gallery_caption'],'Gallery credit')
+
+    def test_supplied_image_is_preserved_with_its_page(self):
+        body=b'<title>Gallery</title><img src="/one.jpg"><img src="/two.jpg" alt="Rear facade">'
+        meta={'content_type':'text/html','final_url':'https://museum.example/article'}
+        with patch.object(self.runner.fetcher,'fetch',return_value=(body,meta)):
+            rows=self.runner.fetcher.record({'source_id':'museum','url':meta['final_url'],
+                'image_url':'https://museum.example/two.jpg','relevance':'facade'})
+        photos=[r for r in rows if r['evidence_type']=='reference_photo']
+        self.assertEqual(photos[0]['candidate_image_url'],'https://museum.example/two.jpg')
+        self.assertEqual(photos[0]['caption'],'Rear facade')
+        self.assertEqual(photos[0]['record_url'],meta['final_url'])
+        self.assertTrue(photos[0]['url_provenance']['page_fetched'])
+        with patch.object(self.runner.fetcher,'fetch',return_value=(body,meta)), self.assertRaisesRegex(ValueError,'neither'):
+            self.runner.fetcher.record({'source_id':'museum','url':meta['final_url'],
+                'image_url':'https://unobserved.example/invented.jpg','relevance':'facade'})
+
+    def test_responsive_group_bridges_og_image_without_duplicate_or_caption_loss(self):
+        page=rb.Page();page.feed('<meta property="og:image" content="https://museum.example/large.jpg">'
+            '<img src="https://museum.example/small.jpg" alt="Facade" '
+            'srcset="https://museum.example/small.jpg 800w, https://museum.example/large.jpg 1600w">')
+        photos=rb.ranked_page_images(page.images,'facade')
+        self.assertEqual(len(photos),1)
+        self.assertEqual(photos[0]['src'],'https://museum.example/large.jpg')
+        self.assertEqual(photos[0]['alt'],'Facade')
+
+    def test_action_url_admitted_without_claiming_search_or_fetch_success(self):
+        self.runner.settings.update(discovery_mode='adaptive',max_rounds=1)
+        response=self.adaptive_search();url=response['observed_urls'][0]
+        response.update(observed_urls=[],action_urls=[url])
+        with patch.object(self.runner,'call',return_value=response), \
+             patch.object(self.runner.fetcher,'record',side_effect=ValueError('HTTP 403')):
+            row=self.runner.process(self.item,1)
+        state=row['rounds'][0]['url_provenance'][0]
+        self.assertFalse(state['observed_in_search']);self.assertTrue(state['requested_by_tool'])
+        self.assertFalse(state['page_fetched']);self.assertEqual(row['stop_reason'],'retrieval_failed')
+
+    def test_large_gallery_can_continue_after_per_round_limit(self):
+        rows=[{'source_id':'museum','record_url':'https://museum.example/gallery','title':'Photograph',
+               'candidate_image_url':f'https://museum.example/{i}.jpg'} for i in range(12)]
+        with patch.object(self.runner.fetcher,'image',side_effect=lambda u:{'image_sha256':hashlib.sha256(u.encode()).hexdigest()}):
+            seen=set(); first=self.runner.gather(rows,{},seen,1)[0]; second=self.runner.gather(rows,{},seen,2)[0]
+        self.assertEqual((len(first),len(second)),(8,4))
+        self.assertEqual(len({p['candidate_image_url'] for p in first+second}),12)
+
+    def test_visual_selection_can_choose_a_photo_below_text_top_six(self):
+        pool=[{'cid':f'C{i}','local_image':str(self.preview)} for i in range(1,9)]
+        result=receipt({'picks':[{'candidate_id':'C8','verdict':'likely','reason':'Matching windows'}],
+                        'next':{'reason':'','search_terms':[],'place_names':[]}})
+        record={}
+        with patch.object(self.runner,'call',return_value=result) as call:
+            picked=self.runner.visual_selection(pool,self.preview,[],[],'r1',record)
+        self.assertEqual(picked,[pool[-1]])
+        self.assertEqual(len(call.call_args.args[3]),2) # INPUT and gallery
+        self.assertFalse(call.call_args.kwargs.get('web',False))
+
+    def test_action_only_provenance_is_distinct_from_search_and_fetch(self):
+        event={'type':'item.completed','item':{'type':'web_search',
+               'action':{'type':'open_page','url':'https://museum.example/article'}}}
+        self.assertTrue(rb.has_url_provenance([event]))
+        self.assertEqual(rb.observed_urls([event]),[])
+        self.assertEqual(rb.action_urls([event]),['https://museum.example/article'])
+
+    def adaptive_search(self, boxes=()):
+        url='https://museum.example/article'
+        return {**receipt({'research_routing':{'primary':'buildings_places','secondary':[],
+            'confidence':'high','reason':'Facade'},'visual_features':['windows'],'crop_boxes':list(boxes),
+            'records':[{'source_id':'museum','page_url':url,'image_url':None,'relevance':'facade'}],
+            'queries_reported':['facade'],'limitations':[]}), 'observed_urls':[url]}
+
+    def test_crops_precede_first_comparison_and_references_reach_next_discovery(self):
+        self.runner.settings.update(discovery_mode='adaptive',native_crops=True)
+        crop=self.root/'detail.jpg';Image.new('RGB',(100,100)).save(crop)
+        calls=[]
+        def call(stem,prompt,schema,images=(),**kw):
+            calls.append((stem,list(images)))
+            if stem.endswith('adaptive'):
+                return self.adaptive_search([{'label':'sign','x':.1,'y':.1,'w':.4,'h':.4}])
+            return receipt(comparison(['R1'],more=False)) # unresolved must not stop early
+        pool=[{'image_sha256':'a','local_image':str(self.preview),'record_url':'https://museum.example/article'}]
+        with patch.object(self.runner,'call',side_effect=call), \
+             patch.object(self.runner,'research_input',return_value=(self.preview,'test')), \
+             patch.object(self.runner,'native_details',return_value=([crop],'native crop')) as native, \
+             patch.object(self.runner.fetcher,'record',return_value=[]), \
+             patch.object(self.runner,'gather',return_value=(pool,[],[])):
+            row=self.runner.process(self.item,1)
+        self.assertEqual(len(calls),4)
+        self.assertIn(crop,calls[1][1])
+        self.assertEqual(len(calls[2][1]),3) # INPUT, crop, retained reference
+        self.assertEqual(native.call_count,2) # includes final-round crop request
+        self.assertEqual(row['stop_reason'],'round_limit')
+
+    def test_partial_result_remains_retryable_after_failed_second_search(self):
+        self.runner.settings.update(discovery_mode='adaptive')
+        pool=[{'image_sha256':'a','local_image':str(self.preview),'record_url':'https://museum.example/article'}]
+        calls=[self.adaptive_search(),receipt(comparison(['R1'],more=True)),receipt(None,errors=['timeout'])]
+        with patch.object(self.runner,'call',side_effect=calls), \
+             patch.object(self.runner.fetcher,'record',return_value=[]), \
+             patch.object(self.runner,'gather',return_value=(pool,[],[])):
+            row=self.runner.process(self.item,1)
+        self.assertEqual(row['status'],'compared')
+        self.assertEqual(row['stop_reason'],'search_failed')
+        self.assertTrue(rb.retryable(row));self.assertEqual(row['comparison']['result']['comparisons'][0]['reference_id'],'R1')
+
+    def test_retry_run_revisits_partial_failure_without_attaching_pilot(self):
+        self.runner.args.retry_failed=True;self.runner.args.limit=0
+        rb.write(self.runner.path('harvest.json'),[{'object_id':'object','status':'compared','stop_reason':'access_limited'}])
+        result={'object_id':'object','number':1,'status':'compared','stop_reason':'identified','rounds':[]}
+        with patch.object(self.runner,'load_plan',return_value={'items':[self.item],'benchmark':True}), \
+             patch.object(self.runner,'process',return_value=result) as process, \
+             patch.object(self.runner,'publish'), patch.object(self.runner,'attach') as attach, \
+             patch.object(rb.signal,'signal'):
+            self.runner.run()
+        process.assert_called_once();attach.assert_not_called()
+
+    def test_direct_control_makes_one_comparison_without_search(self):
+        self.runner.settings.update(discovery_mode='direct',direct_reference={
+            'page_url':'https://museum.example/article','image_url':'https://museum.example/known.jpg'})
+        candidate={'source_id':'museum','record_url':'https://museum.example/article','title':'',
+                   'candidate_image_url':'https://museum.example/known.jpg'}
+        result=comparison(['R1']);result['depicted_object']=assessment('supported',['R1'],'Site')
+        result['location']=assessment('supported',['R1'],'Address')
+        with patch.object(self.runner.fetcher,'record',return_value=[candidate]), \
+             patch.object(self.runner.fetcher,'image',return_value={'image_sha256':'a','local_image':str(self.preview)}), \
+             patch.object(self.runner,'call',return_value=receipt(result)) as call:
+            row=self.runner.process(self.item,1)
+        call.assert_called_once();self.assertFalse(call.call_args.kwargs.get('web',False))
+        self.assertEqual(row['stop_reason'],'identified');self.assertEqual(row['queries_used'],0)
 
 
 if __name__=='__main__':unittest.main()

@@ -792,12 +792,68 @@ list; full findings remain in the original research record.
 
 ## Bounded reference research
 
-Current runner: `reference_batch.py` (v7). The older runner under
+Current runner: `reference_batch.py` (v9). The older runner under
 `work-area/visual-similarity` is retained history. The versioned
 `berlin-photo-reference-sources.json` contains the 19-source website registry;
 use `--registry /home/vladimir/archive/Archive-tools/berlin-photo-reference-sources.json`
 explicitly to select it. The existing Downloads default is preserved, and
 existing plans still require their frozen script and registry hashes.
+
+v8 preserves an explicitly discovered `image_url` alongside its `page_url`.
+Article images retain captions, gallery context and observed resolution links;
+related-content sections and footer images are excluded before selection. Each
+round can download up to eight unseen photographs per page, within the existing
+12-image pool and 18-attempt limits. Seen images do not consume those slots.
+Pools of up to six are compared in full; larger pools receive a visual shortlist
+before the selected full-size images reach comparison. Text ranking only orders
+retrieval. These limits are bounded coverage, not an exhaustive website search.
+
+Requested native detail crops are generated before that round's comparison.
+The next discovery receives the retained reference photographs as well as INPUT,
+crops and textual history. An unresolved requested research goal does not stop solely
+because the model says `needs_more_references=false`. Receipts distinguish
+`identified`, `search_exhausted` (within the attempted sources), `round_limit`,
+`usage_limit`, and retrieval/search/comparison/integration failures. A successful
+earlier comparison remains available after a later failure; `--retry-failed`
+checks `stop_reason` as well as status, and batch status exposes retryable counts.
+
+URL provenance separates a model-proposed URL, a URL in search results, a URL
+requested by a web tool, and a successfully fetched page. An open action alone
+is never reported as successful retrieval. Public-network guards still apply.
+
+Use a fresh prefix after this schema change. `--compare-effort high` must be
+passed to **prepare**; discovery, visual selection and comparison use the saved
+setting. Passing a different effort to **run** does not override the plan.
+The default remains low until bounded trials justify broader cost changes.
+
+To separate comparison quality from retrieval, prepare an isolated one-object
+control with `--discovery-mode direct --object-id OBJECT_ID --blind-pilot`,
+`--reference-page-url PAGE_URL`, `--reference-image-url IMAGE_URL`, and
+`--compare-effort high`. Supply the registry explicitly as above. This downloads
+the named reference and compares it without web discovery. Named-object
+pilots never attach results to live proposals. Prepare an adaptive pilot of the
+same object under a different prefix to test retrieval separately.
+
+v9 selects the largest observed variant of the discovered photograph and retains
+`discovered_image_url` separately. It never constructs a larger-image URL.
+Commons categories use the existing media API. File-description pages ending in
+`.jpg` are not treated as image files. Linked originals and WordPress originals
+retain priority; otherwise declared sizes outrank unknown dimensions.
+Empty Commons file lookups fail explicitly. Search-generated relevance text is
+kept separately and cannot become a documentary source title.
+A fresh caption-blind call records visual matches and contradictions. Up to two
+paired INPUT/reference details are read from guarded originals; a second blind
+call inspects those details before the caption-informed assessment. Missing crops
+are recorded as limitations. The raw model assessment remains in the receipt;
+claims lacking a distinctive blind match are downgraded unless documentary evidence
+supports them. Historical context alone cannot populate the photograph-date field.
+
+`--research-goal identification|location|dating` is frozen at prepare (default:
+identification). A supported requested field ends research even if an unrelated
+field remains unknown. Follow-up discovery targets the outstanding visual feature,
+not generic pictures of the same site. Visual calls count toward reported usage
+and between-call limits. These extra checks can increase per-comparison cost;
+validate with named-object pilots before scaling. Fresh v9 prefixes are required.
 
 `reference_batch.py` v7 uses subject-specific routing for adaptive visual web discovery.
 The shared `research_routes.py` contract covers buildings/places, machinery and
