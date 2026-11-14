@@ -102,3 +102,24 @@ Several inspected workflow tests inherit settings without `visual_verification`,
 4. Compare correctness and token use before another full batch.
 
 The purpose is to distinguish discovery, selection and comparison failures. Increasing the source registry or research budget alone would not establish which stage is losing the useful evidence.
+
+
+## Implementation follow-up — v10
+
+R1–R4 and Q1 are addressed in the existing runner and workbench. Final fields,
+hypotheses and displayed conclusions now agree; image-plus-document claims
+cannot bypass visual verification. Observed derivative fallback, neutral INPUT
+crops, distinct tool-action image provenance and pending full-size inspection
+have focused regression coverage with production verification enabled.
+
+The companion review's layout exclusion, documents-only calls, rejected-image
+carryover, tentative INPUT dates, cached raw-result preservation, invalid IDs,
+picture/video parsing, default allowances and goal-specific stop labels are also
+covered. Original reviewer findings above remain as the historical review.
+
+Validation: 173 targeted tests passed, including browser-JavaScript behavior
+through the existing test harness. Seven saved real comparison results retained
+their supported/unresolved field assessments and raw outputs. An injected failure
+of an original image led to a real download of its observed smaller variant.
+No new paid model recognition run was performed; recognition accuracy and the
+higher default research allowances have not received a new live batch benchmark.

@@ -364,6 +364,14 @@ function proposalFields(proposal) {
     places: list(r.places), creator: text(r.creator), subjects: list(r.subjects),
     inscriptions: list(r.inscriptions), notes: "", ...proposal.consolidated_proposal};
 }
+function referenceConclusion(result) {
+  return [["depicted_object","Object"],["location","Location"],["event","Event"],["photograph_date","Photograph date"]]
+    .map(([key,title]) => {
+      const claim = result[key] || {};
+      const status = ["supported","tentative","unresolved","contradicted"].includes(claim.status) ? claim.status : "unresolved";
+      return `${title}: ${status}${claim.value && status !== "unresolved" ? " — " + claim.value : ""}`;
+    }).join("; ");
+}
 function locationHypotheses(proposal) {
   if (proposal.reference_check?.status === "compared")
     return (proposal.reference_check.result?.hypotheses || [])
@@ -440,8 +448,8 @@ function renderMetadataEditor() {
     form.append(el("label", {for:"meta-"+key}, title), input);
     if (key === "places") {
       const check = proposal.reference_check;
-      if (check?.status === "compared" && check.result?.summary)
-        form.append(el("p", {class:"reference-conclusion"}, "Reference comparison: " + check.result.summary));
+      if (check?.status === "compared" && check.result)
+        form.append(el("p", {class:"reference-conclusion"}, "Reference comparison: " + referenceConclusion(check.result)));
       else if (check?.status === "access_limited")
         form.append(el("p", {class:"muted"}, "Reference images could not be retrieved; these hypotheses remain unverified."));
       const hypotheses = locationHypotheses(proposal);

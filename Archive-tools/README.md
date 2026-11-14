@@ -792,7 +792,7 @@ list; full findings remain in the original research record.
 
 ## Bounded reference research
 
-Current runner: `reference_batch.py` (v9). The older runner under
+Current runner: `reference_batch.py` (v10). The older runner under
 `work-area/visual-similarity` is retained history. The versioned
 `berlin-photo-reference-sources.json` contains the 19-source website registry;
 use `--registry /home/vladimir/archive/Archive-tools/berlin-photo-reference-sources.json`
@@ -854,6 +854,36 @@ field remains unknown. Follow-up discovery targets the outstanding visual featur
 not generic pictures of the same site. Visual calls count toward reported usage
 and between-call limits. These extra checks can increase per-comparison cost;
 validate with named-object pilots before scaling. Fresh v9 prefixes are required.
+
+v10 addresses both follow-up reviews of commit `655bda5`:
+
+- Layout classes such as `no-sidebar` retain article photographs. Actual related
+  sections remain excluded; picture variants share a candidate and video sources
+  are ignored. Failed originals fall back only to observed variants, within the
+  existing attempt/byte limits. Receipts distinguish delivered variants, fallback
+  failures, downloaded dimensions and original availability.
+- Existing INPUT detail crops reach blind verification with neutral banners.
+  Missing/duplicate blind assessments become insufficient; unknown IDs are dropped.
+  Documents-only rounds skip the blind call. Crops use verified downloaded pixels
+  without enlargement; a downloaded derivative is not described as the original.
+- Image-citing claims require a cited visual match, even when a document is also
+  cited. Hypotheses and displayed conclusions use the final assessments. Raw output
+  survives cached reruns. The workbench displays final fields for older receipts too.
+  Visible INPUT dates remain tentative time clues, never supported exposure dates.
+  Rejected images are excluded from retained evidence.
+- Tool-requested image URLs have separate provenance. Successful retrieval does
+  not establish association with a proposed page. Downloaded candidates omitted
+  from comparison remain queued; adaptive and portal modes inspect them before
+  another search. Round/budget limits leave remaining candidates explicitly listed.
+- Default item and average allowances are 150,000 tokens for low/medium adaptive
+  work and 500,000 for high adaptive work. Other modes default to 30,000 or 120,000
+  respectively. Explicit overrides apply. These between-call thresholds are not
+  hard billing caps; reasoning still defaults to low. Goal completion reports
+  `identified`, `located`, or `dated`.
+
+Prepare a fresh v10 prefix. Regression tests, saved-response replay and a real
+derivative download under an injected original failure verify these changes;
+they do not establish a new model-recognition accuracy estimate.
 
 `reference_batch.py` v7 uses subject-specific routing for adaptive visual web discovery.
 The shared `research_routes.py` contract covers buildings/places, machinery and

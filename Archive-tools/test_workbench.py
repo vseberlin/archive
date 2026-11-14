@@ -246,6 +246,18 @@ vm.runInContext('current=snapshot; draft=structuredClone(current.decision); over
         self.assertEqual(self.browser_action(self.app.snapshot('photo'), '',
             'locationHypotheses(' + json.dumps(proposal) + ')'), [])
 
+    def test_browser_reference_conclusion_uses_final_fields_not_stale_summary(self):
+        result={'summary':'Definitely identified and dated 1972',
+                'depicted_object':{'status':'tentative','value':'Candidate building'},
+                'location':{'status':'unresolved','value':None},
+                'photograph_date':{'status':'unresolved','value':None}}
+        shown=self.browser_action(self.app.snapshot('photo'),'',
+            'referenceConclusion('+json.dumps(result)+')')
+        self.assertIn('Object: tentative',shown)
+        self.assertIn('Location: unresolved',shown)
+        self.assertIn('Photograph date: unresolved',shown)
+        self.assertNotIn('Definitely',shown);self.assertNotIn('1972',shown)
+
     def test_browser_consolidation_overrides_superseded_fields(self):
         proposal = {'result': {'title': {'value': 'Bear'}, 'description': {'value': 'Old guess'},
             'date': {'display': '1928', 'basis': 'hypothesis'}, 'subjects': [{'value': 'Bear'}]},

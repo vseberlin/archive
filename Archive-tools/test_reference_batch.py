@@ -840,13 +840,18 @@ class ResearchQualityTests(unittest.TestCase):
         self.assertEqual(row['stop_reason'],'identified')
         self.assertEqual(len(row['rounds']),1)
 
-    def test_invalid_blind_reference_blocks_caption_comparison(self):
+    def test_invalid_blind_reference_becomes_insufficient_without_aborting(self):
         self.runner.settings['visual_verification']=True
         ref={'id':'R1','labelled_image':str(self.preview)}
         visual=self.visual();visual['result']['comparisons'][0]['reference_id']='R9'
-        with patch.object(self.runner,'call',return_value=visual) as call:
-            result=self.runner.compare_verified(self.item,[ref],[],[],self.preview,'r1',{})
-        self.assertTrue(result['errors']);call.assert_called_once()
+        answer=comparison(['R1']);answer['depicted_object']=assessment('supported',['R1'],'Site')
+        answer['date_basis']={'kind':'none','explanation':'Unknown','reference_ids':[]}
+        record={}
+        with patch.object(self.runner,'call',side_effect=[visual,receipt(answer)]) as call:
+            result=self.runner.compare_verified(self.item,[ref],[],[],self.preview,'r1',record)
+        self.assertFalse(result['errors']);self.assertEqual(call.call_count,2)
+        self.assertEqual(result['result']['depicted_object']['status'],'tentative')
+        self.assertEqual(record['visual_check']['result']['comparisons'][0]['verdict'],'insufficient')
 
     def test_usage_limit_after_blind_check_prevents_another_paid_call(self):
         self.runner.settings.update(visual_verification=True,max_item_tokens=50)
@@ -946,7 +951,7 @@ class ResearchQualityTests(unittest.TestCase):
         record={}
         with patch.object(self.runner,'call',return_value=result) as call:
             picked=self.runner.visual_selection(pool,self.preview,[],[],'r1',record)
-        self.assertEqual(picked,[pool[-1]])
+        self.assertEqual(picked[0],pool[-1]);self.assertEqual(len(picked),6)
         self.assertEqual(len(call.call_args.args[3]),2) # INPUT and gallery
         self.assertFalse(call.call_args.kwargs.get('web',False))
 
@@ -1023,5 +1028,203 @@ class ResearchQualityTests(unittest.TestCase):
         call.assert_called_once();self.assertFalse(call.call_args.kwargs.get('web',False))
         self.assertEqual(row['stop_reason'],'identified');self.assertEqual(row['queries_used'],0)
 
+
+class ReviewFixTests(unittest.TestCase):
+    setUp = RefactorTests.setUp
+    visual = ResearchQualityTests.visual
+    adaptive_search = ResearchQualityTests.adaptive_search
+
+    def answer(self, ids=('R1',), supported=True):
+        result=comparison([rid for rid in ids if rid.startswith('R')])
+        if supported:result['depicted_object']=assessment('supported',ids,'Named building')
+        result['date_basis']={'kind':'none','explanation':'Unknown','reference_ids':[]}
+        return result
+
+    def test_layout_classes_keep_article_images_but_exclude_actual_related_sections(self):
+        for tag,cls in [('body','no-sidebar'),('html','has-sidebar'),('div','content-sidebar-wrap'),
+                        ('main','related'),('article','sidebar')]:
+            with self.subTest(tag=tag,cls=cls):
+                p=rb.Page();p.feed(f'<{tag} class="{cls}"><img src="/facade.jpg">'
+                    '<section class="related-posts"><img src="/other.jpg"></section>'
+                    f'<footer><img src="/footer.jpg"></footer></{tag}>')
+                self.assertEqual([x['src'] for x in rb.ranked_page_images(p.images,'')],['/facade.jpg'])
+
+    def test_picture_groups_non_wordpress_sources_and_ignores_video(self):
+        p=rb.Page();p.feed('<picture><source srcset="/large.webp 1600w"><img src="/small.jpg" alt="Facade"></picture>'
+            '<video><source src="/movie.mp4"></video>')
+        photos=rb.ranked_page_images(p.images,'')
+        self.assertEqual(len(photos),1);self.assertEqual(photos[0]['src'],'/large.webp')
+        self.assertEqual(set(photos[0]['variants']),{'/large.webp','/small.jpg'})
+
+    def test_original_failure_uses_only_known_variant_and_reports_resolution(self):
+        original='https://museum.example/original.jpg';small='https://museum.example/thumb.jpg'
+        candidate={'source_id':'museum','title':'','record_url':'https://museum.example/page',
+                   'candidate_image_url':original,'original_image_url':original,'image_variants':[small,original]}
+        for error in ('Response exceeds 12 MB limit','HTTP 403'):
+            with self.subTest(error=error), patch.object(self.runner.fetcher,'image',side_effect=[ValueError(error),
+                    {'image_sha256':'a','local_image':str(self.preview),'original_size':[1800,1200]}]) as download:
+                pool,docs,issues=self.runner.gather([candidate],{},set(),1)
+            self.assertEqual([c.args[0] for c in download.call_args_list],[original,small])
+            self.assertEqual(len(pool),1);self.assertFalse(issues)
+            self.assertEqual(pool[0]['delivered_variant'],small)
+            self.assertFalse(pool[0]['native_reference_available'])
+            self.assertEqual(pool[0]['fallback_attempts'][0]['error'],error)
+            self.assertTrue(pool[0]['image_provenance']['image_fetched'])
+
+    def test_all_variant_failures_respect_attempt_cap(self):
+        c={'source_id':'museum','title':'','record_url':'https://museum.example/page',
+           'candidate_image_url':'https://museum.example/0.jpg',
+           'image_variants':[f'https://museum.example/{i}.jpg' for i in range(30)]}
+        with patch.object(self.runner.fetcher,'image',side_effect=ValueError('blocked')) as download:
+            pool,docs,issues=self.runner.gather([c],{},set(),1)
+        self.assertEqual(download.call_count,rb.MAX_IMAGE_ATTEMPTS);self.assertFalse(pool);self.assertTrue(issues)
+
+    def test_tool_opened_image_admitted_without_fabricating_search_or_page_association(self):
+        url='https://cdn.example/image.jpg';page='https://museum.example/article'
+        entry={'source_id':'museum','url':page,'image_url':url,'image_requested_by_tool':True,'relevance':'facade'}
+        with patch.object(self.runner.fetcher,'fetch',return_value=(b'<title>Article</title><p>Context</p>',
+                          {'content_type':'text/html','final_url':page})):
+            records=self.runner.fetcher.record(entry)
+        photo=next(c for c in records if c.get('candidate_image_url'))
+        self.assertIn(url,self.runner.fetcher.observed_media)
+        state=photo['image_provenance']
+        self.assertTrue(state['requested_by_tool']);self.assertFalse(state['observed_in_search'])
+        self.assertFalse(state['associated_with_page']);self.assertFalse(state['image_fetched'])
+        with patch.object(self.runner.fetcher,'image',return_value={'image_sha256':'a'}) as download:
+            pool,_,_=self.runner.gather(records,{},set(),1)
+        download.assert_called_once_with(url);self.assertTrue(pool[0]['image_provenance']['image_fetched'])
+
+    def test_document_citation_cannot_bypass_visual_rejection_and_summary_agrees(self):
+        result=self.answer(('R1','D1'))
+        result['summary']='Definitely identified, dated 1972'
+        result['photograph_date']=assessment('supported',['D1'],'1972')
+        result['date_basis']={'kind':'historical_context','explanation':'Event date only','reference_ids':['D1']}
+        result['hypotheses']=[{'candidate':'Named building','field':'depicted_object','status':'supported',
+                              'assessment':'Certain','reference_ids':['R1','D1']}]
+        raw=deepcopy(result);out=receipt(result)
+        refs=[{'id':'R1','record_url':'page'}]
+        rb.verify_assessments(out,self.visual('different')['result'],refs,[{'id':'D1'}])
+        self.assertEqual(out['raw_result'],raw)
+        self.assertEqual(out['result']['depicted_object']['status'],'tentative')
+        self.assertEqual(out['result']['hypotheses'][0]['status'],'tentative')
+        self.assertNotIn('Definitely',out['result']['summary']);self.assertNotIn('1972',out['result']['summary'])
+        self.assertIn('Aufnahmedatum: ungeklärt',out['result']['summary'])
+        self.assertEqual(rb.retain_evidence(out['result'],refs,[])[0],[])
+        once=deepcopy(out)
+        rb.verify_assessments(out,self.visual('different')['result'],refs,[{'id':'D1'}])
+        self.assertEqual(out,once) # cached rerun preserves raw output and is idempotent
+
+    def test_document_only_round_skips_blind_call_and_can_support_bound_record(self):
+        self.runner.settings['visual_verification']=True
+        result=self.answer(('D1',));result['comparisons']=[];record={}
+        with patch.object(self.runner,'call',return_value=receipt(result)) as call:
+            out=self.runner.compare_verified(self.item,[],[],[],self.preview,'docs',record,[{'id':'D1'}])
+        self.assertEqual(call.call_count,1);self.assertTrue(record['visual_check']['skipped'])
+        self.assertEqual(out['result']['depicted_object']['status'],'supported')
+        self.runner.check_result(out['result'],[],[{'id':'D1'}])
+
+    def test_visible_input_date_remains_tentative_not_exposure_date(self):
+        value=self.answer((),False);value['photograph_date']=assessment('supported',['INPUT'],'1. Mai 1972')
+        value['date_basis']={'kind':'visible_time_bound','explanation':'Visible banner text','reference_ids':['INPUT']}
+        out=receipt(value);rb.verify_assessments(out,{'comparisons':[]},[],[])
+        self.assertEqual(out['result']['photograph_date']['status'],'tentative')
+        self.assertEqual(out['result']['photograph_date']['value'],'1. Mai 1972')
+        self.assertIn('not a verified exposure date',out['result']['photograph_date']['explanation'])
+        self.runner.check_result(out['result'],[])
+        out['result']['depicted_object']=assessment('supported',['INPUT'],'Name')
+        with self.assertRaises(ValueError):self.runner.check_result(out['result'],[])
+
+    def test_existing_detail_reaches_blind_call_with_neutral_banner(self):
+        self.runner.settings['visual_verification']=True
+        crop=self.root/'discovery-detail.jpg'
+        rb.save_jpeg(rb.labelled(rb.open_rgb(self.preview),'SECRET CANDIDATE',1800),crop)
+        ref={'id':'R1','labelled_image':str(self.preview),'title':'SECRET CANDIDATE'}
+        for verdict,expected in [('matching','supported'),('different','tentative')]:
+            with patch.object(self.runner,'call',side_effect=[self.visual(verdict),receipt(self.answer())]) as call:
+                out=self.runner.compare_verified(self.item,[ref],[crop],[],self.preview,'neutral',{})
+            sent=call.call_args_list[0].args[3]
+            self.assertEqual(len(sent),3);self.assertNotEqual(str(sent[1]),str(crop))
+            self.assertNotIn('SECRET',call.call_args_list[0].args[1])
+            with Image.open(crop) as before, Image.open(sent[1]) as after:
+                self.assertEqual(before.size,after.size)
+                self.assertNotEqual(before.crop((0,0,200,28)).tobytes(),after.crop((0,0,200,28)).tobytes())
+                self.assertEqual(before.crop((0,28,before.width,before.height)).tobytes(),
+                                 after.crop((0,28,after.width,after.height)).tobytes())
+            self.assertEqual(out['result']['depicted_object']['status'],expected)
+
+    def test_production_adaptive_revisits_full_size_candidates_omitted_from_shortlist(self):
+        self.runner.settings.update(discovery_mode='adaptive',visual_verification=True,max_item_tokens=500000)
+        pool=[{'image_sha256':str(i),'cid':f'C{i}','local_image':str(self.preview),
+               'record_url':f'https://museum.example/{i}'} for i in range(1,9)]
+        seen=[]
+        def call(stem,prompt,schema,images=(),**kw):
+            seen.append((stem,list(images)))
+            if stem.endswith('adaptive'):return self.adaptive_search()
+            if stem.endswith('shortlist'):return receipt({'picks':[{'candidate_id':'C999','verdict':'likely','reason':'bad id'}],
+                'next':{'reason':'','search_terms':[],'place_names':[]}})
+            if stem.endswith('visual'):
+                count=len(images)-1
+                return receipt({'comparisons':[{'reference_id':f'R{i+1}','verdict':'different',
+                    'matches':'','conflicts':'wrong geometry','limitation':''} for i in range(count)],
+                    'paired_crops':[],'unresolved_feature':'windows'})
+            return receipt(self.answer([f'R{i+1}' for i in range(len(images)-1)],False))
+        with patch.object(self.runner,'call',side_effect=call), \
+             patch.object(self.runner.fetcher,'record',return_value=[]), \
+             patch.object(self.runner,'gather',side_effect=[(deepcopy(pool),[],[]),([],[],[])]):
+            row=self.runner.process(self.item,1)
+        self.assertEqual(sum(stem.endswith('adaptive') for stem,_ in seen),1)
+        self.assertTrue(row['rounds'][1]['inspection_only'])
+        self.assertEqual([r['image_sha256'] for r in row['rounds'][1]['references']],['7','8'])
+        self.assertEqual(row['uninspected_candidates'],[])
+        self.assertFalse(any(c.get('errors') for c in rb.row_calls(row)))
+        self.assertEqual(len(row['rounds'][0]['references']),6)
+
+    def test_production_adaptive_document_and_mismatched_image_cannot_finish_identification(self):
+        self.runner.settings.update(discovery_mode='adaptive',visual_verification=True,max_rounds=1)
+        pool=[{'image_sha256':'a','local_image':str(self.preview),'record_url':'https://museum.example/article'}]
+        docs=[{'record_url':'https://museum.example/article','title':'Article','excerpt':'Context only'}]
+        with patch.object(self.runner,'call',side_effect=[self.adaptive_search(),self.visual('different'),
+                 receipt(self.answer(('R1','D1')))]), \
+             patch.object(self.runner.fetcher,'record',return_value=[]), \
+             patch.object(self.runner,'gather',return_value=(pool,docs,[])):
+            row=self.runner.process(self.item,1)
+        self.assertEqual(row['status'],'compared');self.assertEqual(row['stop_reason'],'round_limit')
+        self.assertEqual(row['comparison']['result']['depicted_object']['status'],'tentative')
+        self.assertEqual(row['comparison']['raw_result']['depicted_object']['status'],'supported')
+        self.assertIn('Objekt: vorläufig',row['comparison']['result']['summary'])
+
+    def test_production_portal_mode_inspects_pending_references_without_another_search(self):
+        self.runner.settings.update(discovery_mode='portals',visual_verification=True,max_item_tokens=500000)
+        pool=[{'image_sha256':str(i),'cid':f'C{i}','local_image':str(self.preview),'source_id':'museum',
+               'record_url':f'https://museum.example/{i}'} for i in range(1,9)]
+        def call(stem,prompt,schema,images=(),**kw):
+            if schema is rb.DISCOVERY:return receipt(self.discovery)
+            if stem.endswith('shortlist'):return receipt({'picks':[],
+                'next':{'reason':'','search_terms':[],'place_names':[]}})
+            ids=[f'R{i+1}' for i in range(len(images)-1)]
+            if stem.endswith('visual'):
+                return receipt({'comparisons':[{'reference_id':rid,'verdict':'different',
+                    'matches':'','conflicts':'wrong geometry','limitation':''} for rid in ids],
+                    'paired_crops':[],'unresolved_feature':'windows'})
+            return receipt(self.answer(ids,False))
+        with patch.object(self.runner,'call',side_effect=call), \
+             patch.object(self.runner,'retrieve',side_effect=RefactorTests.fake_retrieve(self)) as retrieve, \
+             patch.object(self.runner,'gather',return_value=(pool,[],[])):
+            row=self.runner.process(self.item,1)
+        retrieve.assert_called_once()
+        self.assertTrue(row['rounds'][1]['inspection_only'])
+        self.assertEqual([r['image_sha256'] for r in row['rounds'][1]['references']],['5','6','7','8'])
+        self.assertEqual(row['uninspected_candidates'],[])
+
+    def test_goal_stop_labels_and_rejected_evidence_retention(self):
+        for goal,label in [('identification','identified'),('location','located'),('dating','dated')]:
+            self.runner.settings['research_goal']=goal;self.assertEqual(self.runner.goal_stop(),label)
+        result=self.answer(('R2',))
+        result['hypotheses']=[{'candidate':'Other','status':'tentative','assessment':'possible','reference_ids':['R1']}]
+        refs=[{'id':'R1','record_url':'a','visual_verdict':'compatible'},
+              {'id':'R2','record_url':'b','visual_verdict':'matching'},
+              {'id':'R3','record_url':'c','visual_verdict':'different'}]
+        kept,_=rb.retain_evidence(result,refs,[])
+        self.assertEqual([r['id'] for r in kept],['R2','R1'])
 
 if __name__=='__main__':unittest.main()

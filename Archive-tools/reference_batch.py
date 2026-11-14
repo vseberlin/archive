@@ -44,7 +44,7 @@ from archive_common import atomic_write, file_lock, read_bytes, require, work_ro
 from codex_image_pilot import CODEX, digest
 from codex_reference_pilot import obj, arr, S, B, N
 from photo_clue_research import protected_source, stamp
-from research_routes import ROUTES, ROUTING_SCHEMA, classify, routing_for, guidance, source_preferences
+from research_routes import ROUTING_SCHEMA, classify, routing_for, guidance, source_preferences
 
 DEFAULT_WORK = Path('/mnt/volume/iss-archive-work/visual-similarity')
 DEFAULT_REVIEW = Path('/mnt/volume/iss-archive-work/avantmedia-master-review-20261103')
@@ -52,7 +52,7 @@ DEFAULT_REGISTRY = Path('/home/vladimir/Downloads/berlin-photo-reference-sources
 EXTRA_DOMAINS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org', 'www.wikidata.org'}
 COMMONS_HOSTS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org'}
 
-VERSION = 9
+VERSION = 10
 NUMBER = {'type': 'number', 'minimum': 0, 'maximum': 1}
 STATUS = {'type': 'string', 'enum': ['supported', 'tentative', 'unresolved', 'contradicted']}
 SUBJECTS = ['building', 'public_event', 'industry_or_schoeneweide', 'shop_sign_or_address',
@@ -87,6 +87,9 @@ DATED_COMPARISON = {**COMPARISON, 'properties': {**COMPARISON['properties'],
     'date_basis': obj(kind={'type':'string', 'enum':['photo_record','visible_time_bound','historical_context','none']},
                       explanation=S, reference_ids=arr(S))},
     'required': [*COMPARISON['required'], 'date_basis']}
+DATED_COMPARISON['properties']['hypotheses'] = arr(obj(candidate=S, status=STATUS,
+    assessment=S, reference_ids=arr(S), field={'type':'string',
+        'enum':['depicted_object', 'location', 'event', 'photograph_date']}))
 CHILD = None
 
 MAX_POOL = 12          # bounded contact sheet; preserve source/viewpoint diversity
@@ -229,11 +232,15 @@ class Page(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
-        excluded = (any(n['excluded'] for n in self.stack) or tag in ('footer', 'nav', 'aside') or
-                    bool(re.search(r'(?:^|[-_\s])(?:related|recommendations?|suggest|footer|sidebar)(?:[-_\s]|$)',
-                                   a.get('class', '')+' '+a.get('id', ''), re.I)))
+        tokens = (a.get('class', '')+' '+a.get('id', '')).lower().split()
+        layout = {'html', 'body', 'main', 'article'}
+        decoration = any(t in {'related', 'related-posts', 'related-content', 'recommendations',
+                         'footer', 'sidebar', 'bzi-suggest-more-section'} or
+                         t.startswith(('related-', 'recommended-', 'footer-', 'sidebar-')) for t in tokens)
+        excluded = tag not in layout and (any(n['excluded'] for n in self.stack) or
+                    tag in ('footer', 'nav', 'aside') or decoration)
         if tag not in self.VOID:
-            self.stack.append({'tag': tag, 'excluded': excluded, 'start': len(self.images), 'href': a.get('href', '')})
+            self.stack.append({'tag': tag, 'excluded': excluded, 'start': len(self.images), 'href': a.get('href', ''), 'group': None})
         if tag == 'title': self.in_title = True
         if tag in ('script', 'style'): self.hidden += 1
         context = {'excluded': excluded}
@@ -243,8 +250,12 @@ class Page(HTMLParser):
                 self.images.append({'src': a['href'], 'alt': a.get('title', ''), 'caption': '', **context})
         if tag == 'meta' and a.get('property') in ('og:image', 'twitter:image') and a.get('content'):
             self.images.insert(0, {'src': a['content'], 'alt': '', 'caption': '', **context})
-        if tag in ('img', 'source'):
-            self.groups += 1
+        if tag in ('img', 'source') and not any(n['tag'] in ('video', 'audio') for n in self.stack):
+            picture = next((n for n in reversed(self.stack) if n['tag']=='picture'), None)
+            if picture is None or picture['group'] is None:
+                self.groups += 1
+                if picture is not None: picture['group'] = self.groups
+            group = picture['group'] if picture is not None else self.groups
             label = a.get('alt') or a.get('title') or ''
             linked = next((n['href'] for n in reversed(self.stack) if n['tag'] == 'a' and
                            self.media_link(n['href'])), '')
@@ -260,7 +271,7 @@ class Page(HTMLParser):
             for value, quality in values:
                 if value and not value.startswith(('data:', 'blob:')):
                     self.images.append({'src': value, 'alt': label, 'caption': '',
-                        'variant_group': self.groups, 'quality': quality, **context})
+                        'variant_group': group, 'quality': quality, **context})
         if tag == 'figcaption':
             self.cap = []
             self.cap_start = next((n['start'] for n in reversed(self.stack) if n['tag'] == 'figure'), len(self.images)-1)
@@ -326,7 +337,7 @@ def ranked_page_images(images, clue):
         chosen = dict(max(group, key=quality))
         for key in ('alt', 'caption', 'gallery_caption'):
             chosen[key] = '; '.join(dict.fromkeys(im[key] for im in group if im.get(key)))
-        chosen['variants'] = list(dict.fromkeys(im['src'] for im in group))
+        chosen['variants'] = list(dict.fromkeys(im['src'] for im in sorted(group, key=quality, reverse=True)))
         out.append(chosen)
     return sorted(out, key=lambda im: -score(im))
 
@@ -409,8 +420,8 @@ class Fetcher:
             output = self.root/f'{self.prefix}-image-{receipt["sha256"][:24]}.jpg'
             if not output.exists(): save_jpeg(im, output)
         return {'image_url': url, 'local_image': str(output), 'image_sha256': digest(output),
-                'download_receipt': receipt, 'image_delivered': False, 'original_size': original_size,
-                'original_image': str(self.root/f'{self.prefix}-http-{hashlib.sha256(url.encode()).hexdigest()[:24]}.bin')}
+                'download_receipt': receipt, 'image_delivered': False, 'downloaded_size': original_size,
+                'downloaded_image': str(self.root/f'{self.prefix}-http-{hashlib.sha256(url.encode()).hexdigest()[:24]}.bin')}
 
     # -- Wikidata: resolve a named place to coordinates and a Commons category
     def wikidata(self, name):
@@ -458,7 +469,7 @@ class Fetcher:
                 'reference_date': clean(meta.get('DateTimeOriginal', {}).get('value', ''))[:120],
                 'credit': clean(meta.get('Credit', {}).get('value', ''))[:300],
                 'artist': clean(meta.get('Artist', {}).get('value', ''))[:150],
-                'candidate_image_url': i['url'],
+                'candidate_image_url': i['url'], 'original_image_url': i['url'],
                 'image_variants': list(dict.fromkeys([i.get('thumburl', i['url']), i['url']])),
                 'linked_records': links[:3], 'record_receipt': receipt, 'query': label, 'retrieval': kind}
             for number in re.findall(r'\b(09\d{6})\b', entry['title']+' '+entry['caption'])[:1]:
@@ -509,11 +520,18 @@ class Fetcher:
                 record['url_provenance'] = {**entry.get('url_provenance', {}), 'page_fetched': True}
                 requested = entry.get('image_url')
                 if requested:
-                    require(requested in record.get('image_variants', []) or entry.get('image_observed_in_search')
+                    associated = requested in record.get('image_variants', [])
+                    require(requested in record.get('image_variants', []) or entry.get('image_observed_in_search') or entry.get('image_requested_by_tool')
                             or entry.get('supplied_reference'), 'Unobserved Commons image URL')
                     self.observed_media.add(requested)
                     record.update(discovered_image_url=requested, discovered_image=True)
-                    if requested not in record.get('image_variants', []): record['candidate_image_url'] = requested
+                    if not associated:
+                        record.update(candidate_image_url=requested, image_variants=[requested], original_image_url=None,
+                                      caption_caution='Image opened independently; page association unverified.')
+                    record['image_provenance'] = {'proposed_url':requested,
+                        'observed_in_search':bool(entry.get('image_observed_in_search')),
+                        'requested_by_tool':bool(entry.get('image_requested_by_tool')),
+                        'associated_with_page':associated, 'image_fetched':False}
             return records
         data, receipt = self.fetch(url)
         if 'url_provenance' in entry: entry['url_provenance']['page_fetched'] = True
@@ -555,7 +573,7 @@ class Fetcher:
         requested = entry.get('image_url')
         page_media = {urllib.parse.urljoin(receipt['final_url'], im['src']) for im in page.images}
         if requested:
-            require(requested in page_media or entry.get('image_observed_in_search') or entry.get('supplied_reference'),
+            require(requested in page_media or entry.get('image_observed_in_search') or entry.get('image_requested_by_tool') or entry.get('supplied_reference'),
                     'Discovered image URL is neither in the fetched page nor independently observed')
             matched = next((im for im in images if requested in
                            [urllib.parse.urljoin(receipt['final_url'], u) for u in im.get('variants', [im['src']])]), None)
@@ -568,17 +586,24 @@ class Fetcher:
             absolute = urllib.parse.urljoin(receipt['final_url'], image['src'])
             if absolute in seen or re.search(r'logo|icon|pixel|banner|sprite|karte_|map|button|footer|sponsor', absolute, re.I): continue
             seen.add(absolute)
-            self.observed_media.add(absolute)  # Exact image URL read from a fetched source page, including its CDN.
+            variants = [urllib.parse.urljoin(receipt['final_url'], u) for u in image.get('variants', [image['src']])]
+            self.observed_media.update([absolute, *variants])
+            image_state = {'proposed_url': requested if image.get('discovered_image') else absolute,
+                'observed_in_search': bool(image.get('discovered_image') and entry.get('image_observed_in_search')),
+                'requested_by_tool': bool(image.get('discovered_image') and entry.get('image_requested_by_tool')),
+                'associated_with_page': absolute in page_media, 'image_fetched': False}
             own = clean(' '.join(x for x in (image['alt'], image['caption']) if x))
             out.append({**base, 'evidence_type': 'reference_photo',
                 'title': base['title'], 'caption': own[:700], 'page_context': txt[:400],
                 'gallery_caption': image.get('gallery_caption', ''),
                 'image_variants': [urllib.parse.urljoin(receipt['final_url'], u) for u in image.get('variants', [image['src']])],
                 'discovered_image': image.get('discovered_image', False),
-                'discovered_image_url': image.get('discovered_image_url'),
+                'discovered_image_url': image.get('discovered_image_url'), 'image_provenance': image_state,
+                'original_image_url': absolute if image.get('quality') == 1e9 else None,
                 'reference_date': '', 'candidate_image_url': absolute, 'record_receipt': receipt,
                 'retrieval': 'record', 'query': url,
-                'caption_caution': '' if own else 'Page text is contextual; verify association to this image.'})
+                'caption_caution': ('Image opened independently; page association unverified.' if not image_state['associated_with_page']
+                                    else '' if own else 'Page text is contextual; verify association to this image.')})
             image_count += 1
             if image_count >= 24: break
         return out
@@ -728,17 +753,63 @@ def retain_evidence(result, refs, documents):
     scores = {}
     for assessment in [result[k] for k in ('depicted_object', 'location', 'event', 'photograph_date')]:
         if assessment['status'] in ('supported', 'tentative'):
-            for rid in assessment['reference_ids']: scores[rid] = scores.get(rid, 0)+1
+            for rid in assessment['reference_ids']: scores[rid] = scores.get(rid, 0)+(4 if assessment['status']=='supported' else 1)
     question = ' '.join(result.get('next', {}).get('search_terms', []))
     for hypothesis in result['hypotheses']:
         if hypothesis['status'] in ('supported', 'tentative'):
-            weight = 10+min(5, text_score(hypothesis['candidate'], question))
+            weight = (10 if hypothesis['status']=='supported' else 2)+min(2, text_score(hypothesis['candidate'], question))
             for rid in hypothesis['reference_ids']: scores[rid] = scores.get(rid, 0)+weight
-    ranked = sorted(refs, key=lambda r: -scores.get(r['id'], 0))[:2]
+    ranked = sorted((r for r in refs if r.get('visual_verdict') != 'different'),
+                    key=lambda r: (r.get('visual_verdict')!='matching', -scores.get(r['id'], 0)))[:2]
     pages = {r['record_url'] for r in ranked}
     docs = sorted((d for d in documents if scores.get(d['id'], 0) or d['record_url'] in pages),
                   key=lambda d: -(scores.get(d['id'], 0)+5*(d['record_url'] in pages)))[:3]
     return ranked, docs
+
+
+def verify_assessments(receipt, visual, refs, documents):
+    """Apply one conservative assessment to fields, hypotheses and the displayed summary."""
+    import copy
+    receipt.setdefault('raw_result', copy.deepcopy(receipt['result']))
+    value = copy.deepcopy(receipt['raw_result']); receipt['result'] = value
+    ids = {r['id'] for r in refs}; docs = {d['id'] for d in documents}
+    verdicts = {c['reference_id']:c['verdict'] for c in visual['comparisons']}
+    strong = {r['id'] for r in refs if verdicts.get(r['id'])=='matching' and
+              r.get('image_provenance', {}).get('associated_with_page', True)}
+    for ref in refs: ref['visual_verdict'] = verdicts.get(ref['id'], 'insufficient')
+    date = value['date_basis']; date_ids = set(date['reference_ids'])
+    input_bound = date['kind']=='visible_time_bound' and 'INPUT' in date_ids
+    if not date_ids <= ids | docs | ({'INPUT'} if input_bound else set()):
+        receipt['errors'].append('Date basis cites absent evidence')
+    if date['kind'] in ('historical_context', 'none') or not date_ids:
+        old = value['photograph_date']
+        if old['value']: value['limitations'].append('Date context only: '+old['value']+'; '+old['explanation'])
+        value['photograph_date'] = {'status':'unresolved', 'value':None,
+            'explanation':date['explanation'], 'reference_ids':[]}
+    elif input_bound:
+        claim = value['photograph_date']
+        if claim['status']=='supported': claim['status']='tentative'
+        claim['explanation'] += ' Visible date text is a tentative time clue, not a verified exposure date.'
+    for field in ('depicted_object', 'location', 'event'):
+        claim = value[field]; cited = set(claim['reference_ids']); image_ids = cited & ids
+        if claim['status']=='supported' and ((image_ids and not image_ids & strong) or
+                (not image_ids and not cited & docs)):
+            claim['status']='tentative'
+            claim['explanation'] += ' Caption-blind inspection did not establish a distinctive visual match.'
+    for hypothesis in value['hypotheses']:
+        field = hypothesis.get('field') or next((k for k in
+            ('depicted_object','location','event','photograph_date') if
+            receipt['raw_result'][k].get('value') and receipt['raw_result'][k]['value'] in hypothesis['candidate']), 'depicted_object')
+        cited = set(hypothesis['reference_ids']); image_ids = cited & ids
+        if hypothesis['status']=='supported' and (value[field]['status']!='supported' or
+                (image_ids and not image_ids & strong) or (not image_ids and not cited & docs)):
+            hypothesis['status']='tentative'
+            hypothesis['assessment'] += ' Not supported by the final verified '+field+' assessment.'
+    labels = {'depicted_object':'Objekt', 'location':'Ort', 'event':'Ereignis', 'photograph_date':'Aufnahmedatum'}
+    states = {'supported':'gestützt', 'tentative':'vorläufig', 'unresolved':'ungeklärt', 'contradicted':'widerlegt'}
+    value['summary'] = '; '.join(f'{label}: {states[value[k]["status"]]}' +
+        (f' — {value[k]["value"]}' if value[k].get('value') else '') for k,label in labels.items())
+    return receipt
 
 
 def round_memory(rnd, result, evidence):
@@ -802,8 +873,10 @@ class Runner:
                     item[key] = [] if isinstance(item.get(key), list) else ({} if isinstance(item.get(key), dict) else '')
         first = 'VASSET-FCE76B5E42A1D38194E43D6D6B7BFB38'
         items.sort(key=lambda x: (x['research_routing']['primary'], x['object_id'] != first, x['object_id']))
+        allowance = (500000 if self.args.compare_effort=='high' else 150000) if self.args.discovery_mode=='adaptive' else (120000 if self.args.compare_effort=='high' else 30000)
         settings = {'compare_effort': self.args.compare_effort, 'max_rounds': self.args.max_rounds,
-            'max_item_tokens': self.args.max_item_tokens, 'max_average_tokens': self.args.max_average_tokens,
+            'max_item_tokens': allowance if self.args.max_item_tokens is None else self.args.max_item_tokens,
+            'max_average_tokens': allowance if self.args.max_average_tokens is None else self.args.max_average_tokens,
             'web_search': self.args.web_search, 'native_crops': self.args.native_crops,
             'discovery_mode': self.args.discovery_mode, 'visual_verification': True,
             'research_goal': getattr(self.args, 'research_goal', 'identification')}
@@ -936,19 +1009,22 @@ Return only visible C labels; explain each choice briefly. If none fit, suggest 
 or place_names, with a reason, in next. Do not invent an identity just to fill the list.
 FEATURES: {features}"""
 
+    def goal_stop(self):
+        return {'identification':'identified', 'location':'located', 'dating':'dated'}[self.settings.get('research_goal', 'identification')]
+
     def goal_met(self, result):
         goal = self.settings.get('research_goal', 'identification')
         field = {'identification': 'depicted_object', 'location': 'location', 'dating': 'photograph_date'}[goal]
         return result[field]['status'] == 'supported'
 
     def paired_details(self, item, input_img, refs, requests, stem):
-        """Crop both sides from verified originals, using the displayed overview geometry."""
+        """Crop guarded INPUT and verified downloaded reference pixels without enlargement."""
         images = []; notes = []
         by_id = {r['id']: r for r in refs}
         for n, request in enumerate(requests[:2], 1):
             try:
                 ref = by_id[request['reference_id']]
-                original = Path(ref['original_image']).resolve()
+                original = Path(ref.get('downloaded_image') or ref['original_image']).resolve()
                 require(original.parent == self.root.resolve(), 'Reference original outside research root')
                 require(digest(original) == ref['download_receipt']['sha256'], 'Reference original changed')
                 with Image.open(input_img) as overview, Image.open(item['preview_path']) as preview:
@@ -966,6 +1042,8 @@ FEATURES: {features}"""
                                   self.path(f'{stem}-pair{n}-{ref["id"]}.jpg'))
                 images.extend([left[0], right])
                 notes.append({'pair': n, 'reference_id': ref['id'], 'request': request,
+                              'native_reference_available': ref.get('native_reference_available', False),
+                              'reference_pixel_source': 'downloaded variant; never enlarged',
                               'input_photo_box': input_boxes[0],
                               'reference_photo_box': boxes[0], 'images': [str(left[0]), str(right)]})
             except (ValueError, KeyError, OSError) as e:
@@ -978,6 +1056,20 @@ FEATURES: {features}"""
         if not self.settings.get('visual_verification'):
             return self.call(stem+'-compare', prompt, COMPARISON, images,
                              effort=self.settings['compare_effort'], timeout=300)
+        neutral = []
+        for i, path in enumerate(crops, 1):
+            im = open_rgb(path)
+            # Replace only our deterministic label banner; preserve all detail pixels.
+            height = next((h for h in range(max(1, im.height-im.height//18-30), im.height)
+                           if h+max(28,h//18)==im.height), None)
+            require(height is not None, 'Invalid INPUT detail banner geometry')
+            band = im.height-height
+            draw = ImageDraw.Draw(im); draw.rectangle((0,0,im.width,band-1), fill='black')
+            draw.text((8,band//6), f'INPUT detail {i}', fill='white', font=font(int(band*.7)))
+            output = self.path(f'{stem}-input-detail-{i}.png')
+            data = io.BytesIO(); im.save(data, format='PNG'); atomic_write(output, data.getvalue())
+            neutral.append(output)
+        images = [input_img, *neutral, *[r['labelled_image'] for r in refs]]
         visual_prompt = """Compare INPUT with every attached R-labelled photograph using pixels only.
 Do not name or guess the site, object, artist or date. No web, shell or external context.
 Judge distinctive geometry and spatial relationships; generic resemblance is only compatible.
@@ -986,18 +1078,27 @@ conflicts and limitations. Different viewpoints or historical alterations alone 
 Request at most two paired_crops when a specific detail could discriminate a match. Give one box
 on INPUT and its corresponding box on the named R image, normalized to the WHOLE labelled image
 including its banner. Never request a box for a feature outside the frame. State the single most
-useful unresolved_feature for further retrieval. Keep output under 900 tokens."""
-        visual = self.call(stem+'-visual', visual_prompt, VISUAL,
-                           [input_img, *[r['labelled_image'] for r in refs]],
-                           effort=self.settings['compare_effort'], timeout=300)
+useful unresolved_feature for further retrieval. INPUT detail images are already available crops;
+crop coordinates must still refer to the full overviews. Keep output under 900 tokens."""
+        visual = (self.call(stem+'-visual', visual_prompt, VISUAL, images,
+                           effort=self.settings['compare_effort'], timeout=300) if refs else
+                  {'result':{'comparisons':[], 'paired_crops':[], 'unresolved_feature':''},
+                   'errors':[], 'usage':None, 'skipped':True})
         record['visual_check'] = visual
         def validate(call):
             if not call['errors']:
-                ids = [c['reference_id'] for c in call['result']['comparisons']]
-                if len(ids) != len(set(ids)) or set(ids) != {r['id'] for r in refs}:
-                    call['errors'].append('Visual check must cover every delivered reference exactly once')
-                if any(c['reference_id'] not in ids for c in call['result']['paired_crops']):
-                    call['errors'].append('Paired crop cites absent reference')
+                import copy
+                call.setdefault('raw_result',copy.deepcopy(call['result']))
+                ids = {r['id'] for r in refs}; groups = {}
+                for c in call['raw_result']['comparisons']:
+                    if c['reference_id'] in ids: groups.setdefault(c['reference_id'],[]).append(c)
+                call['result'] = copy.deepcopy(call['raw_result'])
+                call['result']['comparisons'] = [groups[r['id']][0] if len(groups.get(r['id'],[]))==1 else
+                    {'reference_id':r['id'], 'verdict':'insufficient', 'matches':'', 'conflicts':'',
+                     'limitation':'Missing or ambiguous visual assessment; no match established.'} for r in refs]
+                call['result']['paired_crops'] = [c for c in call['result']['paired_crops'] if c['reference_id'] in ids][:2]
+                if call['result']!=call['raw_result']:
+                    call['validation_notes']=['Unknown IDs dropped; missing/duplicate assessments marked insufficient.']
             if call.get('receipt_path'): write(Path(call['receipt_path']), call)
             return not call['errors']
         if not validate(visual):
@@ -1009,14 +1110,14 @@ useful unresolved_feature for further retrieval. Keep output under 900 tokens.""
         if pairs:
             detail_prompt = visual_prompt + '\nPaired details are now attached. Reassess the overview verdicts using these pixels. Return paired_crops=[].'
             visual = self.call(stem+'-visual-details', detail_prompt, VISUAL,
-                [input_img, *[r['labelled_image'] for r in refs], *pairs],
+                [*images, *pairs],
                 effort=self.settings['compare_effort'], timeout=300)
             record['visual_details'] = visual
             if not validate(visual): return {'result': None, 'errors': visual['errors'], 'usage': None, 'skipped': True}
         if not self.within_budget(budget_row or {'rounds':[record]}):
             return {'result':None, 'errors':['Usage limit after detail check'], 'usage':None, 'skipped':True, 'stop_reason':'usage_limit'}
         prompt += '\nCAPTION-BLIND VISUAL FINDINGS: '+compact(visual['result'])
-        prompt += '\nPAIRED DETAIL LIMITATIONS: '+compact([n for n in notes if n.get('error')])
+        prompt += '\nPAIRED DETAIL RESOLUTION AND LIMITATIONS: '+compact(notes)
         prompt += """\nThese findings were recorded before captions. Explain any disagreement explicitly.
 Caption names cannot erase visual contradictions. A compatible generic view does not establish identity.
 date_basis must distinguish photo_record, visible_time_bound, historical_context, or none and cite supplied
@@ -1028,24 +1129,7 @@ Do not continue identification research solely to fill an unrelated date or loca
         result = self.call(stem+'-compare', prompt, DATED_COMPARISON, [*images, *pairs],
                            effort=self.settings['compare_effort'], timeout=300)
         if not result['errors']:
-            import copy
-            result['raw_result'] = copy.deepcopy(result['result'])
-            value = result['result']; date = value['date_basis']
-            allowed = {r['id'] for r in refs} | {d['id'] for d in documents}
-            if not set(date['reference_ids']) <= allowed:
-                result['errors'].append('Date basis cites absent evidence')
-            if date['kind'] in ('historical_context', 'none') or not date['reference_ids']:
-                previous = value['photograph_date']
-                if previous['value']: value['limitations'].append('Date context only: '+previous['value']+'; '+previous['explanation'])
-                value['photograph_date'] = {'status':'unresolved', 'value':None,
-                    'explanation':date['explanation'], 'reference_ids':[]}
-            strong = {c['reference_id'] for c in visual['result']['comparisons'] if c['verdict']=='matching'}
-            docs = {d['id'] for d in documents}
-            for field in ('depicted_object', 'location'):
-                claim = value[field]
-                if claim['status']=='supported' and not set(claim['reference_ids']) & (strong | docs):
-                    claim['status'] = 'tentative'
-                    claim['explanation'] += ' Caption-blind inspection did not establish a distinctive visual match.'
+            verify_assessments(result, visual['result'], refs, documents)
         if result.get('receipt_path'): write(Path(result['receipt_path']), result)
         return result
 
@@ -1066,7 +1150,8 @@ depicted_object identifies a named work/building/object or a specific technical 
 For machinery distinguish function/type, manufacturer, model and installation site; proving one does not prove the others.
 If only a generic description is possible, keep depicted_object unresolved and put the description in observations.
 A document may support a claim without an image, but explain how its text binds to this exact object/photo.
-Cite INPUT only in observations. Assessments may cite only supplied R image IDs and D document IDs.
+Cite supplied R or D IDs in assessments. Only photograph_date may additionally cite INPUT for a
+visible_time_bound (a tentative time clue, never a supported exposure date). Hypotheses must name their field.
 comparisons contains R image IDs ONLY. If no R images are supplied, comparisons MUST be [].
 Discuss D documents in assessments, never invent an image comparison for a document.
 Supported identifications require compared images or documentary evidence; INPUT observations alone cannot support them.
@@ -1283,10 +1368,25 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
             url = candidate.get('candidate_image_url')
             # Decorations are excluded while parsing; seen photos do not consume slots.
             if not url or url in seen or per_record.get(candidate['record_url'], 0) >= 8: continue
-            attempts += 1
-            try: image = self.fetcher.image(url)
-            except Exception as e:
-                issues.append({'source': 'image', 'record_url': candidate['record_url'], 'error': str(e)}); continue
+            choices = list(dict.fromkeys([url, *candidate.get('image_variants', [])]))
+            image = None; failures = []
+            for variant in choices:
+                if attempts >= MAX_IMAGE_ATTEMPTS: break
+                attempts += 1
+                try:
+                    image = self.fetcher.image(variant)
+                    break
+                except Exception as e:
+                    failures.append({'url':variant,'error':str(e)})
+            if image is None:
+                issues.append({'source':'image','record_url':candidate['record_url'],
+                               'error':'All attempted observed variants failed', 'attempts':failures})
+                continue
+            image.update(requested_image_url=candidate.get('discovered_image_url') or url,
+                         delivered_variant=variant, fallback_attempts=failures,
+                         native_reference_available=variant==candidate.get('original_image_url'),
+                         image_provenance={**candidate.get('image_provenance', {}),
+                                           'image_fetched':True,'fetched_url':variant})
             seen.add(url)
             seen.update(candidate.get('image_variants', []))
             if image['image_sha256'] in seen: continue
@@ -1306,7 +1406,8 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
                     'Direct observations must cite INPUT and contain a description')
         for a in [result[k] for k in ('depicted_object', 'location', 'event', 'photograph_date')]+result['hypotheses']:
             cited = set(a['reference_ids'])
-            require(cited <= allowed | docs, 'Assessment cites an absent reference')
+            input_bound = (a is result['photograph_date'] or a.get('field')=='photograph_date') and result.get('date_basis', {}).get('kind')=='visible_time_bound'
+            require(cited <= allowed | docs | ({'INPUT'} if input_bound and a.get('status')!='supported' else set()), 'Assessment cites an absent reference')
             if a.get('status') == 'supported':
                 require(bool(cited) and cited <= compared | docs, 'Supported claim needs compared images or documentary evidence')
         return result
@@ -1333,7 +1434,7 @@ Keep output under 500 tokens. Prior contradictions: {compact(history)}"""
         for i, box in enumerate(crop_boxes(boxes)[:2]):
             x, y, w, h = (box[k] for k in 'xywh')
             crop = im.crop((int(x*im.width), int(y*im.height), int((x+w)*im.width), int((y+h)*im.height)))
-            paths.append(save_jpeg(labelled(crop, f'{label_prefix} {i+1}: {box["label"]}',
+            paths.append(save_jpeg(labelled(crop, f'{label_prefix} {i+1}',
                                            1800 if self.settings.get('discovery_mode') in ('adaptive', 'direct') else 900),
                                    self.path(f'{stem}-native-{i+1}.jpg')))
         require(stamp(source) == before, 'Source changed during native crop read')
@@ -1410,14 +1511,19 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                'started_at': now(), 'rounds': [], 'input_note': note,
                'input_path': str(input_img), 'input_sha256': digest(input_img),
                'input_recipe': item.get('preview_recipe', {}), 'initial_routing': item['research_routing']}
-        history = []; seen = set(); carry = []; carry_docs = []; crops = []; used = set(); final = None
+        history = []; seen = set(); pending = []; carry = []; carry_docs = []; crops = []; used = set(); final = None
         status = 'no_results'; stop = 'round_limit'; query_count = 0
         for rnd in range(1, st['max_rounds']+1):
             if not self.within_budget(row): status = 'usage_limit'; stop = 'usage_limit'; break
             rs = f'{stem}-r{rnd}'; r = {'round': rnd}; row['rounds'].append(r)
+            inspection_only = bool(pending)
             search = self.call(rs+'-adaptive', self.adaptive_prompt(item, history), ADAPTIVE_SEARCH,
                 [input_img, *crops, *[ref['labelled_image'] for ref in carry]], web=True, effort=st['compare_effort'], timeout=360,
-                query_limit=6, web_call_limit=8)
+                query_limit=6, web_call_limit=8) if not inspection_only else {
+                    'result':{'research_routing':item['research_routing'],'visual_features':[],
+                              'crop_boxes':[], 'records':[], 'queries_reported':[], 'limitations':[]},
+                    'errors':[], 'usage':None, 'skipped':True, 'provenance_available':True}
+            r['inspection_only'] = inspection_only
             r['adaptive_search'] = search
             query_count += search.get('search_queries_executed', 0)
             if search['errors']: status = 'failed'; stop = 'search_failed'; break
@@ -1453,7 +1559,8 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                 self.fetcher.domains.add(host); used.add(sid)
                 entries.append({**entry, 'url': url, 'source_id': sid, 'observed_by': rs+'-adaptive',
                     'url_provenance': provenance, 'image_observed_in_search': bool(image_url and
-                        url_provenance_key(image_url) in observed)})
+                        url_provenance_key(image_url) in observed), 'image_requested_by_tool': bool(image_url and
+                        url_provenance_key(image_url) in actions)})
             r.update(rejected_urls=rejected, url_provenance=proposals)
             if rejected and not entries:
                 search['errors'].append('integration_error: returned URLs have no observed provenance')
@@ -1466,12 +1573,16 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                     entry['url_provenance']['page_fetched'] = True
                 except Exception as e: issues.append({'source': entry['url'], 'error': str(e)})
             pool, documents, failures = self.gather(candidates, item, seen, rnd); issues += failures
+            pool = [{**c, 'cid':f'C{i+1}'} for i,c in enumerate(pending+pool)]
             r.update(pool=[self.slim(c) for c in pool], access_issues=issues)
             write(self.path(rs+'-retrieval.json'), {'records': entries, 'rejected_urls': rejected,
                 'pool': pool, 'documents': documents, 'issues': issues, 'url_provenance': proposals})
             # Compare small galleries in full; visually select from larger pools.
             if not self.within_budget(row): status = 'usage_limit'; stop = 'usage_limit'; break
-            picked = self.visual_selection(pool, input_img, crops, discovery['visual_features'], rs, r)
+            picked = pool[:6] if inspection_only else self.visual_selection(pool, input_img, crops, discovery['visual_features'], rs, r)
+            inspected = {p['image_sha256'] for p in picked}
+            pending = [p for p in pool if p['image_sha256'] not in inspected]
+            r['pending_candidates'] = [self.slim(p) for p in pending]
             if r.get('shortlist', {}).get('errors'):
                 status = 'failed'; stop = 'comparison_failed'; break
             selected = []; hashes = set()
@@ -1509,13 +1620,13 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                                 'retrieval_failures': issues,
                                 'records': entries, 'queries_reported': discovery['queries_reported']})
                 if not (issues and not pool and not documents) and self.goal_met(result):
-                    stop = 'identified'; break
+                    stop = self.goal_stop(); break
                 carry, carry_docs = retain_evidence(result, refs, docs)
                 if issues and not pool and not documents:
                     stop = 'retrieval_failed'
-                elif not entries and not has_next(result['next']) and not result['needs_more_references']:
+                elif not pending and not entries and not has_next(result['next']) and not result['needs_more_references']:
                     stop = 'search_exhausted'; break
-        row.update(status=status, stop_reason=stop, evidence_history=history, sources_used=sorted(used), queries_used=query_count,
+        row.update(status=status, stop_reason=stop, uninspected_candidates=pending, evidence_history=history, sources_used=sorted(used), queries_used=query_count,
                    research_routing=item['research_routing'])
         if final:
             row.update(final)
@@ -1530,11 +1641,15 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                            SHORTLIST, [input_img, *crops, sheet], effort=self.settings['compare_effort'], timeout=300)
         record['shortlist'] = result
         if result['errors']: return []
-        ids = [p['candidate_id'] for p in result['result']['picks']]
-        if len(ids) > 6 or len(ids) != len(set(ids)) or not set(ids) <= {c['cid'] for c in pool}:
-            result['errors'].append('Invalid visual selection IDs')
-            return []
+        valid = {c['cid'] for c in pool}
+        ids = list(dict.fromkeys(p['candidate_id'] for p in result['result']['picks'] if p['candidate_id'] in valid))[:6]
+        if len(ids)!=len(result['result']['picks']): result['validation_notes']=['Unknown or duplicate shortlist IDs dropped.']
+        # A tile cannot conclusively reject a detailed match. Fill available slots and
+        # leave remaining downloaded candidates queued for full-size inspection.
+        ids += [c['cid'] for c in pool if c['cid'] not in ids][:6-len(ids)]
+        if result.get('receipt_path'): write(Path(result['receipt_path']), result)
         return [next(c for c in pool if c['cid'] == ident) for ident in ids]
+
 
     def process_direct(self, item, number):
         """Isolated supplied-reference comparison; no discovery or proposal attachment."""
@@ -1573,7 +1688,7 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
         else:
             result = compared['result']
             row.update(status='compared', comparison=compared, references=refs, documents=[],
-                       stop_reason='identified' if self.goal_met(result) else 'direct_comparison_complete')
+                       stop_reason=self.goal_stop() if self.goal_met(result) else 'direct_comparison_complete')
         return row
 
     def process(self, item, number):
@@ -1597,12 +1712,12 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
         queries = {k: d[k] for k in ('subject', 'search_terms', 'place_names', 'candidate_queries')}
         queries['candidate_queries'] = list(dict.fromkeys(reviewer_candidates(item)+queries['candidate_queries']))
         features = d['visual_features']
-        seen = set(); carry = []; carry_docs = []; final = None; history = []; crops = []
+        seen = set(); pending = []; carry = []; carry_docs = []; final = None; history = []; crops = []
         used = set(); budget = [self.policy()['queries']]; status = 'no_results'
         for rnd in range(1, st['max_rounds']+1):
             rs = f'{stem}-r{rnd}'; r = {'round': rnd, 'queries': queries}; row['rounds'].append(r)
             if not self.within_budget(row): status = 'usage_limit'; break
-            if rnd > 1 and not crops and d['crop_boxes']:
+            if rnd > 1 and not pending and not crops and d['crop_boxes']:
                 try: crops, note = self.native_details(item, d['crop_boxes'], stem)
                 except Exception as e: crops, note = [], 'Native crop unavailable: '+str(e)
                 row['crop_note'] = note; row['crops'] = [str(p) for p in crops]
@@ -1623,28 +1738,37 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                         queries = merge_queries(queries, fresh)
                         r['queries'] = queries; features = fresh['visual_features']
                 if not self.within_budget(row): status = 'usage_limit'; break
-            checkpoint = self.path(rs+'-retrieval.json')
-            retry_search = checkpoint.exists() and getattr(self.args, 'retry_failed', False) and any(
-                read(checkpoint).get('search', {}).get(key, {}).get('errors') for key in ('portal_search', 'web_fallback'))
-            if checkpoint.exists() and not retry_search:
-                saved = read(checkpoint)
-                require(saved['queries'] == queries, 'Retrieval inputs changed; prepare a new prefix')
-                pool, documents, issues = saved['pool'], saved['documents'], saved['issues']
-                r.update(saved['search'])
-                used.update(r['sources_used']); budget[0] = r['queries_remaining']
-                for c in pool:
-                    require(digest(Path(c['local_image'])) == c['image_sha256'], 'Cached reference changed')
-                    seen.update([c['image_url'], c['image_sha256']])
+            inspection_only = bool(pending)
+            r['inspection_only'] = inspection_only
+            if inspection_only:
+                pool, documents, issues = pending, [], []
             else:
-                candidates, issues = self.retrieve(queries, item, rnd, row, history, used, budget)
-                pool, documents, image_issues = self.gather(candidates, item, seen, rnd)
-                issues += image_issues
-                write(checkpoint, {'queries': queries, 'pool': pool, 'documents': documents, 'issues': issues,
-                                  'search': {k: v for k, v in r.items() if k not in ('round', 'queries')}})
+                checkpoint = self.path(rs+'-retrieval.json')
+                retry_search = checkpoint.exists() and getattr(self.args, 'retry_failed', False) and any(
+                    read(checkpoint).get('search', {}).get(key, {}).get('errors') for key in ('portal_search', 'web_fallback'))
+                if checkpoint.exists() and not retry_search:
+                    saved = read(checkpoint)
+                    require(saved['queries'] == queries, 'Retrieval inputs changed; prepare a new prefix')
+                    pool, documents, issues = saved['pool'], saved['documents'], saved['issues']
+                    r.update(saved['search'])
+                    used.update(r['sources_used']); budget[0] = r['queries_remaining']
+                    for c in pool:
+                        require(digest(Path(c['local_image'])) == c['image_sha256'], 'Cached reference changed')
+                        seen.update([c['image_url'], c['image_sha256'], c.get('candidate_image_url'),
+                                     *c.get('image_variants', [])])
+                else:
+                    candidates, issues = self.retrieve(queries, item, rnd, row, history, used, budget)
+                    pool, documents, image_issues = self.gather(candidates, item, seen, rnd)
+                    issues += image_issues
+                    write(checkpoint, {'queries': queries, 'pool': pool, 'documents': documents, 'issues': issues,
+                                      'search': {k: v for k, v in r.items() if k not in ('round', 'queries')}})
             r.update(pool=[self.slim(c) for c in pool], access_issues=issues)
             if not self.within_budget(row): status = 'usage_limit'; break
             picks = []
-            if pool:
+            if st.get('visual_verification'):
+                candidates = pool[:self.policy()['refs']] if inspection_only else self.visual_selection(pool, input_img, crops, features, rs, r)
+                if r.get('shortlist',{}).get('errors'): status='failed'; break
+            elif pool:
                 sheet = contact_sheet(pool, self.path(rs+'-sheet.jpg'))
                 shortlist = self.call(rs+'-shortlist', self.SHORTLIST_PROMPT.format(
                     max_refs=self.policy()['refs'], features=compact(features)),
@@ -1672,6 +1796,10 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
                 break
             # Reserve space for a visually plausible institutional reference, never force a rejected image.
             selected = select_references(candidates, carry, self.policy()['refs'])
+            if st.get('visual_verification'):
+                picked_hashes = {c['image_sha256'] for c in selected}
+                pending = [c for c in pool if c['image_sha256'] not in picked_hashes]
+                r['pending_candidates'] = [self.slim(c) for c in pending]
             refs = []
             for c in selected:
                 ref = {**c, 'id': f'R{len(refs)+1}'}
@@ -1694,12 +1822,13 @@ Output concise JSON, under 1100 tokens. No shell, local file reads, agents, or m
             final = {'comparison': compare, 'references': refs, 'documents': docs, 'final_round': rnd}
             status = 'compared'; res = compare['result']
             history.append(round_memory(rnd, res, refs+docs))
-            if self.goal_met(res): row['stop_reason'] = 'identified'; break
+            if self.goal_met(res): row['stop_reason'] = self.goal_stop(); break
             if not self.within_budget(row): status = 'usage_limit'; break
-            if not (res['needs_more_references'] and rnd < st['max_rounds'] and has_next(res['next']) and budget[0] > 0): break
+            if not (rnd < st['max_rounds'] and (pending or (res['needs_more_references'] and has_next(res['next']) and budget[0] > 0))): break
             carry, carry_docs = retain_evidence(res, refs, docs)
             queries = merge_queries(queries, res['next'], followup=True)
         row['status'] = status
+        row['uninspected_candidates'] = pending
         if final:
             row.update(final)
             if status != 'compared': row['stop_reason'] = status
@@ -1818,7 +1947,7 @@ def main():
     p.add_argument('--research-root', type=Path, default=DEFAULT_WORK)
     p.add_argument('--work-root', type=Path, default=DEFAULT_REVIEW)
     p.add_argument('--registry', type=Path, default=DEFAULT_REGISTRY)
-    p.add_argument('--prefix', required=True, help='new prefix for v9; existing run artifacts are retained')
+    p.add_argument('--prefix', required=True, help='new prefix for v10; existing run artifacts are retained')
     p.add_argument('--model', default='gpt-6-astra')
     p.add_argument('--limit', type=int, default=0)
     p.add_argument('--retry-failed', action='store_true', help='explicitly retry failed calls on this invocation; retain all attempts')
@@ -1833,8 +1962,8 @@ def main():
     g.add_argument('--expected', type=Path, help='held-out human verified JSON: objects keyed by object_id; never sent to model')
     g.add_argument('--compare-effort', choices=['low', 'medium', 'high'], default='low')
     g.add_argument('--max-rounds', type=int, choices=[1, 2], default=2)
-    g.add_argument('--max-item-tokens', type=int, default=30000, help='completed-call usage cutoff; 0 disables')
-    g.add_argument('--max-average-tokens', type=int, default=30000, help='batch average cutoff; 0 disables')
+    g.add_argument('--max-item-tokens', type=int, default=None, help='between-call cutoff; adaptive 150k (low/medium) or 500k (high), other modes 30k or 120k; 0 disables')
+    g.add_argument('--max-average-tokens', type=int, default=None, help='batch average cutoff; defaults to mode/effort allowance; 0 disables')
     g.add_argument('--web-search', action=argparse.BooleanOptionalAction, default=True,
                    help='enable live web discovery (required for adaptive mode)')
     g.add_argument('--native-crops', action=argparse.BooleanOptionalAction, default=True,
