@@ -24,3 +24,16 @@ Not checkable: the trial results themselves (photos and receipts are private). T
 5. End a continuation when a page's first comparison batch is all `different`, so the follow-up search still runs.
 6. Keep the subject class (e.g. "building") in blind mode; it is not an identity hint.
 7. Try low effort as a first pass; publish tokens per stage to see whether the easy cases need high effort.
+
+## Design note: local reference index from the ISS collections (no model training)
+Not run; based on reading `visual_knn.py` on the unmerged branch `claude/visual-similarity-knn` (open_clip ViT-B-32 on CPU, 11,170 museum-digital previews, leave-one-out `evaluate` with a `series_hidden` mode, kNN proposals). Its accuracy is unmeasured. Contents of the TFA, Paragon and Kurt Schwarz collections were not inspected.
+
+1. Run `evaluate` first; `series_hidden` precision per field shows what pretrained embeddings can do on this material. If weak, change nothing else yet.
+2. Index sites, not only images: group records by place/building from metadata; per site keep a card (name, address, photo count, date range) and 3-4 representative previews. Rank sites from the neighbours of an INPUT photo, pass them as R references to the existing blind comparison and paired crops. The index proposes; the comparison verifies.
+3. Re-rank the top ~20 with pretrained local feature matching and geometric verification (OpenCV SIFT + RANSAC, or LightGlue), since global embeddings are weak at same-building-different-decade.
+4. Add SQLite full-text search over titles, tags, places and captions for inputs with banner or caption text.
+5. Use the same data as the benchmark: leave one out, hide the same series and near-duplicates (>0.95 similarity), record top-1 and top-3 site recall (suggestion 2 above).
+6. Integrate into `reference_batch.py` as a first discovery source with `local_index` provenance; web search only when no confident site.
+
+Limits: the index only knows what the collections cover (sites like Pfefferberg need Commons/Denkmal); accuracy measured on ISS-skewed material will not transfer to unknown photos from elsewhere; it is unknown how many records carry a usable place, or whether DDB holds anything museum-digital lacks.
+Approvals (AGENTS.md): `open_clip_torch`/`torch` dependencies, work directory, SQLite cache. Rights check: comparison calls upload reference images to the model; confirm this is acceptable for Kurt Schwarz and Paragon material.
