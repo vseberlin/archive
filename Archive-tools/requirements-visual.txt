@@ -1,0 +1,6 @@
+# CPU torch/torchvision: install from https://download.pytorch.org/whl/cpu first.
+# NumPy 2.5.4 SIGILLs on this Phenom II; 2.2.6 was import-tested here.
+numpy==2.2.6
+torch==2.15.0+cpu
+torchvision==0.29.2+cpu
+open_clip_torch==3.3.0

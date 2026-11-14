@@ -1,0 +1,5 @@
+# Verified on this workstation's AMD Phenom II / Python 3.13.
+# Newer installed wheels crashed at NumPy import with SIGILL.
+numpy==2.2.6
+opencv-python-headless==4.12.0.88
+Pillow==11.1.0

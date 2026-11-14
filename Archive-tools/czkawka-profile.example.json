@@ -1,0 +1,23 @@
+{
+  "format": "archive-tools-czkawka-1",
+  "exact_hash": "BLAKE3",
+  "scope": "unconfirmed",
+  "proxy_edge": 512,
+  "preview_mode": "catalogued",
+  "passes": [
+    {
+      "algorithm": "Gradient",
+      "hash_size": 16,
+      "resize_filter": "Lanczos3",
+      "max_difference": 12,
+      "geometric_invariance": "mirror-flip-rotate90"
+    },
+    {
+      "algorithm": "DoubleGradient",
+      "hash_size": 32,
+      "resize_filter": "Lanczos3",
+      "max_difference": 12,
+      "geometric_invariance": "mirror-flip-rotate90"
+    }
+  ]
+}

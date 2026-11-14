@@ -27,6 +27,7 @@ tools/archive-preservation/copyhash
 
 # Local archive data, decisions, catalogues and generated reports
 *.sqlite*
+*.npz
 *.db
 *.db-*
 *.sql
@@ -35,6 +36,8 @@ tools/archive-preservation/copyhash
 *.xlsx
 *.xls
 *.json
+!/Archive-tools/czkawka-profile.example.json
+!/Archive-tools/berlin-photo-reference-sources.json
 *.jsonl
 *.ndjson
 *.nul
