@@ -1,0 +1,7 @@
+{% extends 'research_web/base.html' %}{% block title %}Log in{% endblock %}{% block content %}
+<section class="card login"><div class="eyebrow">Local research pilot</div><h1>Log in</h1><p class="muted">Browse the synthetic comparison and its evidence.</p>
+<form method="post">{% csrf_token %}{{ form.non_field_errors }}
+<label for="id_username">Username</label>{{ form.username }}{{ form.username.errors }}
+<label for="id_password">Password</label>{{ form.password }}{{ form.password.errors }}
+<input type="hidden" name="next" value="{{ next }}"><button type="submit">Log in</button></form></section>
+{% endblock %}

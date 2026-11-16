@@ -1,0 +1,6 @@
+{% extends 'research_web/base.html' %}{% block title %}Cases{% endblock %}{% block content %}
+<div class="eyebrow">Evidence workspace</div><h1>Research comparisons</h1>
+<p class="muted">Inspect source views, citation locators and the limits of each assertion.</p>
+{% if real_count %}<p><strong>{{ real_count }} real review cases</strong> · <a href="{% url 'index' %}">Real material</a> · <a href="{% url 'index' %}?demo=1">Synthetic demonstration</a></p><div class="notice">Local research and review. Prepared observations await your assessment; no catalogue metadata has been adopted.</div>{% else %}<div class="notice">Synthetic fixtures only. Descriptions and initial decisions in this demonstration are invented.</div>{% endif %}
+{% for case in cases %}<article class="card"><span class="badge">{% if case.payload.synthetic %}Synthetic demonstration{% else %}{{ case.key }} · {{ case.payload.group_label }}{% endif %}</span><h2><a href="{{ case.get_absolute_url }}">{{ case.title }}</a></h2><p>{{ case.payload.views|length }} source views{% if case.payload.question %} · {{ case.payload.question }}{% endif %}</p>{% if case.payload.limit %}<p class="muted">{{ case.payload.limit }}</p>{% endif %}<a class="button" href="{{ case.get_absolute_url }}">Open comparison</a></article>{% empty %}<p>No cases loaded.</p>{% endfor %}
+{% endblock %}

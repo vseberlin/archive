@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Archive workbench</title>
+  <link rel="stylesheet" href="/workbench.css">
+  <script src="/workbench.js" defer></script>
+</head>
+<body>
+  <header><div><span class="eyebrow">Archive tools · workbench</span><h1 id="unit-title">Loading work area…</h1></div><div id="unit-status" role="status"></div><button id="reload">Reload evidence</button></header>
+  <div id="error" class="error" role="alert" hidden></div>
+  <div class="layout">
+    <aside aria-label="Object list">
+      <label>Find an object<input id="search" type="search" placeholder="Object ID, title or note"></label>
+      <label>Show<select id="filter"><option value="all">All review cases</option><option value="matches">Has comparison candidates</option><option value="alone">No comparison candidate</option><option value="pending">Needs review</option><option value="similarity_review">Unconfirmed similarity</option><option value="master_upgrade">Master upgrades</option><option value="proposed_new_object">Proposed new objects</option><option value="metadata_review">Metadata questions</option><option value="search_coverage_review">Search coverage gaps</option><option value="evidence_conflict">Conflicting evidence</option><option value="master">Master unresolved</option><option value="reviewed">Candidates reviewed</option></select></label>
+      <p id="counts" class="muted"></p><nav id="queue" aria-label="Objects"></nav>
+    </aside>
+    <main id="review"><p class="empty">Loading prepared objects…</p></main>
+  </div>
+  <footer>Decisions are saved in the work area. Source files remain unchanged. Redundant copies still require separate authorization for deletion.</footer>
+</body>
+</html>

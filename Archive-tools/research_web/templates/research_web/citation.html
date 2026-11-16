@@ -1,0 +1,19 @@
+{% extends 'research_web/base.html' %}{% block title %}{{ view.label }} · Citation{% endblock %}{% block content %}
+<a href="{% url 'case' case.key %}">← Back to comparison</a>
+<h1>{{ view.label }}</h1>
+<p class="locator"><strong>Page {{ view.page_sequence }} of {{ view.page_count }}</strong>{% if view.printed_page_label %} · printed {{ view.printed_page_label }}{% endif %}{% if view.figure %} · figure {{ view.figure }}{% endif %}{% if view.passage_label %} · {{ view.passage_label }}{% endif %}</p>
+<p>{{ view.observation }}</p>
+<p class="muted">{% if case.payload.synthetic %}Synthetic evidence.{% else %}Real source material.{% endif %} The amber outline marks the recorded citation region; it is not an identification result.</p>
+<figure class="citation-figure">
+<img src="{% url 'media' case.key view.key %}?revision={{ case.revision }}" alt="{{ view.alt }}">
+<span class="citation-region" style="left:{{ region.x|floatformat:3 }}%;top:{{ region.y|floatformat:3 }}%;width:{{ region.width|floatformat:3 }}%;height:{{ region.height|floatformat:3 }}%" aria-hidden="true"></span>
+<figcaption class="sr-only">Recorded citation region: {{ view.region_xywh }} in normalized x, y, width, height coordinates from the top-left of the unrotated image.</figcaption>
+</figure>
+<p><a href="{% url 'source' case.key view.key %}?revision={{ case.revision }}{% if source_is_pdf %}#page={{ view.page_sequence }}{% endif %}" target="_blank" rel="noopener">{% if source_is_pdf %}Open source PDF at page {{ view.page_sequence }}{% elif source_is_tiff %}Download source TIFF{% else %}Open source image{% endif %}</a> · <a href="{% url 'media' case.key view.key %}?revision={{ case.revision }}" target="_blank" rel="noopener">Open prepared image at full size</a></p>
+{% if source_is_pdf %}<p class="muted">The PDF link requests the cited sequence page in your browser's viewer. The printed label is shown separately above.</p>{% endif %}
+<details class="card"><summary>Citation details</summary><dl><dt>Source</dt><dd>{{ view.source.path }}</dd><dt>Item</dt><dd>{{ view.item_key }}</dd><dt>Region</dt><dd>{{ view.region_xywh }}</dd><dt>Page rotation</dt><dd>{{ view.rotation }}° clockwise in the prepared image</dd><dt>Reading</dt><dd>{{ view.transcription_method }}</dd>{% if view.source_rights %}<dt>Source rights</dt><dd>{{ view.source_rights }}</dd>{% endif %}{% if view.source_attribution %}<dt>Attribution</dt><dd>{{ view.source_attribution }}</dd>{% endif %}</dl></details>
+{% if view.external_reference %}<div class="notice" role="status"><strong>External reference unavailable.</strong> {{ view.external_reference.note }}</div>{% endif %}
+<details class="card"><summary>Optional OCR · {% if ocr.status == 'not_generated' %}Not generated{% else %}{{ ocr.status|title }}{% endif %}</summary><p>{{ ocr.note }}</p>{% if ocr.status == 'ready' %}<pre class="ocr-text">{{ ocr.text }}</pre>{% endif %}</details>
+<h2>Current assertions citing this view</h2>
+{% for assertion in assertions %}<article class="card"><span class="badge {{ assertion.review }}">{{ assertion.review|title }}</span><h3>{{ assertion.value }}</h3><p>{{ assertion.scope }}</p>{% if not case.payload.read_only %}<a href="{% url 'review' case.key assertion.key %}">Review or correct {{ assertion.key }}</a>{% endif %}</article>{% empty %}<p>No current assertion cites this view.</p>{% endfor %}
+{% endblock %}

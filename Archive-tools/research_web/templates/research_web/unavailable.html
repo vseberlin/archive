@@ -1,0 +1,5 @@
+{% extends 'research_web/base.html' %}{% block content %}
+<h1>{% if saved %}Review saved; browsing needs rebuilding{% else %}Comparison unavailable{% endif %}</h1>
+<div class="notice" role="alert">{{ message }}</div>
+{% if rebuild_revision %}<form method="post" action="{% url 'rebuild' %}">{% csrf_token %}<input type="hidden" name="revision" value="{{ rebuild_revision }}"><button>Rebuild browsing</button></form><p>This refreshes browsing from the saved history and does not repeat a review.</p>{% endif %}
+<p><a href="{% url 'index' %}">Reload current records</a></p>{% endblock %}

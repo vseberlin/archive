@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Archive reconciliation</title>
+  <link rel="stylesheet" href="/reconciliation_workbench.css">
+  <script src="/reconciliation_workbench.js" defer></script>
+</head>
+<body>
+  <header><div><span class="eyebrow">Archive · reconciliation</span><h1 id="unit-title">Loading work area…</h1></div><div id="unit-status" role="status"></div><button id="reload">Reload evidence</button></header>
+  <div id="error" class="error" role="alert" hidden></div>
+  <div class="layout">
+    <aside aria-label="Object queue">
+      <label>Find an object<input id="search" type="search" placeholder="Inventory, title or object ID"></label>
+      <label>Show<select id="filter"><option value="pending">Needs review</option><option value="all">All objects</option><option value="master">Master unresolved</option><option value="metadata">Metadata pending</option><option value="complete">Review complete</option></select></label>
+      <p id="counts" class="muted"></p><nav id="queue" aria-label="Objects"></nav>
+    </aside>
+    <main id="review"><p class="empty">Loading prepared objects…</p></main>
+  </div>
+  <footer>Records choices in the work area. Sources and the accessioned archive remain unchanged. Redundant does not mean safe to delete.</footer>
+</body>
+</html>

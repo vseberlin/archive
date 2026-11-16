@@ -1,0 +1,9 @@
+{% extends 'research_web/base.html' %}{% block title %}Review assertion{% endblock %}{% block content %}
+<a href="{% url 'case' case_key %}">← Back to comparison</a>
+<h1>Review assertion</h1>
+<p class="muted">{{ assertion.subject }} · {{ assertion.relation }}</p>
+<div class="notice">{% if is_synthetic %}This exercise uses invented evidence.{% else %}Assess the prepared observation against the real source material.{% endif %} Saving retains earlier wording and records your review. Catalogue metadata remains unadopted.</div>
+{% if save_error %}<div class="notice" role="alert"><strong>This submission was not saved.</strong> {{ save_error }}<p>Your entered text is retained below. <a href="{% url 'review' case_key assertion.key %}">Open a fresh form</a> to compare before submitting again.</p></div>{% endif %}
+<details class="card"><summary>Inspect citation evidence</summary><p>Opens in a new tab so your entered wording stays here.</p><ul>{% for view in citation_views %}<li><a href="{% url 'citation' case_key view.key %}?revision={{ citation_revision }}" target="_blank" rel="noopener">{{ view.label }} · page {{ view.page_sequence }}{% if view.printed_page_label %} · printed {{ view.printed_page_label }}{% endif %}</a></li>{% endfor %}</ul></details>
+<form method="post" class="card review-form">{% csrf_token %}{{ form.as_p }}<button type="submit">{% if is_synthetic %}Save synthetic review{% else %}Save research review{% endif %}</button></form>
+{% endblock %}

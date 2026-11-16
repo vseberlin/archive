@@ -1,0 +1,8 @@
+{% if physical %}<dl>
+{% if physical.inventory_reference %}<dt>Inventory / object reference</dt><dd>{{ physical.inventory_reference }}</dd>{% endif %}
+{% if physical.catalogue_url %}<dt>Museum catalogue</dt><dd><a href="{{ physical.catalogue_url }}" target="_blank" rel="noopener noreferrer">{{ physical.catalogue_url }}</a></dd>{% endif %}
+{% if physical.location %}<dt>Last recorded museum location</dt><dd>{{ physical.location }}</dd>{% endif %}
+{% if physical.location_source %}<dt>Source / supplied or checked by</dt><dd>{{ physical.location_source }}</dd>{% endif %}
+{% if physical.location_date %}<dt>Location recorded or checked on</dt><dd>{{ physical.location_date }}</dd>{% endif %}
+<dt>Relationship to the depicted object</dt><dd>{% if physical.relationship == 'same_type' %}Same type{% elif physical.relationship == 'possible_specimen' %}Possibly the depicted specimen{% elif physical.relationship == 'confirmed_specimen' %}Confirmed same specimen{% elif physical.relationship == 'other_connection' %}Other connection described in the source note{% else %}Not established{% endif %}</dd>
+</dl>{% else %}<p class="muted">No physical object recorded. This field can remain empty.</p>{% endif %}
