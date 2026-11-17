@@ -63,6 +63,18 @@ def retryable(value, recipe):
     if discovery:
         if any(p.get('state') in ('not_attempted', 'error') for p in discovery.get('passes', [])):
             return True
+        coverage = discovery.get('coverage', {})
+        if coverage.get('recognition_stopped') in ('timeout', 'error'):
+            return True
+        # Older receipts have no stop reason. Missing variants inside the
+        # recognition limit mean a deadline stop, not a deliberate region cap.
+        expected = coverage.get('expected_variants_per_region')
+        if expected is not None:
+            from .extractors.text_regions import recognition_coverage
+            regions = discovery.get('regions', [])
+            progress = recognition_coverage(regions, expected, coverage.get('recognition_limit', len(regions)))
+            if progress['recognition_stopped'] in ('timeout', 'error'):
+                return True
         return any(v.get('status') == 'error' for r in discovery.get('regions', []) for v in r.get('variants', []))
     return False
 

@@ -34,8 +34,8 @@ adding diagnostics.
 |---|---|---|
 | Cache key v2 | Key binds unit/object/representation, member/page geometry and, with a stored SHA-256, content. Root, path, mtime, `original_path`, role, printed label and logical page no longer enter the key. Without a stored hash the locator and stamp stay bound. | `contracts.py` (`page_binding`, `CACHE_KEY_VERSION`, `key_matches`) |
 | Rebinding instead of re-extraction | When the same identity and content appear at a new locator or stamp, the stored hash is verified once, the receipt is refiled with the current page under the v2 key and records `rebound_from`; no render, no extraction. Receipts under v1 keys are found and refiled. All key checks (`receipts`, `evidence`, web extraction) accept v1 or v2. | `runner.py`, `receipts.py`, `evidence.py`, `web/extraction.py` |
-| Prepared views keyed by binding | Prepared-view binding uses the same identity/content binding. | `prepared_views.py` |
-| Retry semantics | `retryable()`: text-region/line-OCR receipts with `not_attempted`/`error` passes or recognizer errors are retried; faces stopped by timeout are retried; deterministic limits (tile/region/candidate caps, face view budget) are final and reused. | `runner.py` |
+| Prepared views keyed by binding | Prepared-view binding uses the same identity/content binding. The receipt stores the verified source locator/stamp. Stored content hashes are checked before first preparation and after a binding change, including legacy prepared receipts without a verified binding. Unchanged bindings reuse the verification. | `prepared_views.py` |
+| Retry semantics | Text-region/line-OCR coverage records requested/completed recognition variants and a stop reason. Deadline omissions and errors are retried, including older receipts inferred from missing variants within the recognition limit. Faces stopped by timeout are retried; deterministic limits (tile/region/candidate caps, face view budget) remain reusable. | `runner.py`, `extractors/text_regions.py`, `extractors/line_ocr.py` |
 | Traineddata binding | OCR and text-region recipes record the SHA-256 of each language's `.traineddata`, resolved as Tesseract resolves it (`TESSDATA_PREFIX` included); names and hashes only, so moving identical files changes nothing. | `runner.py`, `extractors/text_regions.py` |
 | Face budget | Orientation is searched on the whole-image view; tiles run upright plus the orientation in which the overview found faces. 8000×6000 now needs 92 views (was 356, always partial); 10000×7000 needs 121. Coverage records `stopped: budget | timeout`. Recipe version 2. | `extractors/faces.py` |
 | 16-bit MinIsWhite | Inverted when TIFF tag 262 is 0. | `imaging.py` |
@@ -50,8 +50,11 @@ Render policy v3, traineddata binding and face recipe v2 change every recipe. Al
 existing pilot receipts are therefore recomputed once on their next run. They stay
 readable as evidence (their keys still validate). This is deliberate: it bundles
 every invalidating change before the long run instead of after it. From here on, a
-dependency or policy change invalidates only what it changes; moves, touches and
-metadata embedding no longer do.
+dependency or policy change invalidates only what it changes. Byte-identical moves
+and touches preserve keys when identity and a stored hash remain stable; reuse
+verifies that hash at the new binding. Metadata embedding changes the whole-file
+SHA-256 even when pixels are unchanged, so it still invalidates affected keys.
+An obsolete hash must be rejected, not used to reuse a pre-edit render.
 
 ### Tests
 
@@ -60,10 +63,15 @@ Updated: `test_archive_research` (key binding, v1 lookup), `test_face_regions`
 `test_image_depth` (MinIsWhite, range note, `L` storage),
 `test_positioned_extraction` (move + touch rebinding without render or
 extraction, v1 receipt refiling, stale stored hash refused, retry semantics).
-All repository test modules pass here except environment-only failures that also
-fail on the base commit: `vips` missing, `torch` missing, the installed-package
-worker test. The Django web suite needs project/machine TOMLs and was not run;
-`web/extraction.py` changed only in its key check.
+Workstation validation after the follow-up fixes: **149 core tests and 67 Django
+tests passed** using the source checkout with the existing processing/web venvs;
+Django used isolated synthetic project/machine configuration. Five added regression
+tests failed against `40422a2` before the fixes. They cover stale hashes across
+extractors, first preparation, move/touch and legacy prepared-receipt verification,
+and deadlines after detection or between successful variants, enhancements and
+regions. Completed and region-capped results remain reusable; older incomplete
+receipts are retried. No archive-wide scan or live runtime installation was used
+for this validation.
 
 ## 3. Still open before an archive-wide master scan
 

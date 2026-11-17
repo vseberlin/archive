@@ -24,6 +24,7 @@ def prepared_view(roots, page, directory, root, *, dpi, clockwise, region=None):
     name = 'prepared-'+key
     image = storage.target(root, name+'.png')
     receipt = storage.target(root, name+'.json')
+    source = asdict(page.source)
     roots.source(page.source)
     if receipt.exists():
         value = json.loads(receipt.read_text())
@@ -34,14 +35,21 @@ def prepared_view(roots, page, directory, root, *, dpi, clockwise, region=None):
         transform = value['transform']
         transform['to_source'] = tuple(transform['to_source'])
         transform['steps'] = tuple(transform['steps'])
-        roots.source(page.source)
+        # A content-only key does not prove that the current file has that
+        # content. Legacy receipts also need this first verified binding.
+        rebound = value.get('verified_source') != source
+        roots.source(page.source, verify_hash=bool(page.source.sha256) and rebound)
+        if rebound:
+            storage.write_json(root, receipt.name, {**value, 'verified_source':source})
         return image, Transform(**transform), value['rotation']
+    roots.source(page.source, verify_hash=bool(page.source.sha256))
     rendered, transform, rotation = render(roots, page, directory, dpi=dpi,
                                            clockwise=clockwise, region=region)
     data = rendered.read_bytes()
     roots.source(page.source)
     storage.write(root, image.name, data)
     storage.write_json(root, receipt.name, {'binding':binding, 'transform':asdict(transform),
+        'verified_source':source,
         'rotation':rotation, 'stamp':storage.stamp(image),
         'sha256':hashlib.sha256(data).hexdigest(), 'metadata_adopted':False})
     return image, transform, rotation

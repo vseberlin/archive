@@ -132,6 +132,54 @@ class PositionedTests(unittest.TestCase):
         self.assertEqual(later['state'],'error')
         self.assertTrue((self.output/(first['key']+'.json')).exists())
 
+    def test_new_extractor_rejects_prepared_image_after_stale_hash_rebind(self):
+        page=self.pdf()
+        extract_one(self.roots,'artifacts',{'page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}})
+        prepared=next(self.output.glob('prepared-*.json'));before=prepared.read_bytes()
+        path=self.input/page.source.path
+        path.write_bytes(pdf_bytes('OTHER TOKEN',1,'VII','GAMMA',rotation=0))
+        stale=replace(page.source,size_bytes=path.stat().st_size,mtime_ns=path.stat().st_mtime_ns)
+        with patch('archive_research.extractors.ocr.extract',side_effect=AssertionError('stale render reached OCR')) as recognize:
+            result=extract_one(self.roots,'artifacts',{'page':asdict(replace(page,source=stale)),
+                              'extractor':'ocr','settings':{'dpi':100}})
+        self.assertEqual(result['state'],'error')
+        recognize.assert_not_called()
+        self.assertEqual(prepared.read_bytes(),before)
+
+    def test_prepared_image_verifies_first_binding_rebind_and_legacy_receipt_once(self):
+        from archive_research.prepared_views import prepared_view
+        import os
+        page=self.pdf()
+        def prepare(current):
+            return prepared_view(self.roots,current,self.output,self.output,dpi=100,clockwise=0)
+        def verified_calls(spy):
+            return sum(call.kwargs.get('verify_hash',False) for call in spy.call_args_list)
+        with patch.object(self.roots,'source',wraps=self.roots.source) as source:
+            first=prepare(page)
+            self.assertEqual(verified_calls(source),1)
+        receipt=next(self.output.glob('prepared-*.json'))
+        self.assertEqual(json.loads(receipt.read_text())['verified_source'],asdict(page.source))
+        path=self.input/page.source.path
+        moved=self.input/'moved.pdf';path.rename(moved);os.utime(moved,ns=(1,2_000_000_000))
+        moved_page=replace(page,source=self.bind(moved))
+        with patch('archive_research.prepared_views.render',side_effect=AssertionError('must reuse')), \
+             patch.object(self.roots,'source',wraps=self.roots.source) as source:
+            second=prepare(moved_page);prepare(moved_page)
+            self.assertEqual(first,second)
+            self.assertEqual(verified_calls(source),1)
+            value=json.loads(receipt.read_text());value.pop('verified_source')
+            receipt.write_text(json.dumps(value))
+            source.reset_mock()
+            prepare(moved_page);prepare(moved_page)
+            self.assertEqual(verified_calls(source),1)
+
+    def test_first_preparation_rejects_incorrect_content_hash(self):
+        page=self.pdf();page=replace(page,source=replace(page.source,sha256='0'*64))
+        with patch('archive_research.prepared_views.render',side_effect=AssertionError('unverified source rendered')) as render:
+            result=extract_one(self.roots,'artifacts',{'page':asdict(page),'extractor':'pdf-text'})
+        self.assertEqual(result['state'],'error');render.assert_not_called()
+        self.assertFalse(list(self.output.glob('prepared-*')))
+
     def test_unfinished_work_is_retryable_but_deterministic_limits_are_reused(self):
         from archive_research.runner import retryable
         faces=Recipe.create('faces','2');regions=Recipe.create('text-regions','2')

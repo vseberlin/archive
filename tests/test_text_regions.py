@@ -85,6 +85,39 @@ class ExtractionTests(unittest.TestCase):
         self.assertTrue(any(r['status']=='not_attempted' for r in result['regions']))
         self.assertTrue(crops)
         self.assertTrue(result['coverage']['scan_complete'])
+        from archive_research.runner import retryable
+        self.assertFalse(retryable({'discovery':result},recipe_for({'settings':self.settings})))
+
+    def test_deadline_omissions_retry_but_region_limits_do_not(self):
+        from archive_research.runner import retryable
+        # Expire either after detection, after one enhancement, or after a
+        # successful region. None of these cases records a recognizer error.
+        for boundary in ('detection','enhancement','region'):
+            with self.subTest(boundary=boundary):
+                self.settings.update(scan_angles=[0],max_regions=2,
+                                     enhancements=['original','levels'] if boundary=='enhancement' else ['original'])
+                clock=[0.0]
+                def detect(image):
+                    if boundary=='detection':clock[0]=10_000.0
+                    return [([[30,30],[140,30],[140,50],[30,50]],.9),
+                            ([[230,90],[340,90],[340,110],[230,110]],.8)],False
+                def recognize(*args,**kwargs):
+                    clock[0]=10_000.0
+                    return b'<alto/>',[]
+                self.detector.detect=detect
+                with patch('archive_research.extractors.text_regions.tile_windows',return_value=[]), \
+                     patch('archive_research.extractors.text_regions.time.monotonic',side_effect=lambda:clock[0]), \
+                     patch('archive_research.extractors.ocr.extract',side_effect=recognize):
+                    _,_,result,_=self.run_extract()
+                self.assertTrue(result['coverage']['scan_complete'])
+                self.assertTrue(retryable({'discovery':result},recipe_for({'settings':self.settings})))
+                self.assertEqual(result['coverage']['recognition_stopped'],'timeout')
+                self.assertFalse(result['coverage']['recognition_complete'])
+                # Existing receipts lack the new coverage fields; retain retry
+                # correctness without invalidating completed or capped work.
+                for field in ('recognition_stopped','recognition_complete','requested_variants','completed_variants'):
+                    result['coverage'].pop(field)
+                self.assertTrue(retryable({'discovery':result},recipe_for({'settings':self.settings})))
 
     def test_failed_detector_pass_is_explicit_incomplete_coverage(self):
         self.detector.detect=lambda image: (_ for _ in ()).throw(RuntimeError('synthetic detector failure'))

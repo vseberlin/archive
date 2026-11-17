@@ -12,7 +12,7 @@ import time
 from ..imaging import RENDER_POLICY
 from ..contracts import Artifact, Recipe, Region, Transform, encoded, require, text
 from ..geometry import inverse_rotation
-from .text_regions import ENHANCEMENTS, bounds, compose, enhance_crop, rectified_crop, recognition_status
+from .text_regions import ENHANCEMENTS, bounds, compose, enhance_crop, rectified_crop, recognition_status, recognition_coverage
 
 
 def settings_for(task):
@@ -143,7 +143,7 @@ def extract(image_path, page, transform, roots, settings, temporary, key):
     coverage={'mode':'manual_lines','status':'selected_lines_only','scan_complete':False,
               'requested_passes':0,'completed_passes':0,'omitted_tiles':0,'recognition_limit':len(regions),
               'expected_variants_per_region':expected,'selected_regions':len(regions),
-              'recognition_complete':all(len(r['variants'])==expected and all(v['status']=='complete' for v in r['variants']) for r in regions)}
+              **recognition_coverage(regions,expected,len(regions))}
     details={'format':'archive-text-regions-1','metadata_adopted':False,'coverage':coverage,'passes':[],
              'regions':regions,'elapsed_seconds':time.monotonic()-start,
              'limitations':['Explicit manual line regions only; no automatic whole-image coverage.',

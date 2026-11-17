@@ -121,6 +121,22 @@ def recognition_status(variants, expected):
     return ('text_extracted' if readings else 'unreadable'),readings
 
 
+def recognition_coverage(regions, expected, limit):
+    """Count scheduled readings separately from deterministic region omissions.
+
+    Within the region limit, only deadline checks skip a variant; recognizer
+    failures produce an explicit error variant. This also describes old receipts.
+    """
+    selected = regions[:limit]
+    requested = len(selected) * expected
+    attempted = sum(len(r['variants']) for r in selected)
+    completed = sum(v['status'] == 'complete' for r in selected for v in r['variants'])
+    stopped = ('timeout' if attempted < requested else 'error' if completed < requested
+               else 'budget' if len(regions) > limit else None)
+    return {'requested_variants':requested, 'completed_variants':completed,
+            'recognition_complete':completed == requested, 'recognition_stopped':stopped}
+
+
 def compose(outer, inner):
     a,b,c,d,e,f=outer; g,h,i,j,k,l=inner
     return (a*g+b*j,a*h+b*k,a*i+b*l+c,d*g+e*j,d*h+e*k,d*i+e*l+f)
@@ -304,6 +320,7 @@ def extract(image_path, page, transform, roots, settings, temporary, key, detect
               'states':{state:sum(r['status']==state for r in regions) for state in
                         ('text_extracted','conflicting_readings','unreadable','recognition_failed',
                          'not_attempted','partial_recognition')}}
+    coverage.update(recognition_coverage(regions,expected,settings['max_regions']))
     coverage['scan_complete']=complete==coverage['requested_passes'] and not any(p.get('candidate_limit_reached') for p in passes)
     coverage['status']=('incomplete_scan' if not coverage['scan_complete'] else
                         'regions_detected' if regions else 'no_regions_detected')

@@ -77,5 +77,28 @@ class LineTests(unittest.TestCase):
         third=extract_one(self.roots,'artifacts',self.task);self.assertEqual(third['state'],'error')
         self.assertEqual(before,p.read_bytes())
 
+    def test_deadline_between_successful_variants_is_retried(self):
+        import json
+        clock=[0.0]
+        def recognize(*args,**kwargs):
+            clock[0]=10_000.0
+            return b'<alto/>',[]
+        with patch('cv2.dnn_TextRecognitionModel',self.fake), \
+             patch('archive_research.extractors.ocr.extract',side_effect=recognize), \
+             patch('archive_research.extractors.line_ocr.time.monotonic',side_effect=lambda:clock[0]):
+            first=extract_one(self.roots,'artifacts',self.task)
+        path=self.output/(first['key']+'.json');row=json.loads(path.read_text())
+        self.assertEqual(len(row['discovery']['regions'][0]['variants']),1)
+        self.assertTrue(all(v['status']=='complete' for v in row['discovery']['regions'][0]['variants']))
+        with patch('cv2.dnn_TextRecognitionModel',self.fake), \
+             patch('archive_research.extractors.ocr.extract',return_value=(b'<alto/>',[])):
+            second=extract_one(self.roots,'artifacts',self.task)
+        self.assertFalse(second['reused'])
+        self.assertEqual(row['discovery']['coverage']['recognition_stopped'],'timeout')
+        self.assertEqual(row['discovery']['coverage']['requested_variants'],4)
+        self.assertEqual(row['discovery']['coverage']['completed_variants'],1)
+        self.assertTrue(json.loads(path.read_text())['discovery']['coverage']['recognition_complete'])
+        self.assertTrue(extract_one(self.roots,'artifacts',self.task)['reused'])
+
 
 if __name__=='__main__':unittest.main()
