@@ -80,15 +80,25 @@ class PositionedTests(unittest.TestCase):
         page=self.pdf()
         task={'id':'native','page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}}
         first=extract_one(self.roots,'artifacts',task)
-        before=(self.output/(first['key']+'.png')).stat().st_mtime_ns
+        before=(self.output/json.loads((self.output/(first['key']+'.json')).read_text())['result']['artifacts'][0]['path']).stat().st_mtime_ns
         with patch('archive_research.runner.render',side_effect=AssertionError('must reuse')):
             second=extract_one(self.roots,'artifacts',task)
         self.assertTrue(second['reused'])
-        self.assertEqual(before,(self.output/(first['key']+'.png')).stat().st_mtime_ns)
+        self.assertEqual(before,(self.output/json.loads((self.output/(first['key']+'.json')).read_text())['result']['artifacts'][0]['path']).stat().st_mtime_ns)
         changed={**task,'settings':{'dpi':110}}
         third=extract_one(self.roots,'artifacts',changed)
         self.assertNotEqual(first['key'],third['key'])
         self.assertTrue((self.output/(first['key']+'.json')).exists())
+
+    def test_shared_render_survives_extractor_change_without_decoding_source(self):
+        page=self.pdf()
+        first=extract_one(self.roots,'artifacts',{'page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}})
+        with patch('archive_research.prepared_views.render',side_effect=AssertionError('source decoded twice')):
+            second=extract_one(self.roots,'artifacts',{'page':asdict(page),'extractor':'ocr','settings':{'dpi':100}})
+        self.assertNotEqual(first['key'],second['key'])
+        rows=[json.loads((self.output/(r['key']+'.json')).read_text()) for r in (first,second)]
+        self.assertEqual(rows[0]['result']['artifacts'][0],rows[1]['result']['artifacts'][0])
+        self.assertEqual(second['state'],'complete')
 
     def test_source_change_withholds_cached_result_and_retains_receipt(self):
         page=self.pdf();task={'id':'native','page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}}
@@ -119,7 +129,7 @@ class PositionedTests(unittest.TestCase):
     def test_corrupt_cached_output_withheld(self):
         page=self.pdf();task={'id':'native','page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}}
         first=extract_one(self.roots,'artifacts',task)
-        (self.output/(first['key']+'.png')).write_bytes(b'bad')
+        (self.output/json.loads((self.output/(first['key']+'.json')).read_text())['result']['artifacts'][0]['path']).write_bytes(b'bad')
         self.assertEqual(extract_one(self.roots,'artifacts',task)['state'],'error')
 
     def test_changed_plan_refused_before_task_loading(self):

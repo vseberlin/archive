@@ -95,6 +95,7 @@ def read_evidence(roots, work, item):
             'available': available, 'error': error, 'text': ' '.join(w['text'] for w in words),
             'words': words, 'limitations': list(result.limitations), 'source_group': source_group,
             'layout': receipt.get('feature') if result.recipe.extractor in ('pdf-layout','scan-layout') else None,
+            'faces': receipt.get('feature') if result.recipe.extractor == 'faces' else None,
             'web_context':web_reference,
             'discovery': discovery, 'discovery_sha256': discovery_sha, 'metadata_adopted': False}
 

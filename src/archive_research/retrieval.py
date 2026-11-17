@@ -31,9 +31,8 @@ def build_index(roots, work, keys):
                 require(len(vector)==feature['dimensions']==config['dimensions'] and
                         all(type(v) in (int,float) and math.isfinite(v) for v in vector) and
                         abs(sum(v*v for v in vector)-1)<1e-4,'Invalid normalized feature vector')
-                space={k:config[k] for k in ('encoder','dimensions','preprocessing','dependencies')}
-                space['model_sha256']=config['settings']['model']['sha256']
-                entry.update(vector=vector,space=hashlib.sha256(encoded(space).encode()).hexdigest())
+                from .extractors.visual_features import space_id
+                entry.update(vector=vector,space=space_id(result.recipe))
             entries.append(entry)
         except (OSError,ValueError,KeyError,StopIteration) as error:
             unavailable.append({'key':key,'reason':str(error)})

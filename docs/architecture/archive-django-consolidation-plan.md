@@ -1,6 +1,6 @@
 # Archive research, extraction and workspace consolidation plan
 
-Created: 14 November 2026. Current checkpoint: 16 November 2026.
+Created: 14 November 2026. Current checkpoint: 17 November 2026.
 
 ## Continuity consolidation — 16 November 2026
 
@@ -39,6 +39,19 @@ portability TODO below remains binding: NTFS quirks must not become a permanent
 blocker. Retained environments and old work are not authorized cleanup targets.
 
 ## Current agreed direction and checkpoint
+
+**17 November update:** the active research application is consolidated in the
+installed `archive_research` package with one CLI and shared web/application
+operations. Two selected multimodal assessments completed through the existing
+ChatGPT-authenticated Codex account; they remain unreviewed proposals. The
+[index-readiness audit](../review-archive-index-20261117.md), added by `aa18d6d`,
+was checked against current code and synthetic probes. It now informs the
+[index readiness gate](#index-readiness-gate-before-broader-extraction) below.
+Do not treat completed package consolidation or the bounded pilot as readiness
+for an archive-wide extraction run. The [people/face workstream](#people-and-face-regions--restored-draft-and-pending-work)
+is tracked explicitly, including the recovered historical scripts.
+
+The following paragraphs retain the earlier bounded implementation history.
 
 The user requested this consolidated plan and a local commit before starting
 new changes, then authorized the stage-1 tools/source/consumer/storage audit on
@@ -345,6 +358,70 @@ points, not scheduled installations or model runs. Handwriting, historical type,
 small stamps and marginalia need representative evaluation; a generic OCR pass
 cannot be assumed sufficient for all archive material.
 
+## Index readiness gate before broader extraction
+
+Added 17 November after reviewing `aa18d6d`; this is part of the existing plan,
+not another roadmap or metadata authority. Twenty-seven focused tests passed.
+Synthetic probes reproduced key changes after timestamp/path/root changes,
+reuse of unfinished partial results, whole-index refusal after one source went
+offline, and missed German hyphenation/spelling/alias queries. Catalogue metadata
+is absent from the current shared retrieval projection. These findings change
+what must precede a materially larger run.
+
+1. **Stable identity and reusable cache bindings.** Keep existing unit/object/
+   representation/member/page identities. Map older research IDs to these; do
+   not mint replacement archive identities. Distinguish existing opaque
+   path-shaped IDs from generating a new identity from today's locator. Missing
+   authoritative representation mappings stay explicit. Separate exact file
+   provenance, change detection and extraction-cache reuse. A file content hash
+   alone does not preserve reuse across metadata-only TIFF rewrites: a synthetic
+   probe produced identical decoded pixels and different file hashes. Any
+   pixel/render-based reuse must include geometry, orientation, colour handling
+   and recipe inputs, with verified rebinding to the current source; never simply
+   remove source checks or rewrite old receipts. Preserve prior receipts while
+   qualifying touch, root remap, move and metadata-change behavior.
+2. **Completion and reproducibility.** Separate completed-but-uncertain/no-text
+   results from interrupted or unfinished retryable work. Bind actual OCR
+   traineddata files and effective tessdata configuration, not only language
+   names and executable version. Verify selective retries and invalidation.
+3. **Reusable preparation and bounded execution.** Qualify shared prepared views
+   for compatible page/region/render recipes instead of storing another full
+   image for every extractor. Keep original-resolution detail access. Measure
+   time, memory and disk before choosing worker chunk sizes or model reuse;
+   retain per-item progress, interruption/resume and a whole-task deadline.
+   A failed item must not lose the rest of the batch or completed receipts.
+4. **Resilient catalogue and text retrieval.** Add read-only catalogue descriptions,
+   identifiers, places, dates, people and documented relations alongside OCR and
+   native text, preserving field provenance and source lineage. Search available
+   entries when another source is stale/offline; report per-entry availability
+   and coverage. Opening, citing or submitting selected evidence still verifies
+   its exact current binding. Remove full-corpus artifact rehashing from each
+   query through a qualified projection/refresh boundary. Preserve original OCR;
+   add searchable line-aware dehyphenation, spelling variants and documented
+   aliases. Rank passages/captions/regions, retaining page context. SQLite FTS5
+   and one vector matrix per compatible model space are candidates to measure;
+   no new database, model, dependency or directory is created by this plan edit.
+5. **Retrieval-to-packet bridge and input budget.** Generate an editable proposed
+   evidence selection from ranked local hits with source regions, lineage,
+   alternatives and omitted/unavailable material. Keep proposals unadopted.
+   Bound input text and images, prioritise selected passages, mark truncation
+   explicitly and report an estimate appropriate to the selected model. An
+   output-token limit is not an input budget. Retain exact-request validation.
+6. **Mappings, quality and measured expansion.** Qualify member mappings and
+   expected-versus-processed coverage for every selected unit. Audit catalogue
+   labels before treating them as benchmark answers. Separate duplicate-record
+   rediscovery from new-view retrieval; hold out related series/objects. Select
+   benchmark size from actual reviewed holdings, measure accuracy and resource
+   costs, then freeze the tested preparation/OCR recipes and expand per unit.
+   Start with a resumable chunk, not all units/all extractors at once.
+
+Do not adopt the external review's CPU throughput or rebuild-time estimates as
+measurements. Benchmark existing tools first; additional models follow specific
+measured gaps. Retained pHash, reconciliation and visual research tools may have
+different purposes: mapping their evidence does not automatically retire them.
+Keep the independent curator evaluation and portability/storage qualification
+items open. Tube OCR remains paused.
+
 ## Global mappings, complete coverage and positioned OCR
 
 Build the global view from unit catalogues and representation manifests:
@@ -450,17 +527,26 @@ explicitly established; portable software is distinct from redistributable data.
   external evidence, compare actual source images, and prepare cited competing
   hypotheses for a bounded OpenAI assessment. Follow the
   [implementation and acceptance scope below](#web-assisted-multimodal-hypothesis-assessment).
-  Local implementation is delivered; real-material API submission still requires explicit
-  permission for the selected material. Preserve independent curator answers
-  before exposing model assessments when evaluating accuracy.
-  Profiles, source-bound regions, crop OCR, embedded/scanned figures, tentative
-  caption bands and readable multimodal packets are implemented separately.
-  A retained institutional web reference has actual-image comparison and lineage;
-  local museum-digital duplicates are not counted as independent evidence.
-  Local-only and web-enriched requests are prepared, with bounded transport,
-  exact-request submission checks, citation validation and unreviewed presentation.
-  Live API/account qualification, permitted external material, independent curator
-  evaluation and further detector accuracy remain open.
+  Local implementation and two explicitly authorized selected-material assessments
+  are delivered: local-only and web-enriched, through ChatGPT-authenticated Codex.
+  No Responses API call was made. Profiles, source-bound regions, crop OCR,
+  embedded/scanned figures, caption bands, actual external-image comparison,
+  lineage, exact-request checks, citation validation and unreviewed workbench
+  presentation are implemented. Independent curator accuracy evaluation remains
+  open, so this acceptance item stays unchecked. Capture independent answers
+  before model disclosure; further requests retain their exact-material and
+  account/transport requirements.
+- [ ] **4b — Make shared indexes reusable before wider extraction.** Follow the
+  ordered [index readiness gate](#index-readiness-gate-before-broader-extraction):
+  cache/completion semantics, reusable preparation, resilient catalogue/text
+  retrieval, proposed packet selection, then measured per-unit expansion.
+  Preserve existing IDs, readable authorities and strict checks on selected
+  evidence. This is a plan update, not delivery of the proposed indexing changes.
+- [ ] **4c — Complete the people/face-region extraction workstream.** The historical
+  `face_index.py` and its sibling `visual_knn.py` have been restored together as
+  retained drafts. Detection/crop mapping, document-caption associations and
+  package integration remain pending; see the
+  [workstream and provenance](#people-and-face-regions--restored-draft-and-pending-work).
 - [ ] **5 — Expand coverage with measured limits.** Process the agreed archive
   scope resumably, report complete/partial/error coverage and reuse existing valid
   work. Keep discovery-index consumers compatible. Add layout, crop, embedding
@@ -520,8 +606,8 @@ agent framework is not needed for the first demonstration.
 ### Subject profiles and implementation order
 
 On 17 November the user authorized adding these profiles and proceeding with
-implementation. Reuse the existing `Archive-tools/research_routes.py` subject
-routing as their owner; a source image may have several profiles and each region
+implementation. `archive_research.profiles` now owns the shared subject
+routing (`Archive-tools/research_routes.py` forwards to it); a source image may have several profiles and each region
 retains its original page/context. Profile selection is research guidance, not
 classification or a new archival object/identity.
 
@@ -538,6 +624,62 @@ linked by proximity remain tentative; naming a depicted person requires explicit
 documentary support and curator review. Retain OCR variants separately and never
 silently normalize ambiguous tube codes. The first slice uses selected/manual
 regions; automatic person/face or layout detection is a later measured adapter.
+
+### People and face regions — restored draft and pending work
+
+The people workstream remains in scope. Source archaeology on 17 November found
+`face_index.py` in commit `9010b546705aea0aff47a1c2a5f9d154008b93bd`, introduced
+4 November on the former `claude/visual-similarity-knn` branch. It was absent from
+the current `main` lineage, not removed by the Python package consolidation.
+Both files were recovered together from retained branch tip
+`f4dd22a78d33e87d13ca41236894460a9f9fba9d`; their blobs are identical to that
+introducing commit:
+
+| Restored source | Exact Git blob | Status |
+| --- | --- | --- |
+| [face_index.py](../../work-area/visual-similarity/face_index.py) | `232ac46dcd1ebb2af3e724c1abcefffce90c3089` | Retained standalone draft; imports sibling `visual_knn` |
+| [visual_knn.py](../../work-area/visual-similarity/visual_knn.py) | `f4a37ad5756870627ef04ca9dd11f7fb35668965` | Retained catalogue-image visual retrieval draft |
+
+The recoverable Git objects remain in the private pre-reset Git directory
+`/home/vladimir/archive-local/retained/archive-source-git-before-reset-20261116T125433Z`.
+The table records the original recovered blobs. Subsequent integration moves visual
+retrieval/voting into `archive_research.reference` and `reference_catalogue`; the
+old visual script forwards there. The retained face draft now uses shared safe
+16-bit conversion, but its biometric matching and clustering are not integrated
+or run. The installed `faces` adapter performs detection only, with tiled native
+views, orthogonal rotations, source coordinates, a hash-bound YuNet model and
+explicit coverage. Caption assignment and detection accuracy still need review.
+
+Shared preparation now maps unsigned 16-bit grayscale without clipping and
+refuses unsupported high-depth modes. Preparation versions invalidate new-run
+cache reuse; existing old receipts require an affected-source audit. Prepared
+views are reused across extractors. First rendering still decodes a full image;
+streaming/tiled source decoding remains open. Visual embeddings now default to
+letterboxing and are separated by weights hash, dependency versions and framing.
+New archive reference comparisons import shared receipts, not paths/master scans.
+
+A local 11,170-record museum-digital capture has 7,588 preview URLs and 3,582
+records without one. The preview-only experiment is authorized; a 72-image pilot
+passed. Full indexing and held-out catalogue-agreement evaluation must finish
+before accuracy claims. Both evaluation modes exclude exact byte duplicates;
+series-hidden also excludes cosine ≥ 0.95. These records are archive republications,
+not independent evidence. Model files, cache, readable exports and run receipts
+remain private outside source. No whole-master scan or external image submission.
+
+- [x] Locate and restore both matching source files; preserve commit/blob provenance.
+- [ ] Qualify person/face detection on selected photographs and PDF page images,
+  retaining original-source coordinates, context, group positions and coverage.
+- [ ] Connect regions to explicit captions, names and documentary evidence;
+  proximity and unordered name lists remain tentative. Face detection supplies
+  no name; the current application does not perform face-based identification.
+- [ ] Measure crop/source alignment, missed/false detections, caption assignment
+  and resource costs on a reviewed selection. Keep documentary identifications
+  and machine observations separate.
+- [x] Integrate detection-only extraction into `archive_research.extractors` and the
+  shared evidence/coverage contracts. Retained drafts must not become a second
+  application, database authority or disconnected research pipeline.
+
+### Existing visual and OCR adapter choices
 
 Reuse the existing OpenCLIP `ViT-B-32` / `laion2b_s34b_b79k` and SIFT + RANSAC
 implementations. Test PaddleOCR only against a representative Tesseract baseline;

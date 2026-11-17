@@ -10,6 +10,7 @@ import importlib.metadata
 import math
 import time
 
+from ..imaging import RENDER_POLICY
 from ..contracts import Artifact, Recipe, Region, Transform, encoded, require
 from ..geometry import inverse_rotation, source_region
 
@@ -65,7 +66,7 @@ def settings_for(task):
 def recipe_for(task):
     from ..runner import tool_version
     settings = settings_for(task)
-    return Recipe.create('text-regions', '2', settings=settings,
+    return Recipe.create('text-regions', '2', settings=settings, preparation=RENDER_POLICY,
                          enhancement_recipes={name: ENHANCEMENTS[name] for name in settings['enhancements']},
                          dependencies={name: importlib.metadata.version(name) for name in
                                        ('opencv-python-headless', 'numpy', 'Pillow')},

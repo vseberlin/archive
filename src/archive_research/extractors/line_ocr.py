@@ -9,6 +9,7 @@ import importlib.metadata
 import math
 import time
 
+from ..imaging import RENDER_POLICY
 from ..contracts import Artifact, Recipe, Region, Transform, encoded, require, text
 from ..geometry import inverse_rotation
 from .text_regions import ENHANCEMENTS, bounds, compose, enhance_crop, rectified_crop, recognition_status
@@ -55,7 +56,7 @@ def settings_for(task):
 def recipe_for(task):
     from ..runner import tool_version
     settings = settings_for(task)
-    return Recipe.create('line-ocr', '1', settings=settings,
+    return Recipe.create('line-ocr', '1', settings=settings, preparation=RENDER_POLICY,
                          enhancement_recipes={n: ENHANCEMENTS[n] for n in settings['enhancements']},
                          dependencies={n: importlib.metadata.version(n) for n in ('opencv-python-headless', 'numpy', 'Pillow')},
                          tesseract=tool_version(['tesseract', '--version']),

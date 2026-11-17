@@ -28,6 +28,15 @@ Use this file to route harnesses. Do not infer current policy from
 old downloaded ADRs, local memories, historical handoffs, or completed run
 artifacts.
 
+## Restored historical visual drafts — 17 November 2026
+
+[visual_knn.py](../../work-area/visual-similarity/visual_knn.py) now forwards to
+`archive_research.reference`; catalogue parsing/voting is in `reference_catalogue`.
+[face_index.py](../../work-area/visual-similarity/face_index.py) remains a historical
+draft with safe shared image conversion. The installed `extractors/faces.py`
+adapter performs detection only. Recovery provenance and remaining qualification
+are recorded in the consolidation plan.
+
 ## Dependency Direction
 
 `src/archive_research/` owns the active installed research application. Its

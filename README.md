@@ -118,6 +118,7 @@ processing environment and offline installation.
 | `archive-research search` | Query a bound index |
 | `archive-research packet` | Assemble selected evidence and hypotheses |
 | `archive-research run` | Coordinate extraction, indexing, search and packet preparation |
+| `archive-research reference` | Index cached catalogue previews, evaluate agreement and import shared visual receipts |
 | `archive-research assess` | Prepare, validate or explicitly submit an assessment |
 | `archive-research web` | Configure, check, test or serve the local workbench |
 

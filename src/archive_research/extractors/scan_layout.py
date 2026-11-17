@@ -9,6 +9,7 @@ import io
 import re
 import xml.etree.ElementTree as ET
 
+from ..imaging import RENDER_POLICY
 from ..contracts import Recipe, Region, encoded, require
 from ..geometry import source_region, processed_region
 from .layout import caption_candidates, union
@@ -28,7 +29,7 @@ def recipe_for(task):
             0 < settings['caption_gap'] <= .25, 'Invalid scan layout bounds')
     require(type(settings['max_figures']) is int and 1 <= settings['max_figures'] <= 64, 'Invalid figure limit')
     require(set(settings['ocr_origin']) == {'key','receipt_sha256'}, 'Invalid OCR origin')
-    return Recipe.create('scan-layout', '2', settings=settings,
+    return Recipe.create('scan-layout', '2', settings=settings, preparation=RENDER_POLICY,
                          dependencies={**{n:importlib.metadata.version(n) for n in
                                        ('opencv-python-headless','numpy','Pillow')},
                                        'pdftoppm':tool_version(['pdftoppm','-v'])},

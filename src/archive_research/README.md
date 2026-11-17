@@ -51,7 +51,7 @@ Add `--plan /approved/trial/plan.json` to run selected extraction tasks first;
 omit it to reuse existing receipts. Add `--model MODEL` to prepare a local model
 request. `run` never submits externally. Its output prefix must be unused, and
 selected sources and receipts are rechecked at every stage. Individual commands
-are `extract`, `index`, `search`, `packet`, `assess` and `web`; each has `--help`.
+are `extract`, `index`, `search`, `packet`, `reference`, `assess` and `web`; each has `--help`.
 `retrieve` retains the earlier combined index/search interface.
 
 Processing commands accept `--roots`, or `--project` and `--machine` to resolve
@@ -60,6 +60,60 @@ Processing commands accept `--roots`, or `--project` and `--machine` to resolve
 `ARCHIVE_RESEARCH_PROJECT` and `ARCHIVE_RESEARCH_MACHINE` select those same files.
 No new registry, metadata authority, database or service is introduced.
 See the [workbench guide](web/README.md) for installed launch and review commands.
+
+## Shared image preparation and reference experiment
+
+Unsigned 16-bit grayscale TIFFs use a recorded linear 0..65535 → 0..255 display
+conversion before RGB conversion. Signed, float and high-depth multichannel input
+is refused pending an explicit decoder/range. Original data is unchanged; this
+is neither contrast stretching nor a master conversion. The preparation policy
+is fingerprinted in new extraction recipes, so old clipped receipts are not reused
+by new extraction runs. Existing selected old receipts remain readable and need
+an explicit audit/re-extraction before trusting affected results.
+
+Matching page/frame, crop, DPI, rotation and decoder versions share a checked
+`prepared-*.png` and JSON binding. Different extractors reuse that view. Pillow
+still decodes the selected source image in memory on its first render; this is
+not a streaming TIFF decoder. PDFs and TIFF frame selection use the shared page
+contract. Letterbox framing is the default for new visual embeddings; old centre
+crop vectors remain in a different model space. Fine details still need crops.
+
+The `faces` extractor accepts a fingerprinted local YuNet ONNX `Source`, uses
+native-resolution overlapping tiles plus an overview, and checks orthogonal
+rotations. It emits source-coordinate regions and explicit view coverage, with
+bounded runtime/views. It does not produce face embeddings, names or clusters.
+Regions can be selected as existing `face` evidence views. Documentary caption
+assignment and held-out detection accuracy remain unqualified. The model comes
+from [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet);
+retain its MIT license with the local model.
+
+`archive-research reference` owns the former visual-kNN experiment:
+
+```sh
+archive-research reference --roots ROOTS.toml --model-source MODEL-SOURCE.json \
+  --work-root EXISTING-WORK-DIRECTORY index-reference --capture CAPTURE --batch 8
+archive-research reference --roots ROOTS.toml --model-source MODEL-SOURCE.json \
+  --work-root EXISTING-WORK-DIRECTORY evaluate
+```
+
+The capture is read locally; only its published previews are downloaded, cached
+and hashed. OpenCLIP loads explicit local safetensors without a remote model
+resolver. Model hash, dependency versions and framing separate embedding spaces.
+SQLite is a resumable projection; `reference-run.json` records coverage and recipe,
+and `reference-records.jsonl` exports vectors and provenance on completion.
+Missing preview URLs and failures are reported separately. Evaluation measures
+catalogue agreement, not independent identification accuracy. Both modes hide
+identical preview bytes; `series_hidden` also hides inventory neighbours and
+cosine similarity ≥ 0.95. That threshold is a conservative leakage control,
+not proof of a duplicate. Museum-digital republications are not independent
+archive evidence. Person-name voting is not exposed.
+
+For new archive imagery, `reference ... index-new --selection KEYS.json` imports
+verified shared visual receipts in the matching model space; it never scans
+masters. `propose` retains receipt provenance and unadopted suggestions. Reference
+proposals are not automatically added to a curator packet. The retained
+`face_index.py` is a historical draft, not an application entry point; its
+identity matching/evaluation commands have not been integrated or run.
 
 ## Explicit roots
 

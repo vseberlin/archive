@@ -10,6 +10,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 
+from ..imaging import RENDER_POLICY
 from ..contracts import Recipe, Region, encoded, require
 from ..geometry import inverse_rotation, source_region, processed_region
 from ..preparation import pdf_info
@@ -26,7 +27,7 @@ def recipe_for(task):
     require(type(settings['max_figures']) is int and 1 <= settings['max_figures'] <= 64, 'Invalid figure limit')
     require(0 < settings['min_area'] < settings['scan_area'] <= 1 and 0 < settings['caption_gap'] <= .25,
             'Invalid layout bounds')
-    return Recipe.create('pdf-layout', '2', settings=settings,
+    return Recipe.create('pdf-layout', '2', settings=settings, preparation=RENDER_POLICY,
                          dependencies={**{n:tool_version([n,'-v']) for n in ('pdftohtml','pdftotext','pdftoppm')},
                                        'Pillow':importlib.metadata.version('Pillow')},
                          output='raster-placements-and-caption-leads')

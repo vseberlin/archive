@@ -11,13 +11,14 @@ import tempfile
 import time
 from xml.etree.ElementTree import ParseError
 
+from .imaging import RENDER_POLICY
 from .contracts import Artifact, Page, Recipe, Region, Result, Source, require
-from .preparation import render
+from .prepared_views import prepared_view as render
 from .sources import Roots
 from . import storage
 
 # Explicit adapters keep feature implementations out of the page runner.
-FEATURE_ADAPTERS = {'visual': 'extractors.visual_features', 'pdf-layout': 'extractors.layout', 'scan-layout': 'extractors.scan_layout'}
+FEATURE_ADAPTERS = {'visual': 'extractors.visual_features', 'pdf-layout': 'extractors.layout', 'scan-layout': 'extractors.scan_layout', 'faces': 'extractors.faces'}
 
 
 def page_from_record(value):
@@ -61,7 +62,7 @@ def recipe_for(task):
         allowed.add('caption_origin')
     require(set(settings) == allowed, 'Unknown extractor setting')
     require(type(settings['timeout']) is int and 1 <= settings['timeout'] <= 600, 'Invalid bounded timeout')
-    return Recipe.create(extractor, '2' if set(settings)&{'thresholding_method','caption_origin'} else '1', settings=settings, dependencies=dependencies,
+    return Recipe.create(extractor, '2' if set(settings)&{'thresholding_method','caption_origin'} else '1', settings=settings, preparation=RENDER_POLICY, dependencies=dependencies,
                          coverage={'member': task['page']['member'], 'kind': task['page']['kind'],
                                    'index': task['page']['index']}, output='bbox-xhtml' if extractor == 'pdf-text' else 'alto')
 
@@ -76,6 +77,8 @@ def cached(roots, work, key, page, recipe, region=None):
     require(result.page == page and result.recipe == recipe and result.region == region,
             'Cached result binding differs')
     if result.status not in ('complete', 'partial'):
+        return None
+    if recipe.extractor == 'faces' and not value.get('feature',{}).get('coverage',{}).get('scan_complete'):
         return None
     roots.source(page.source)
     for artifact in result.artifacts:
@@ -96,7 +99,7 @@ def extract_one(roots, work, task):
     with storage.lock(root):
         try:
             roots.source(page.source)
-            if task['extractor'] in ('visual', 'scan-layout'):
+            if task['extractor'] in ('visual', 'scan-layout', 'faces'):
                 adapter = importlib.import_module('.'+FEATURE_ADAPTERS[task['extractor']], __package__)
                 adapter.validate_inputs(roots, work, task, recipe)
             if task['extractor']=='ocr' and 'caption_origin' in task.get('settings',{}):
@@ -116,13 +119,18 @@ def extract_one(roots, work, task):
             settings = recipe.record()['parameters']['settings']
             discovery, extra_artifacts, feature = None, [], None
             with tempfile.TemporaryDirectory(prefix='.page-', dir=root) as temporary:
-                image, transform, rotation = render(roots, page, Path(temporary), dpi=settings['dpi'],
+                image, transform, rotation = render(roots, page, Path(temporary), root, dpi=settings['dpi'],
                                                      clockwise=settings['clockwise'], region=region)
                 if task['extractor'] == 'visual':
                     from .extractors.visual_features import extract
                     raw, feature = extract(image, roots, recipe)
                     words = []; suffix, kind = '.visual.json', 'normalized-visual-embedding'
                     note = 'Local visual features for retrieval; no identification or OCR claim.'
+                elif task['extractor'] == 'faces':
+                    from .extractors.faces import extract
+                    raw, feature = extract(image,page,transform,roots,recipe)
+                    words = []; suffix, kind = '.faces.json', 'face-region-detections'
+                    note = 'Face regions only; identities are not inferred; detection coverage is not recall.'
                 elif task['extractor'] == 'scan-layout':
                     from .extractors.scan_layout import extract
                     raw, words, feature, extra_artifacts = extract(image,page,transform,roots,settings,Path(temporary),key,work)
@@ -165,15 +173,15 @@ def extract_one(roots, work, task):
                     note = 'Unreviewed machine OCR; confidence is not factual verification.'
                 roots.source(page.source)
                 roots.root(work, 'work')
-                artifacts, stamps = [], {}
-                for name, content, artifact_kind in [(key + '.png', image.read_bytes(), 'processed-page'),
-                                                      (key + suffix, raw, kind), *extra_artifacts]:
+                artifacts = [Artifact(work, image.name, 'processed-page', hashlib.sha256(image.read_bytes()).hexdigest())]
+                stamps = {image.name:storage.stamp(image)}
+                for name, content, artifact_kind in [(key + suffix, raw, kind), *extra_artifacts]:
                     path = storage.write(root, name, content)
                     artifacts.append(Artifact(work, name, artifact_kind, hashlib.sha256(content).hexdigest()))
                     stamps[name] = storage.stamp(path)
             roots.source(page.source)
             limitations = (note, 'Coverage is this explicitly requested page/frame, not the whole object.')
-            if not words and task['extractor'] != 'visual':
+            if not words and task['extractor'] not in ('visual','faces'):
                 limitations += ('No words returned; this does not establish that the page is blank.',)
             if region is not None:
                 limitations += ('Selected region only; retained image is a crop, not the complete page.',)

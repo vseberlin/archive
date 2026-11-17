@@ -4,6 +4,7 @@ import subprocess
 
 from .contracts import Page, Transform, require
 from .geometry import inverse_rotation, processed_region
+from .imaging import display_rgb
 
 
 def pdf_info(path, index):
@@ -54,13 +55,13 @@ def render(roots, page, directory, *, dpi=300, clockwise=0, region=None):
                                  capture_output=True, timeout=180)
         require(process.returncode == 0, 'PDF render failed: ' + process.stderr.decode(errors='replace')[-400:])
         with Image.open(target.with_suffix('.png')) as original:
-            image = original.convert('RGB')
+            image, tonal_step = display_rgb(original)
     else:
         with Image.open(path) as original:
             original.seek(page.index)
             require(original.getexif().get(274, 1) == 1, 'Unverified EXIF orientation')
             require(original.size == (page.width, page.height), 'Source image geometry changed')
-            image = original.convert('RGB')
+            image, tonal_step = display_rgb(original)
     try:
         if clockwise:
             rotated = image.rotate(-clockwise, expand=True)
@@ -68,6 +69,8 @@ def render(roots, page, directory, *, dpi=300, clockwise=0, region=None):
             image = rotated
         transform = inverse_rotation(page.width, page.height, *image.size,
                                      (embedded_rotation + clockwise) % 360)
+        transform = Transform(transform.width, transform.height, transform.to_source,
+                              transform.steps + (tonal_step,))
         if region is not None:
             import math
             shown = processed_region(region, transform, page)
