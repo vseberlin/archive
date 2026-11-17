@@ -1,5 +1,5 @@
 """Bounded page extraction and readable resumable receipts; one manual writer."""
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import hashlib
 import importlib.metadata
 import importlib
@@ -12,7 +12,7 @@ import time
 from xml.etree.ElementTree import ParseError
 
 from .imaging import RENDER_POLICY
-from .contracts import Artifact, Page, Recipe, Region, Result, Source, require
+from .contracts import Artifact, Page, Recipe, Region, Result, Source, page_binding, require
 from .prepared_views import prepared_view as render
 from .sources import Roots
 from . import storage
@@ -31,6 +31,40 @@ def tool_version(command):
     process = subprocess.run(command, capture_output=True, text=True, timeout=10)
     require(process.returncode == 0, f'Processor unavailable: {command[0]}')
     return (process.stdout + process.stderr).splitlines()[0]
+
+
+def tessdata_fingerprints(languages):
+    """Bind the language models Tesseract will load, not only their names.
+
+    The directory is resolved as Tesseract resolves it (TESSDATA_PREFIX included);
+    only names and hashes enter the recipe, so moving identical files changes nothing.
+    """
+    import re
+    process = subprocess.run(['tesseract', '--list-langs'], capture_output=True, text=True, timeout=10)
+    require(process.returncode == 0, 'Tesseract language list unavailable')
+    found = re.search(r'"([^"]+)"', process.stdout + process.stderr)
+    require(found, 'Tesseract tessdata directory not reported')
+    directory = Path(found[1])
+    out = {}
+    for language in languages.split('+'):
+        path = directory / (language + '.traineddata')
+        require(path.is_file(), f'Tesseract language model missing: {language}')
+        with path.open('rb') as handle:
+            out[language] = hashlib.file_digest(handle, 'sha256').hexdigest()
+    return out
+
+
+def retryable(value, recipe):
+    """Unfinished work (deadline, error) is retried; deterministic limits are reused."""
+    if recipe.extractor == 'faces':
+        coverage = value.get('feature', {}).get('coverage', {})
+        return not coverage.get('scan_complete') and coverage.get('stopped') != 'budget'
+    discovery = value.get('discovery')
+    if discovery:
+        if any(p.get('state') in ('not_attempted', 'error') for p in discovery.get('passes', [])):
+            return True
+        return any(v.get('status') == 'error' for r in discovery.get('regions', []) for v in r.get('variants', []))
+    return False
 
 
 def recipe_for(task):
@@ -62,6 +96,8 @@ def recipe_for(task):
         allowed.add('caption_origin')
     require(set(settings) == allowed, 'Unknown extractor setting')
     require(type(settings['timeout']) is int and 1 <= settings['timeout'] <= 600, 'Invalid bounded timeout')
+    if extractor == 'ocr':
+        dependencies['tessdata'] = tessdata_fingerprints(settings['languages'])
     return Recipe.create(extractor, '2' if set(settings)&{'thresholding_method','caption_origin'} else '1', settings=settings, preparation=RENDER_POLICY, dependencies=dependencies,
                          coverage={'member': task['page']['member'], 'kind': task['page']['kind'],
                                    'index': task['page']['index']}, output='bbox-xhtml' if extractor == 'pdf-text' else 'alto')
@@ -74,13 +110,12 @@ def cached(roots, work, key, page, recipe, region=None):
         return None
     value = json.loads(path.read_text())
     result = Result.from_record(value['result'])
-    require(result.page == page and result.recipe == recipe and result.region == region,
+    require(page_binding(result.page) == page_binding(page) and result.recipe == recipe and result.region == region,
             'Cached result binding differs')
-    if result.status not in ('complete', 'partial'):
+    if result.status not in ('complete', 'partial') or retryable(value, recipe):
         return None
-    if recipe.extractor == 'faces' and not value.get('feature',{}).get('coverage',{}).get('scan_complete'):
-        return None
-    roots.source(page.source)
+    # Same identity and content at a new locator/stamp: prove content once by hash.
+    roots.source(page.source, verify_hash=bool(page.source.sha256) and result.page.source != page.source)
     for artifact in result.artifacts:
         file = roots.artifact(artifact)
         require(storage.stamp(file) == value['artifact_stamps'][artifact.path], 'Cached artifact changed')
@@ -112,10 +147,20 @@ def extract_one(roots, work, task):
                 model = Artifact(**recipe.record()['parameters']['settings']['model'])
                 require(hashlib.sha256(roots.artifact(model).read_bytes()).hexdigest() == model.sha256,
                         'Detector model changed')
-            prior = cached(roots, work, key, page, recipe, region)
+            prior, prior_key = cached(roots, work, key, page, recipe, region), key
+            if prior is None:
+                prior_key = recipe.cache_key(page, region, version=1)
+                prior = cached(roots, work, prior_key, page, recipe, region)
             if prior is not None:
+                stored = Result.from_record(prior['result'])
+                rebound = prior_key != key or stored.page != page
+                if rebound:
+                    # No re-extraction: refile under the current key with the current locator.
+                    value = {**prior, 'result': replace(stored, page=page).record(),
+                             'rebound_from': {'key': prior_key, 'page': asdict(stored.page)}}
+                    storage.write_json(root, key + '.json', value)
                 return {'key': key, 'state': prior['result']['status'], 'reused': True,
-                        'word_count': len(prior['words'])}
+                        'rebound': rebound, 'word_count': len(prior['words'])}
             settings = recipe.record()['parameters']['settings']
             discovery, extra_artifacts, feature = None, [], None
             with tempfile.TemporaryDirectory(prefix='.page-', dir=root) as temporary:

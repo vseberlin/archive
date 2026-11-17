@@ -5,7 +5,7 @@ import importlib.metadata
 import json
 
 from . import storage
-from .contracts import Transform, encoded, require
+from .contracts import Transform, encoded, page_binding, require
 from .imaging import RENDER_POLICY
 from .preparation import render
 
@@ -14,7 +14,7 @@ def prepared_view(roots, page, directory, root, *, dpi, clockwise, region=None):
     from .runner import tool_version
     require(type(dpi) is int and 72 <= dpi <= 600, 'DPI outside bounded trial range')
     require(clockwise in (0,90,180,270), 'Unsupported editorial rotation')
-    binding = {'page':asdict(page), 'region':asdict(region) if region else None,
+    binding = {'page':page_binding(page), 'key_version':2, 'region':asdict(region) if region else None,
                'dpi':dpi if page.kind == 'pdf' else None,
                'clockwise':clockwise, 'policy':RENDER_POLICY,
                'Pillow':importlib.metadata.version('Pillow')}

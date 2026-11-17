@@ -53,7 +53,7 @@ def snapshot():
         from archive_research import Region
         expected_region = Region(**task['region']) if task.get('region') is not None else None
         require(result.region == expected_region and
-                result.recipe.cache_key(result.page, result.region) == key, 'Result recipe key differs')
+                result.recipe.key_matches(result.page, result.region, key), 'Result recipe key differs')
         row = {'id': task['id'], 'key': key, 'state': attempt['state'], 'result': result,
                'page': receipt['result']['page'], 'words': receipt['words'], 'receipt': receipt,
                'available': False, 'error': attempt.get('error', ''),

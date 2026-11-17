@@ -64,12 +64,25 @@ See the [workbench guide](web/README.md) for installed launch and review command
 ## Shared image preparation and reference experiment
 
 Unsigned 16-bit grayscale TIFFs use a recorded linear 0..65535 → 0..255 display
-conversion before RGB conversion. Signed, float and high-depth multichannel input
+conversion; 16-bit MinIsWhite files are inverted (Pillow does this only for 8-bit)
+and the observed value range is recorded in the transform step. Greyscale sources
+are stored as 8-bit `L` prepared views; consumers needing RGB convert on read
+(render policy version 3). Signed, float and high-depth multichannel input
 is refused pending an explicit decoder/range. Original data is unchanged; this
 is neither contrast stretching nor a master conversion. The preparation policy
 is fingerprinted in new extraction recipes, so old clipped receipts are not reused
 by new extraction runs. Existing selected old receipts remain readable and need
 an explicit audit/re-extraction before trusting affected results.
+
+Cache keys (version 2) bind unit/object/representation identity, member/page
+geometry and, with a stored SHA-256, content instead of locator: touching, moving,
+copying or relabelling an identical file keeps its receipts. On reuse at a new
+locator or stamp the stored hash is verified once and the receipt is refiled with
+the current page (`rebound_from` keeps the previous binding); nothing is
+re-extracted. Without a stored hash the locator and stamp remain bound. Receipts
+written under version-1 keys are found and refiled. Unfinished work (deadline,
+error passes or recognizer errors) is retried; deterministic limits are reused.
+OCR and text-region recipes bind the SHA-256 of each Tesseract traineddata file.
 
 Matching page/frame, crop, DPI, rotation and decoder versions share a checked
 `prepared-*.png` and JSON binding. Different extractors reuse that view. Pillow
@@ -79,8 +92,10 @@ contract. Letterbox framing is the default for new visual embeddings; old centre
 crop vectors remain in a different model space. Fine details still need crops.
 
 The `faces` extractor accepts a fingerprinted local YuNet ONNX `Source`, uses
-native-resolution overlapping tiles plus an overview, and checks orthogonal
-rotations. It emits source-coordinate regions and explicit view coverage, with
+native-resolution overlapping tiles plus an overview. Orthogonal rotations are
+searched on the whole-image view; tiles run upright (`tile_rotations`) plus the
+orientation in which the overview found faces, so large masters stay within the
+view budget. A budget stop is final and reused; a timeout is retried. It emits source-coordinate regions and explicit view coverage, with
 bounded runtime/views. It does not produce face embeddings, names or clusters.
 Regions can be selected as existing `face` evidence views. Documentary caption
 assignment and held-out detection accuracy remain unqualified. The model comes

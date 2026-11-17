@@ -182,13 +182,30 @@ class ResearchTests(Fixture):
         for recipe in variants:
             self.assertNotEqual(key, recipe.cache_key(self.page))
         for page in [replace(self.page, index=1), replace(self.page, member=4),
-                     replace(self.page, source=replace(self.source, mtime_ns=self.source.mtime_ns + 1))]:
+                     replace(self.page, source=replace(self.source, sha256='f'*64))]:
             self.assertNotEqual(key, self.recipe.cache_key(page))
         self.assertNotEqual(key, self.recipe.cache_key(self.page, Region(0, 0, .5, .5)))
         self.assertNotEqual(key, self.recipe.cache_key(self.page, transform=Transform(800, 400, (2, 0, 0, 0, 2, 0))))
         unrelated = Recipe.create('unrelated-embedding', '9', settings='new')
         self.assertNotEqual(key, unrelated.cache_key(self.page))
         self.assertEqual(key, self.recipe.cache_key(self.page))
+
+    def test_cache_key_binds_identity_and_content_not_locator(self):
+        hashed = replace(self.page, source=replace(self.source, sha256='a'*64))
+        key = self.recipe.cache_key(hashed)
+        for source in [replace(hashed.source, mtime_ns=hashed.source.mtime_ns + 1),
+                       replace(hashed.source, path='moved/' + hashed.source.path),
+                       replace(hashed.source, root='other-root', original_path='/old/place', role='master')]:
+            moved = replace(hashed, source=source, printed_label='p. 7')
+            self.assertEqual(key, self.recipe.cache_key(moved))
+            self.assertTrue(self.recipe.key_matches(moved, None, key))
+        unhashed = replace(self.page, source=replace(self.source, sha256=''))
+        self.assertNotEqual(self.recipe.cache_key(unhashed),
+                            self.recipe.cache_key(replace(unhashed, source=replace(unhashed.source, mtime_ns=1))))
+        self.assertNotEqual(key, self.recipe.cache_key(replace(hashed, source=replace(hashed.source, object_id='other'))))
+        legacy = self.recipe.cache_key(hashed, version=1)
+        self.assertNotEqual(key, legacy)
+        self.assertTrue(self.recipe.key_matches(hashed, None, legacy))
 
     def test_recipe_captures_mutable_settings_and_rejects_nan(self):
         settings = {'languages': ['deu']}

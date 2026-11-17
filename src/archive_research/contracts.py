@@ -33,6 +33,9 @@ def digest(value):
             'Expected an empty or lowercase SHA-256 value')
 
 
+CACHE_KEY_VERSION = 2
+
+
 def encoded(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False,
                       separators=(',', ':'))
@@ -159,14 +162,43 @@ class Recipe:
         return {'extractor': self.extractor, 'version': self.version,
                 'parameters': json.loads(self.parameters_json)}
 
-    def cache_key(self, page, region=None, transform=None):
+    def cache_key(self, page, region=None, transform=None, *, version=CACHE_KEY_VERSION):
+        """Version 2 binds identity and content, not today's locator or stamp.
+
+        Version 1 (full page record, including path, root, mtime and descriptive
+        labels) is kept only to find receipts written before version 2.
+        """
         require(isinstance(page, Page), 'Cache keys require an explicit page/frame binding')
         require(region is None or isinstance(region, Region), 'Invalid region')
         require(transform is None or isinstance(transform, Transform), 'Invalid transform')
-        payload = {'page': asdict(page), 'recipe': self.record(),
+        require(version in (1, 2), 'Unknown cache key version')
+        payload = {'page': asdict(page) if version == 1 else page_binding(page), 'recipe': self.record(),
                    'region': asdict(region) if region else None,
                    'transform': asdict(transform) if transform else None}
+        if version == 2:
+            payload['key_version'] = 2
         return hashlib.sha256(encoded(payload).encode()).hexdigest()
+
+    def key_matches(self, page, region, key):
+        """A receipt may be filed under the current key or a pre-version-2 key."""
+        return key in (self.cache_key(page, region), self.cache_key(page, region, version=1))
+
+
+def page_binding(page):
+    """What an extraction result depends on: identity, content and page geometry.
+
+    With a stored SHA-256 the locator (root, path), stamp, provenance path, role and
+    printed labels are excluded, so touching, copying, moving or relabelling a file
+    keeps its receipts. Without a hash the locator and stamp remain the only content
+    evidence and stay bound.
+    """
+    source = page.source
+    content = ({'sha256': source.sha256} if source.sha256 else
+               {'root': source.root, 'path': source.path, 'size_bytes': source.size_bytes,
+                'mtime_ns': source.mtime_ns})
+    return {'unit': source.unit, 'object_id': source.object_id, 'representation': source.representation,
+            'content': content, 'member': page.member, 'kind': page.kind, 'index': page.index,
+            'width': page.width, 'height': page.height, 'units': page.units, 'origin': page.origin}
 
 
 @dataclass(frozen=True)

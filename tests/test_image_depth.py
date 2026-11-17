@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from PIL import Image
 from archive_research import Root, Roots, Source, Region
-from archive_research.imaging import display_rgb, RENDER_POLICY
+from archive_research.imaging import display_image, display_rgb, RENDER_POLICY
 from archive_research.preparation import inspect_page, render
 from archive_research.runner import recipe_for
 
@@ -42,6 +42,18 @@ class ImageDepthTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'high-depth'):
                 display_rgb(original)
 
+    def test_16bit_min_is_white_is_inverted_and_range_recorded(self):
+        with Image.frombytes('I;16',(2,1),b''.join(v.to_bytes(2,'little') for v in [0,60000])) as original:
+            original.tag_v2 = {258: (16,), 339: (1,), 262: 0}
+            image, note = display_image(original)
+        self.assertEqual((image.mode, list(image.getdata())), ("L", [255, 21]))
+        self.assertIn('MinIsWhite inverted', note); self.assertIn('observed 0..60000', note)
+        image.close()
+        with Image.frombytes('I;16',(2,1),b''.join(v.to_bytes(2,'little') for v in [100,4000])) as original:
+            image, note = display_image(original)
+        self.assertEqual(list(image.getdata()), [0, 15]); self.assertIn('observed 100..4000', note)
+        image.close()
+
     def test_selected_tiff_frame_crop_rotation_and_recipe(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp);source_dir=root/'input';source_dir.mkdir();output=root/'output';output.mkdir()
@@ -55,8 +67,8 @@ class ImageDepthTests(unittest.TestCase):
             page=inspect_page(roots,source,2,'tiff',1)
             path,transform,angle=render(roots,page,output,clockwise=90,region=Region(.5,0,.5,1))
             with Image.open(path) as converted:
-                self.assertEqual(converted.size,(2,2))
-                self.assertEqual(set(converted.getchannel('R').getdata()),{127,255})
+                self.assertEqual((converted.size,converted.mode),((2,2),'L'))
+                self.assertEqual(set(converted.getdata()),{127,255})
             self.assertEqual(angle,90);self.assertIsNotNone(transform.to_source)
             self.assertTrue(any('uint16' in s for s in transform.steps))
             from archive_research.prepared_views import prepared_view

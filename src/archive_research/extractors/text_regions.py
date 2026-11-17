@@ -64,9 +64,9 @@ def settings_for(task):
 
 
 def recipe_for(task):
-    from ..runner import tool_version
+    from ..runner import tool_version, tessdata_fingerprints
     settings = settings_for(task)
-    return Recipe.create('text-regions', '2', settings=settings, preparation=RENDER_POLICY,
+    return Recipe.create('text-regions', '2', tessdata=tessdata_fingerprints(settings['languages']), settings=settings, preparation=RENDER_POLICY,
                          enhancement_recipes={name: ENHANCEMENTS[name] for name in settings['enhancements']},
                          dependencies={name: importlib.metadata.version(name) for name in
                                        ('opencv-python-headless', 'numpy', 'Pillow')},

@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-from archive_research import Page, Root, Roots, Source, Region, Transform
+from archive_research import Page, Recipe, Root, Roots, Source, Region, Transform
 from archive_research.geometry import inverse_rotation, source_region, displayed_region, processed_region
 from archive_research.preparation import inspect_page, render
 from archive_research.extractors.pdf_text import extract as pdf_text
@@ -99,6 +99,50 @@ class PositionedTests(unittest.TestCase):
         rows=[json.loads((self.output/(r['key']+'.json')).read_text()) for r in (first,second)]
         self.assertEqual(rows[0]['result']['artifacts'][0],rows[1]['result']['artifacts'][0])
         self.assertEqual(second['state'],'complete')
+
+    def test_moved_or_touched_identical_file_is_rebound_without_reextraction(self):
+        import os, shutil
+        from archive_research.receipts import read_current
+        page=self.pdf();task={'id':'native','page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}}
+        first=extract_one(self.roots,'artifacts',task)
+        moved_dir=self.input/'moved';moved_dir.mkdir()
+        moved=moved_dir/page.source.path
+        shutil.move(self.input/page.source.path,moved);os.utime(moved,ns=(1,2_000_000_000))
+        new_page=inspect_page(self.roots,replace(self.bind(moved),path='moved/'+moved.name),1,'pdf',1,printed_label='VII')
+        with patch('archive_research.prepared_views.render',side_effect=AssertionError('must not re-render')), \
+             patch('archive_research.extractors.pdf_text.extract',side_effect=AssertionError('must not re-extract')):
+            second=extract_one(self.roots,'artifacts',{**task,'page':asdict(new_page)})
+        self.assertEqual((second['key'],second['reused'],second['rebound']),(first['key'],True,True))
+        row,result,_=read_current(self.roots,'artifacts',first['key'])
+        self.assertEqual(result.page,new_page)
+        self.assertEqual(row['rebound_from']['page']['source']['path'],page.source.path)
+        # Legacy (version 1) receipts are found and refiled under the current key.
+        legacy=result.recipe.cache_key(new_page,version=1)
+        (self.output/(first['key']+'.json')).rename(self.output/(legacy+'.json'))
+        third=extract_one(self.roots,'artifacts',{**task,'page':asdict(new_page)})
+        self.assertEqual((third['key'],third['reused'],third['rebound']),(first['key'],True,True))
+
+    def test_changed_content_with_stale_stored_hash_is_not_reused(self):
+        page=self.pdf();task={'id':'native','page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}}
+        first=extract_one(self.roots,'artifacts',task)
+        path=self.input/page.source.path
+        path.write_bytes(pdf_bytes('OTHER TOKEN',1,'VII','GAMMA',rotation=0))
+        stale=replace(page.source,size_bytes=path.stat().st_size,mtime_ns=path.stat().st_mtime_ns)
+        later=extract_one(self.roots,'artifacts',{**task,'page':asdict(replace(page,source=stale))})
+        self.assertEqual(later['state'],'error')
+        self.assertTrue((self.output/(first['key']+'.json')).exists())
+
+    def test_unfinished_work_is_retryable_but_deterministic_limits_are_reused(self):
+        from archive_research.runner import retryable
+        faces=Recipe.create('faces','2');regions=Recipe.create('text-regions','2')
+        self.assertTrue(retryable({'feature':{'coverage':{'scan_complete':False,'stopped':'timeout'}}},faces))
+        self.assertFalse(retryable({'feature':{'coverage':{'scan_complete':False,'stopped':'budget'}}},faces))
+        self.assertFalse(retryable({'feature':{'coverage':{'scan_complete':True}}},faces))
+        self.assertTrue(retryable({'discovery':{'passes':[{'state':'not_attempted'}],'regions':[]}},regions))
+        self.assertTrue(retryable({'discovery':{'passes':[{'state':'complete'}],
+                                                'regions':[{'variants':[{'status':'error'}]}]}},regions))
+        self.assertFalse(retryable({'discovery':{'passes':[{'state':'complete'}],
+                                                 'regions':[{'variants':[{'status':'complete'}]}]}},regions))
 
     def test_source_change_withholds_cached_result_and_retains_receipt(self):
         page=self.pdf();task={'id':'native','page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}}

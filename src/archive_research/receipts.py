@@ -12,7 +12,7 @@ def read_current(roots, work, key, _parents=()):
     require(key not in _parents and len(_parents)<8, 'Cyclic or excessive receipt dependencies')
     data=target(roots.root(work,'work'),key+'.json').read_bytes(); row=json.loads(data)
     result=Result.from_record(row['result'])
-    require(result.recipe.cache_key(result.page,result.region)==key, 'Receipt key differs')
+    require(result.recipe.key_matches(result.page,result.region,key), 'Receipt key differs')
     require(result.status in ('complete','partial'), 'Extraction unavailable')
     roots.source(result.page.source)
     for artifact in result.artifacts:

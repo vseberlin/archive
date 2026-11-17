@@ -37,7 +37,7 @@ def read_evidence(roots, work, item):
     data = target(roots.root(work, 'work'), item['key'] + '.json').read_bytes()
     receipt = json.loads(data)
     result = Result.from_record(receipt['result'])
-    require(result.recipe.cache_key(result.page, result.region) == item['key'], 'Receipt key differs')
+    require(result.recipe.key_matches(result.page, result.region, item['key']), 'Receipt key differs')
     region = Region(**item['region']) if item.get('region') is not None else result.region
     shown = processed_region(region, result.transform, result.page) if region and result.transform else None
     words = selected_words(receipt['words'], region)
@@ -72,7 +72,7 @@ def read_evidence(roots, work, item):
         found = json.loads(discovery_data)
         found_result = Result.from_record(found['result'])
         require(found_result.page == result.page and found_result.recipe.extractor in ('text-regions', 'line-ocr')
-                and found_result.recipe.cache_key(found_result.page) == item['discovery_key'],
+                and found_result.recipe.key_matches(found_result.page, None, item['discovery_key']),
                 'Discovery belongs to another page or recipe')
         discovery_sha = hashlib.sha256(discovery_data).hexdigest()
         discovery = found.get('discovery')
