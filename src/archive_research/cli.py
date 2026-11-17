@@ -29,6 +29,9 @@ def main(argv=None):
     if argv and argv[0] == 'reference':
         from .reference import main as reference
         return reference(argv[1:])
+    if argv and argv[0] == 'reference-diagnostics':
+        from .reference_diagnostics import main as diagnostics
+        return diagnostics(argv[1:])
     if argv and argv[0] == 'assess':
         from .assessment.cli import main as assess
         return assess(argv[1:])
@@ -64,6 +67,7 @@ def main(argv=None):
     r.add_argument('--output-prefix', required=True); r.add_argument('--sift', action='store_true')
     r.add_argument('--model', help='Optionally prepare a local request; never send it')
     sub.add_parser('reference', help='Index and evaluate catalogue previews with a bound local model')
+    sub.add_parser('reference-diagnostics', help='Baselines, strata, holdout sweep and curator review for a reference index; no model or images')
     sub.add_parser('assess', help='Prepare, validate or explicitly submit an assessment')
     sub.add_parser('web', help='Configure, check, test or serve the local Django application')
     a = p.parse_args(argv)

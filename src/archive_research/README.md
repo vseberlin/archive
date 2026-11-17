@@ -108,6 +108,27 @@ cosine similarity ≥ 0.95. That threshold is a conservative leakage control,
 not proof of a duplicate. Museum-digital republications are not independent
 archive evidence. Person-name voting is not exposed.
 
+`archive-research reference-diagnostics` reads only the completed projection
+(`index.sqlite`) and optionally the capture; it decodes no image and loads no model:
+
+```sh
+archive-research reference-diagnostics diagnose --work-root WORK --run LABEL
+archive-research reference-diagnostics preview-gaps --capture CAPTURE
+archive-research reference-diagnostics review-export --work-root WORK --run LABEL
+archive-research reference-diagnostics review-score --review JUDGED.csv
+```
+
+`diagnose` adds what catalogue agreement alone cannot show: a prevalence baseline
+proposing the eligible pool's most frequent labels at the visual method's per-query
+count (all and high tier), precision without the most common labels, results per
+collection stratum, pool/own-collection/predicted-collection date baselines, and a
+holdout sweep over inventory windows with and without a session proxy (identical
+date text within identical collections). `preview-gaps` classifies records without a
+selected preview URL. `review-export` writes top-k neighbours with an empty
+`judgement` column (`same_photograph`, `same_place_or_object`, `same_type`,
+`unrelated`, `unclear`); `review-score` reports hit@k and precision@k. Receipts are
+never overwritten. These remain diagnostics, not acceptance evidence.
+
 For new archive imagery, `reference ... index-new --selection KEYS.json` imports
 verified shared visual receipts in the matching model space; it never scans
 masters. `propose` retains receipt provenance and unadopted suggestions. Reference
