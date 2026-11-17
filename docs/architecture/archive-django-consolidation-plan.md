@@ -170,8 +170,9 @@ Accessioned holdings already live at `/mnt/volume/iss-archive`; relocating those
 units is a separate, explicitly scoped operation because evidence uses their
 paths. Protected Elements sources remain read-only and outside workspace moves.
 
-Qualify storage before moving active runtimes: effective ownership and 0700/0600
-privacy, independent-process file locks, atomic replacement and file/directory
+Qualify storage before moving active runtimes: effective access protection
+(0700/0600 checks for the current Linux deployment, native effective-access
+checks on other platforms), independent-process file locks, atomic replacement and file/directory
 sync, SQLite transactions/recovery in the selected journal mode, timestamps,
 filename handling, executable requirements and representative small-file costs.
 A passing smoke test does not certify power-loss safety. Existing database use
@@ -179,6 +180,92 @@ on the volume does not prove all these properties. If a requirement fails,
 keep that component on compatible storage behind configuration; do not weaken
 privacy/source checks or abandon portability. Filesystem replacement or volume
 repartitioning is outside this plan's implementation scope.
+
+## Portability guardrails — binding from design onward
+
+Agreed 16 November 2026. Cross-platform implementation and acceptance may come
+later; these constraints apply to new design and changes now. They belong to
+this plan, not a second framework, registry or metadata authority.
+
+1. **Keep identity independent of the filesystem.** Preserve explicit object
+   and representation IDs. Do not use case differences, paths, drive letters,
+   inode/device numbers, symlinks, hard-link relationships, ownership or
+   modification times as essential object identity. These may be locators,
+   provenance or local change/race observations. A content hash identifies bytes,
+   not necessarily an archival object: identical bytes do not merge holdings.
+   Existing path-shaped identifiers remain opaque identifiers; remapping a root
+   must not silently rewrite them or break citations. Do not introduce a parallel
+   identifier system to achieve portability.
+2. **Preflight names and paths without changing sources.** Detect destination
+   collisions involving case or Unicode normalization, reserved names/characters
+   and path-length limits. Preserve original names and paths as provenance.
+   Do not silently normalize, truncate, rename, merge or overwrite conflicting
+   entries. Any necessary destination-name mapping must be explicit and
+   reversible and must preserve object identity. Windows naming constraints
+   illustrate why source filenames alone are insufficient as portable storage
+   keys; see [Microsoft's naming rules](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file).
+3. **Separate application authorization from disk protection.** Application
+   roles govern application operations. Direct filesystem access, credentials,
+   databases, exports and backups have a separate protection responsibility.
+   Login does not prevent someone with disk access from reading or altering files;
+   filesystem restrictions do not replace application authorization. State the
+   intended users and access requirements for each component and verify both
+   boundaries independently.
+4. **Specify security outcomes, not translated permission bits.** For example,
+   require that only designated accounts can read credentials, then verify that
+   outcome with the target platform's native security model. Do not translate
+   Unix modes directly into Windows permissions or assume Unix parent-directory
+   traversal rules apply there. Check effective access, inheritance and relevant
+   child files, not merely a successful permission-setting call. The current
+   Linux mount's failed chmod probe does not establish that NTFS or Windows
+   cannot protect files; Windows uses
+   [security descriptors and ACLs](https://learn.microsoft.com/en-us/windows/win32/fileio/file-security-and-access-rights).
+5. **Never weaken a failed atomic write into a live-file copy.** Prepare and
+   validate a temporary file on the destination filesystem, then use a supported
+   replacement operation. Missing capabilities, cross-filesystem replacement,
+   access errors or open-file conflicts must produce explicit failures. Never
+   silently fall back to copying over, truncating or deleting the live target.
+   Failure before replacement must leave the old live file intact. If replacement
+   succeeded but subsequent synchronization failed, report uncertain durability;
+   do not claim that nothing changed or blindly retry an already applied action.
+6. **Treat atomicity, durability and concurrency separately.** A successful
+   rename is not proof of power-loss safety, a multi-file transaction or writer
+   exclusion. Qualify replacement, file/directory synchronization, locks and
+   database recovery on the actual target filesystem. Do not infer capabilities
+   from an OS name or filesystem label alone. If a required guarantee is absent,
+   fail explicitly or retain that component on a configured compatible location;
+   never report a weaker operation as equivalent. See the relevant
+   [Python filesystem interfaces](https://docs.python.org/3/library/os.html#os.replace).
+7. **Make deployment locations and OS operations explicit.** No implicit cwd,
+   home-directory, drive-letter or permanent-symlink dependency; no fallback to
+   another root when the configured one is absent, full or unsuitable. Keep
+   platform-specific mounting, file access, locking, permission and process
+   handling behind small, explicit boundaries. Retain the current exact protected
+   Elements mount check on this workstation until an equivalent deployment
+   protection is explicitly defined and tested. Recreate environments from
+   specifications rather than copying executable environments between platforms.
+8. **Keep records and verification portable.** Specify encodings, timestamp
+   meanings/time zones, coordinate units, ordering and schema versions. Filesystem
+   enumeration order must not determine representation/page order. Keep durable
+   records readable and caches rebuildable. Add focused conformance checks for
+   root remapping, changed timestamps with unchanged content, filename collisions,
+   inaccessible/redirected sources, competing writers, full disks and interrupted
+   or refused replacement. Real target-platform acceptance remains necessary;
+   mocks or one workstation's smoke tests cannot certify another deployment.
+
+### Current implementation limits
+
+The existing writer already has no copy-over-live fallback. Source size/mtime
+checks and inode comparisons serve local change/race detection; they are not
+archival identity. However, mtime and locator fields currently participate in
+cache keys. Portable relocation/rebinding and content/recipe-based cache reuse
+must be addressed explicitly without weakening changed-source rejection or
+altering existing IDs. The runner and filesystem code also use Unix-specific
+facilities such as `fcntl`, `resource`, `findmnt` and file-open flags. Isolate and
+qualify those implementations as portability work proceeds. Do not describe
+standard-library-only code as automatically cross-platform. These are tracked
+implementation gaps, not permission to redesign the archive or rewrite current
+source bindings during this documentation change.
 
 ## Package and extractor contract
 
