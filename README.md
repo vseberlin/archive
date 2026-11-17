@@ -1,135 +1,201 @@
 # Industriesalon archive
 
-Source code for archive discovery, reconciliation, human Master selection,
-accession, and bounded local review workbenches.
+Local archive research and cross-referencing for the Industriesalon collection.
+The main application connects photographs, scanned documents, books, newspapers
+and object records through positioned text, visual comparisons and cited evidence.
+Selected evidence can be prepared for multimodal OpenAI assessment, then reviewed
+in a local Django workbench. Machine findings remain proposals until reviewed.
 
-## Layout
+This repository contains the application source, tests, workflow documentation,
+and retained reconciliation/accession tools. Archive holdings, private research
+results, accounts and runtime databases live outside the repository.
 
-| Path | Source and purpose |
-| --- | --- |
-| `Archive-tools/` | Retained reconciliation tools and compatibility launchers. New research implementation lives in the installed package. |
-| `src/archive_research/` | Installed research application: extractors, cross-unit retrieval, evidence, assessment and Django workbench. See its [application guide](src/archive_research/README.md). |
-| `tools/archive-preservation/` | Shared helpers and retained compatibility tools, copied from the mixed `/home/vladimir/wp` checkout. |
-| `tests/archive-preservation/` | Existing tests for the shared tools. |
-| `work-area/` | Unit-specific scripts and UI assets, preserving their relative paths under `/mnt/volume/iss-archive-work`. Includes Avantmedia, TFA, Paragon, Kurt Schwarz, Costa and other collections. |
-| `docs/architecture/` | Archive workflow contract and tool routing. |
+## Start here
 
-Read [AGENTS.md](AGENTS.md), the [workflow contract](docs/architecture/archive-preservation-architecture-adr.md),
-and the [tool map](docs/architecture/archive-application-structure.md) before
-running archive operations. Legacy tools and completed jobs are retained as
-source evidence; their presence does not authorize running them again.
+- [Application guide](src/archive_research/README.md): installation, configuration,
+  extractor contracts, retrieval, evidence packets and assessment commands.
+- [Workbench guide](src/archive_research/web/README.md): local review, citations,
+  configuration and launch instructions.
+- [Implementation plan](docs/architecture/archive-django-consolidation-plan.md):
+  agreed direction, delivered work and remaining limitations.
+- [Tool map](docs/architecture/archive-application-structure.md): active, retained
+  and unit-specific code.
+- [Project instructions](AGENTS.md) and [archive contract](docs/architecture/archive-preservation-architecture-adr.md):
+  source protection, authority and permitted operations.
 
-The [WF research workbench plan](docs/architecture/archive-django-consolidation-plan.md)
-proposes a bounded Django pilot connecting photographs, documents, and patents,
-with portable research configuration and an optional FiftyOne comparison.
-The project home is `/home/vladimir/archive-local`; its KEEP README owns current
-locations and links to the sole private handoff. `/mnt/volume/archive-system` is
-retained earlier setup material, not the current startup authority.
-The 16 November retention-only cleanup moved the large historical Paragon recovery
-tree into a verified volume bundle; the hub README owns its exact recovery location.
-Referenced legacy helpers and active pilot/index state remain in their current roots.
-The approved [local research pilot](src/archive_research/web/README.md) now shows
-16 real photograph/report/relationship cases, including book and patent evidence,
-with 51 prepared images and one explicitly unreadable source. It supports local
-login, citations and bounded research review; all real observations begin
-unreviewed. The synthetic demonstration and its export remain separate.
-
-The [current consolidation plan](docs/architecture/archive-django-consolidation-plan.md#current-agreed-direction-and-checkpoint)
-records the next phase: modular extractors, global unit/page mappings, positioned
-OCR and cross-unit evidence search. Its ordered TODO includes portable root
-configuration and eventual storage consolidation without permanent compatibility
-symlinks. Necessary Linux runtime components stay in home for now; NTFS-specific
-limitations must not become a permanent portability blocker. The tools audit,
-shared package/configuration boundary, positioned PDF text/ALTO extraction and
-bounded workbench page search/image leads are delivered. The current private
-handoff records approved coverage, acceptance and the manually owned pilot.
-Whole-archive indexing and storage migration remain later work.
-
-## Research application
-
-Install the project into the selected Python environment with `python -m pip install .`.
-The [application guide](src/archive_research/README.md) documents optional dependency
-sets, offline installation and configured roots. Use one entry point:
+## Repository layout
 
 ```text
-archive-research extract   selected local extraction tasks
-archive-research index     index selected source-bound receipts
-archive-research search    cross-reference that index
-archive-research packet    assemble selected evidence and hypotheses
-archive-research run       bounded extraction/index/search/packet workflow
-archive-research assess    prepare, validate or explicitly submit a model request
-archive-research web       check, test or serve the local review application
+archive/
+├── pyproject.toml                # iss-archive-research package and dependencies
+├── src/archive_research/         # active, installed research application
+│   ├── cli.py, __main__.py       # archive-research / python -m archive_research
+│   ├── config.py, pipeline.py   # shared configuration and application operations
+│   ├── contracts.py, sources.py # source, page, region and result bindings
+│   ├── storage.py, units.py     # readable artifacts and existing unit mappings
+│   ├── preparation.py          # selected page/frame rendering
+│   ├── geometry.py, runner.py   # coordinates and isolated extraction workers
+│   ├── extractors/             # OCR, text regions, layouts and visual features
+│   ├── retrieval.py            # text and visual cross-references
+│   ├── evidence.py, profiles.py # evidence packets and subject-specific clues
+│   ├── external_evidence.py     # retained external references and provenance
+│   ├── sift.py                 # selected geometric comparisons
+│   ├── assessment/             # request preparation, transport and validation
+│   └── web/                    # Django application, templates and web tests
+├── tests/                       # application tests and retained harness tests
+├── Archive-tools/               # retained tools and research compatibility paths
+├── tools/
+│   ├── repo-guard.py           # guarded repository operations
+│   └── archive-preservation/   # reusable and retained archive helpers
+├── work-area/                   # source for unit-specific jobs and review UIs
+└── docs/                        # architecture, workflow and published benchmarks
 ```
 
-`run` prepares local artifacts only. External submission remains explicit, and
-model output remains an unadopted proposal. CLI and web code share application
-modules; the installed package runs outside the checkout without `PYTHONPATH`.
-Old research script paths forward to the package. The retained accession,
-reconciliation and unit-specific tools have separate scopes and are not run by it.
+The CLI and workbench use the same application modules. The active package does
+not import `Archive-tools` and works outside the checkout without `PYTHONPATH`.
+Old research script paths and import names forward to the installed package.
+Reconciliation/accession tools and completed unit jobs retain their separate
+entry points; the research pipeline does not execute them.
 
-## Local checkout and runtime
+## Research workflow
 
-The dedicated checkout is `/home/vladimir/archive-local/source`, branch `archive/scripts`,
-tracking `origin/main` at <https://github.com/vseberlin/archive>.
-On 16 November 2026 the user approved a fresh source baseline on `main`.
-Older remote branches retain their earlier history and are not maintained mirrors;
-the workstation keeps its established `archive/scripts` checkout.
-The initial source import was collected on 30 October 2026. It included then
-uncommitted archive scripts from the old checkout, without importing WordPress
-code or the old repository's mixed history.
+```text
+Explicit local sources and page selections
+    → extract text, regions, layout and visual features
+    → index selected extraction records across archive units
+    → retrieve text matches and visual candidates
+    → assemble cited evidence, hypotheses and conflicting readings
+    → optionally prepare and explicitly send a multimodal assessment
+    → review the evidence and proposal in the workbench
+```
 
-Resolve current runtime and data paths through the home workspace's KEEP README
-and private handoff. This repository does not automatically deploy scripts, start workbenches, or change
-archive data. Many unit scripts expect their original local data beside them or
-use absolute workstation paths. They are not standalone applications that can
-run against an empty clone.
+Local archive evidence comes first. External references can supplement a packet
+with retained provenance; a republication of the same archive record is not
+independent corroboration. Visual similarity and geometric matches are research
+leads, not automatic object or person identification.
 
-The shared tools are versioned in `Archive-tools/`. On this workstation, use
-the real `/home/vladimir/archive-local/source/Archive-tools` directory; the old
-`~/Archive-tools` compatibility link is retired. Their private continuation checkpoint is
-`/home/vladimir/archive-local/HANDOFF.md`; generated review state remains outside
-Git. Read it when starting a task or when current state is missing/changed; reuse
-unchanged guidance after compaction. See [continuity](docs/architecture/archive-continuity.md).
+| Area | Implemented behavior |
+| --- | --- |
+| Text extraction | Poppler PDF text; positioned Tesseract OCR; selected text/line regions, retained enhancement variants and original readings |
+| Image and page analysis | PDF/scan layout candidates, caption regions, local OpenCLIP features and selected SIFT comparisons |
+| Cross-references | Explicit unit/member/page bindings; text and visual search over selected receipts; source-change checks |
+| Evidence and assessment | Buildings, people, equipment and tube profiles; source/detail views, hypotheses and citations; explicit API or ChatGPT-authenticated Codex submission |
+| Local review | Django login, citation/region viewers, prepared search results, evidence packets and unadopted assessment proposals |
 
-For the legacy Avantmedia/Kurt Schwarz review, the workbench remains in
-`/mnt/volume/iss-archive-work/avantmedia-305-review`, at
-<http://127.0.0.1:8774/tiff-scan>. Its historical `review-checkpoint-20261015.md`, readable decisions and SQLite
-index stay in that work area; current continuation uses the central handoff. Recheck its service state before reuse. Source review must use the exact protected mount
-`/dev/sdf1 /media/vladimir/Elements ntfs3 ro`.
+Extraction runs locally in explicit batches with per-task progress and reusable
+receipts. HTTP requests read prepared results; they do not start extraction or
+model calls. Human-readable evidence and review records remain authoritative;
+SQLite provides rebuildable projections.
 
-## Source-only boundary
+Current coverage is a bounded research pilot, not an archive-wide index.
+Whole-archive processing, specialist detectors and held-out identification
+accuracy remain future work. Person/face regions do not provide automatic names.
+Packaging has been qualified locally on Linux; other-platform storage and
+permission behavior still need qualification.
 
-Archive payloads, source images, catalogues, review decisions, databases,
-credentials, generated reports, downloaded websites, binaries and backup
-script copies are excluded. The `.gitignore` protects common data formats;
-review each staged change before publication to this public repository.
+## Install and use
 
-One resolved object has one selected Master. Derivatives are generated during
-authorized accession. Marking a candidate redundant never authorizes deletion.
+Requires Python 3.11 or newer. From the checkout, in the selected virtual
+environment:
 
-## Current photo research source
+```sh
+python -m pip install '.[web]'
+archive-research --help
+```
 
-The retained photograph-reference batch runner is [`Archive-tools/reference_batch.py`](Archive-tools/reference_batch.py)
-(v12); it is separate from the installed extraction/retrieval workflow above. Its helpers, regression tests and review UI live alongside it. The older
-`work-area/visual-similarity/reference_batch.py` and its v2 notes are retained
-history; use the `Archive-tools` runner for current work.
+The core package has no third-party runtime dependencies. Optional dependency
+sets in [pyproject.toml](pyproject.toml) are `web`, `images`, `vision` and
+`embeddings`; select those needed by the operation. Poppler and Tesseract are
+separate system tools. Visual adapters require explicitly supplied local models;
+installation does not fetch model weights. The pinned CPU torch wheels need the
+matching PyTorch CPU wheel index. See the application guide for the qualified
+processing environment and offline installation.
 
-The [search source registry](Archive-tools/berlin-photo-reference-sources.json)
-contains 19 public reference sources and subject routing. It is search
-configuration, not a catalogue or a file of research results. Its access notes
-are dated observations, not a guarantee of current website availability.
-The published copy matches the workstation registry in
-`/home/vladimir/archive-local/berlin-photo-reference-sources.json` at this sync.
-The runner retains that workstation default; select the versioned copy with
-`--registry /home/vladimir/archive-local/source/Archive-tools/berlin-photo-reference-sources.json`
-when preparing and running a new, explicitly authorized batch. Existing plans
-freeze script and registry hashes; consult the private handoff before resuming.
+| Command | Purpose |
+| --- | --- |
+| `archive-research extract` | Run selected extraction tasks and retain receipts |
+| `archive-research index` | Index selected existing receipts |
+| `archive-research search` | Query a bound index |
+| `archive-research packet` | Assemble selected evidence and hypotheses |
+| `archive-research run` | Coordinate extraction, indexing, search and packet preparation |
+| `archive-research assess` | Prepare, validate or explicitly submit an assessment |
+| `archive-research web` | Configure, check, test or serve the local workbench |
 
-This checkout is independent of `/home/vladimir/wp-website` (website source).
-The former `/home/vladimir/wp` mixed checkout is retained in verified bundles at
-`/mnt/volume/sites-backup/website-consolidation-20261116/`; it is not a runtime or
-source dependency. Maintained helpers use this archive checkout directly. Publishing here does not deploy or
-remove any of those retained copies.
+Each command has `--help`. `retrieve` preserves the earlier combined index/search
+interface. `python -m archive_research` exposes the same CLI.
+
+A bounded workflow using existing receipts:
+
+```sh
+archive-research run --roots /path/to/roots.toml \
+  --retrieval-selection /path/to/retrieval-selection.json \
+  --packet-selection /path/to/packet-selection.json \
+  --output-prefix selected-research
+```
+
+Add `--plan /path/to/plan.json` for extraction first, `--sift` for selected geometric
+comparisons, or `--model MODEL` to prepare a local model request. **`run` never
+submits externally.** Output prefixes must be unused. The application guide
+specifies selection formats and source bindings; a clone does not include private
+archive data or a configured runtime.
+
+For an existing configured workbench:
+
+```sh
+archive-research web --project /path/to/project.toml \
+  --machine /path/to/machine.toml check
+archive-research web --project /path/to/project.toml \
+  --machine /path/to/machine.toml serve
+```
+
+The manual server listens at `http://127.0.0.1:8785` without a reloader. Project and
+private machine configuration select the existing runtime; see the workbench guide
+for initialization and the separate synthetic demonstration.
+
+## Tests and verification
+
+With the package and required processing dependencies installed:
+
+```sh
+python -B -m unittest discover -s tests -p 'test_*.py'
+archive-research web --project /path/to/project.toml \
+  --machine /path/to/machine.toml test
+```
+
+The 17 November 2026 consolidation passed 384 tests: 119 application, 67 Django,
+186 retained route/reference/workbench and 12 SIFT tests. The installed workflow
+also ran outside the checkout and reproduced the prior index, evidence packet and
+prepared model request. Existing readable records and database table counts stayed
+unchanged. These checks establish local behavior, not collection-wide accuracy.
+
+Legacy suites have their own dependencies and instructions. Some unit tests need
+private evidence absent from Git; accession or drain executors are not test runners.
+The [six-photo V11/V12 benchmark](docs/reference-v12-building-benchmark-20261114.md)
+documents the retained photograph-reference runner and its evaluation limits.
+
+## Retained tools and data boundaries
+
+[Archive-tools](Archive-tools/README.md) includes reconciliation preparation,
+workbenches and the retained [photograph-reference batch runner](Archive-tools/reference_batch.py).
+Its [public reference registry](Archive-tools/berlin-photo-reference-sources.json)
+is search configuration, not research results. Older copies under `work-area/`
+are historical; consult the tool map before choosing an entry point.
+`work-area/` mirrors unit-job source paths, not live holdings or review state.
+
+Archive images, catalogues, decisions, credentials, databases, model weights and
+raw research outputs are excluded from Git. The invented installed web fixture,
+public search configuration and explicitly published benchmark measurements are
+intentional source/documentation assets. One resolved archival object has one
+selected Master; derivatives belong to authorized accession. Marking another
+copy redundant does not authorize deletion.
+
+On the maintained workstation, the source checkout is
+`/home/vladimir/archive-local/source`, branch `archive/scripts` → GitHub `main`.
+The private hub `/home/vladimir/archive-local/README.md` owns runtime/data locations;
+`/home/vladimir/archive-local/HANDOFF.md` is the sole current checkpoint. Private
+runtime stays outside this source tree. Historical paths and completed scripts
+are not launch instructions. A source publication does not deploy services or
+change archive data. See [continuity](docs/architecture/archive-continuity.md).
 
 ## Guarded Git workflow
 
@@ -187,30 +253,3 @@ Run the isolated regression checks with:
 ```sh
 python3 -B /home/vladimir/archive-local/source/tests/archive-preservation/test_repo_guard.py -q
 ```
-
-## Tests and dependencies
-
-With the package installed in the qualified processing environment, run
-`python -B -m unittest discover -s tests -p 'test_*.py'`. With explicit pilot
-configuration, run `archive-research web test` for isolated Django tests.
-The installed-worker test exercises a subprocess from an unrelated directory;
-application tests also check changed-source rejection and local-only preparation.
-
-Legacy tests retain their original layout. For example:
-
-```sh
-python3 -B -m unittest discover -s tests/archive-preservation -p test_md_export_discovery.py
-python3 -B -m unittest discover -s tests/archive-preservation -p test_tiff_metadata.py
-```
-
-Other tests may require Pillow, ExifTool, GCC/OpenSSL, or local unit evidence.
-The existing `tools/archive-preservation/requirements.txt` belongs to the legacy
-harness; it is not a complete installation recipe for every unit script.
-Avantmedia's tests depend on local scan evidence, which is intentionally absent
-from Git. Do not run accession or drain executors as a test.
-
-The [six-photo V11/V12 comparison report](docs/reference-v12-building-benchmark-20261114.md) includes
-per-photo benchmark results, evidence-quality limitations, reproduction commands
-and the exact pilot-source reconstruction patch. This report and its selected
-measurements are an explicitly authorized publication exception to the runtime
-data boundary; private images and raw logs remain excluded.
