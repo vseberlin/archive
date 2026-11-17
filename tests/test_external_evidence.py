@@ -5,7 +5,7 @@ import unittest
 import test_research_evidence as fixtures
 from archive_research.external_evidence import read_reference
 from archive_research.evidence import build_packet
-from research_routes import research_profiles
+from archive_research.profiles import research_profiles
 
 
 class ExternalEvidenceTests(unittest.TestCase):

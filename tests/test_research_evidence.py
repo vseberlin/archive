@@ -8,10 +8,9 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT/'src'), str(ROOT/'Archive-tools')]
 from archive_research import Artifact, Page, Recipe, Region, Result, Root, Roots, Source, Transform
 from archive_research.evidence import build_packet, code_candidates, evidence_image, refresh_packet
-from research_routes import research_profiles
+from archive_research.profiles import research_profiles
 from archive_research.assessment import prepare_assessment
 
 

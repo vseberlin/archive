@@ -10,14 +10,13 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path[:0] = [str(ROOT/'src'), str(ROOT/'Archive-tools')]
 from archive_research import Page, Root, Roots, Source, Region, Transform
 from archive_research.geometry import inverse_rotation, source_region, displayed_region, processed_region
 from archive_research.preparation import inspect_page, render
-from archive_research.pdf_text import extract as pdf_text
-from archive_research.ocr import extract as ocr
+from archive_research.extractors.pdf_text import extract as pdf_text
+from archive_research.extractors.ocr import extract as ocr
 from archive_research.runner import extract_one, load_plan
-from research_web.fixtures import pdf_bytes
+from archive_research.web.fixtures import pdf_bytes
 
 
 class PositionedTests(unittest.TestCase):
@@ -111,7 +110,7 @@ class PositionedTests(unittest.TestCase):
 
     def test_timeout_is_not_cached_as_completed(self):
         page=self.pdf();task={'id':'timeout','page':asdict(page),'extractor':'ocr'}
-        with patch('archive_research.ocr.extract',side_effect=subprocess.TimeoutExpired('tesseract',1)):
+        with patch('archive_research.extractors.ocr.extract',side_effect=subprocess.TimeoutExpired('tesseract',1)):
             result=extract_one(self.roots,'artifacts',task)
         self.assertEqual(result['state'],'error')
         receipt=json.loads((self.output/(result['key']+'.json')).read_text())

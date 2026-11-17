@@ -1,4 +1,4 @@
-# Industriesalon archive scripts
+# Industriesalon archive
 
 Source code for archive discovery, reconciliation, human Master selection,
 accession, and bounded local review workbenches.
@@ -7,8 +7,8 @@ accession, and bounded local review workbenches.
 
 | Path | Source and purpose |
 | --- | --- |
-| `Archive-tools/` | Shared photo reconciliation preparation and workbench, with configurable Czkawka profiles. See its README for the contract and commands. |
-| `src/archive_research/` | Shared source/page/result contracts, explicit roots, bounded positioned extraction and adapters for existing visual research. See its [API guide](src/archive_research/README.md). |
+| `Archive-tools/` | Retained reconciliation tools and compatibility launchers. New research implementation lives in the installed package. |
+| `src/archive_research/` | Installed research application: extractors, cross-unit retrieval, evidence, assessment and Django workbench. See its [application guide](src/archive_research/README.md). |
 | `tools/archive-preservation/` | Shared helpers and retained compatibility tools, copied from the mixed `/home/vladimir/wp` checkout. |
 | `tests/archive-preservation/` | Existing tests for the shared tools. |
 | `work-area/` | Unit-specific scripts and UI assets, preserving their relative paths under `/mnt/volume/iss-archive-work`. Includes Avantmedia, TFA, Paragon, Kurt Schwarz, Costa and other collections. |
@@ -28,7 +28,7 @@ retained earlier setup material, not the current startup authority.
 The 16 November retention-only cleanup moved the large historical Paragon recovery
 tree into a verified volume bundle; the hub README owns its exact recovery location.
 Referenced legacy helpers and active pilot/index state remain in their current roots.
-The approved [local research pilot](Archive-tools/research_web/README.md) now shows
+The approved [local research pilot](src/archive_research/web/README.md) now shows
 16 real photograph/report/relationship cases, including book and patent evidence,
 with 51 prepared images and one explicitly unreadable source. It supports local
 login, citations and bounded research review; all real observations begin
@@ -44,6 +44,28 @@ shared package/configuration boundary, positioned PDF text/ALTO extraction and
 bounded workbench page search/image leads are delivered. The current private
 handoff records approved coverage, acceptance and the manually owned pilot.
 Whole-archive indexing and storage migration remain later work.
+
+## Research application
+
+Install the project into the selected Python environment with `python -m pip install .`.
+The [application guide](src/archive_research/README.md) documents optional dependency
+sets, offline installation and configured roots. Use one entry point:
+
+```text
+archive-research extract   selected local extraction tasks
+archive-research index     index selected source-bound receipts
+archive-research search    cross-reference that index
+archive-research packet    assemble selected evidence and hypotheses
+archive-research run       bounded extraction/index/search/packet workflow
+archive-research assess    prepare, validate or explicitly submit a model request
+archive-research web       check, test or serve the local review application
+```
+
+`run` prepares local artifacts only. External submission remains explicit, and
+model output remains an unadopted proposal. CLI and web code share application
+modules; the installed package runs outside the checkout without `PYTHONPATH`.
+Old research script paths forward to the package. The retained accession,
+reconciliation and unit-specific tools have separate scopes and are not run by it.
 
 ## Local checkout and runtime
 
@@ -87,8 +109,8 @@ authorized accession. Marking a candidate redundant never authorizes deletion.
 
 ## Current photo research source
 
-The working research runner is [`Archive-tools/reference_batch.py`](Archive-tools/reference_batch.py)
-(v12). Its helpers, regression tests and review UI live alongside it. The older
+The retained photograph-reference batch runner is [`Archive-tools/reference_batch.py`](Archive-tools/reference_batch.py)
+(v12); it is separate from the installed extraction/retrieval workflow above. Its helpers, regression tests and review UI live alongside it. The older
 `work-area/visual-similarity/reference_batch.py` and its v2 notes are retained
 history; use the `Archive-tools` runner for current work.
 
@@ -168,7 +190,13 @@ python3 -B /home/vladimir/archive-local/source/tests/archive-preservation/test_r
 
 ## Tests and dependencies
 
-Tests retain their original layout. For example:
+With the package installed in the qualified processing environment, run
+`python -B -m unittest discover -s tests -p 'test_*.py'`. With explicit pilot
+configuration, run `archive-research web test` for isolated Django tests.
+The installed-worker test exercises a subprocess from an unrelated directory;
+application tests also check changed-source rejection and local-only preparation.
+
+Legacy tests retain their original layout. For example:
 
 ```sh
 python3 -B -m unittest discover -s tests/archive-preservation -p test_md_export_discovery.py

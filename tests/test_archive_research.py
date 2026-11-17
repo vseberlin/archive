@@ -14,7 +14,6 @@ import unittest
 from unittest.mock import patch
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPOSITORY / 'src'))
 
 from archive_research import Artifact, Page, Recipe, Region, Result, Root, Roots, Source, Transform
 from archive_research.visual import preview
@@ -224,6 +223,7 @@ class ResearchTests(Fixture):
             Result.from_record(record)
 
     def test_core_import_has_no_optional_dependencies_or_io(self):
+        import archive_research
         code = '''import sys
 sys.path.insert(0, sys.argv[1])
 def guard(event, args):
@@ -234,7 +234,8 @@ import archive_research
 import archive_research.visual
 assert not any(n.split('.')[0] in {'django', 'numpy', 'torch', 'PIL', 'cv2', 'visual_research', 'workbench'} for n in sys.modules)
 '''
-        process = subprocess.run([sys.executable, '-I', '-S', '-B', '-c', code, str(REPOSITORY / 'src')],
+        package_root = Path(archive_research.__file__).resolve().parent.parent
+        process = subprocess.run([sys.executable, '-I', '-S', '-B', '-c', code, str(package_root)],
                                  cwd=self.base, capture_output=True, text=True)
         self.assertEqual(process.returncode, 0, process.stderr)
 
@@ -301,6 +302,8 @@ class VisualAdapterTests(Fixture):
 
     def test_actual_legacy_preview_output_compatibility(self):
         from PIL import Image
+        original_path = list(sys.path)
+        self.addCleanup(lambda: sys.path.__setitem__(slice(None), original_path))
         sys.path.insert(0, str(REPOSITORY / 'Archive-tools'))
         from visual_research import VERSION, make_preview
         Image.new('RGB', (1600, 800), (20, 40, 80)).save(self.path)

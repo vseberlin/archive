@@ -8,11 +8,10 @@ import sys
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 import test_research_evidence as fixtures
 from archive_research import Artifact,Recipe,Result,Transform,Source
 from archive_research.retrieval import build_index,refresh_index,visual_search,text_search
-from archive_research.visual_features import validate_inputs
+from archive_research.extractors.visual_features import validate_inputs
 
 
 class RetrievalTests(unittest.TestCase):
@@ -80,7 +79,7 @@ class RetrievalTests(unittest.TestCase):
     def test_layout_crop_origin_must_match_page_region_and_receipt(self):
         origin={'key':self.key,'figure':0,'receipt_sha256':'f'*64}
         recipe=Recipe.create('visual','1',settings={'model':{},'region_origin':origin})
-        with patch('archive_research.visual_features.model_path',return_value=None):
+        with patch('archive_research.extractors.visual_features.model_path',return_value=None):
             with self.assertRaisesRegex(ValueError,'Layout origin'):
                 validate_inputs(self.roots,'artifacts',{'page':asdict(self.page)},recipe)
 

@@ -2,7 +2,7 @@ import copy
 import json
 import unittest
 import test_research_layout as fixtures
-from archive_research.caption_regions import caption_tasks
+from archive_research.extractors.caption_regions import caption_tasks
 from archive_research.runner import extract_one
 
 

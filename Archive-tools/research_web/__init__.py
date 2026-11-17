@@ -1,1 +1,1 @@
-"""Isolated, synthetic-only WF research browser."""
+"""Legacy module paths forward to archive_research.web; install the project first."""

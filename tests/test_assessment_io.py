@@ -4,12 +4,12 @@ import hashlib
 import json
 import unittest
 from unittest.mock import Mock,MagicMock
-from archive_research.assessment_http import submit_once,NoRedirect
+from archive_research.assessment.http import submit_once,NoRedirect
 
 import test_research_evidence as fixtures
-from archive_research.assessment_io import prepare_request,validate_response
+from archive_research.assessment.io import prepare_request,validate_response
 from archive_research.contracts import encoded
-from research_routes import research_profiles
+from archive_research.profiles import research_profiles
 
 
 class AssessmentIOTests(unittest.TestCase):
@@ -99,7 +99,7 @@ class AssessmentIOTests(unittest.TestCase):
         self.assertFalse(value['metadata_adopted'])
 
     def test_codex_disabled_host_notice_allowed_only_before_turn(self):
-        from archive_research.assessment_codex import DISABLED_HOST_NOTICE
+        from archive_research.assessment.codex import DISABLED_HOST_NOTICE
         response=self.codex_response()
         notice={'type':'item.completed','item':{'type':'error','message':DISABLED_HOST_NOTICE}}
         response['events'].insert(0,notice)
@@ -121,9 +121,9 @@ class AssessmentIOTests(unittest.TestCase):
                 validate_response(response,self.packet,self.receipt)
 
     def test_codex_rejects_unauthorized_request_before_launch(self):
-        from archive_research.assessment_codex import submit_once as codex_submit
+        from archive_research.assessment.codex import submit_once as codex_submit
         from unittest.mock import patch
-        with patch('archive_research.assessment_codex.subprocess.run') as run:
+        with patch('archive_research.assessment.codex.subprocess.run') as run:
             with self.assertRaises(ValueError):
                 codex_submit(self.request,self.receipt,authorized_request_sha256='0'*64,
                              executable='/unused',root=self.fixture.base,prefix='unused')

@@ -1,3 +1,4 @@
+# Compatibility requirements; canonical optional dependencies are in pyproject.toml.
 Django==5.2.19
 asgiref==3.13.0
 sqlparse==0.6.1

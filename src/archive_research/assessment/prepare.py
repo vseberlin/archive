@@ -3,9 +3,9 @@ from dataclasses import asdict
 import hashlib
 import json
 
-from .contracts import Result, encoded, require
-from .evidence import evidence_image, refresh_packet
-from .storage import target
+from ..contracts import Result, encoded, require
+from ..evidence import evidence_image, refresh_packet
+from ..storage import target
 
 
 INSTRUCTIONS = """Assess the supplied archive evidence as research proposals for curator review.

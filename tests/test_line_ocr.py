@@ -8,9 +8,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from archive_research import Artifact,Page,Root,Roots,Source,Transform
-from archive_research.line_ocr import extract,model_paths,recipe_for,settings_for
+from archive_research.extractors.line_ocr import extract,model_paths,recipe_for,settings_for
 from archive_research.runner import extract_one
 
 
@@ -59,7 +58,7 @@ class LineTests(unittest.TestCase):
         self.assertNotEqual(key,recipe_for(task).cache_key(self.page))
 
     def test_receipt_keeps_engine_outputs_and_no_automatic_coverage_claim(self):
-        with patch('cv2.dnn_TextRecognitionModel',self.fake),patch('archive_research.ocr.extract',return_value=(b'<alto/>',[])):
+        with patch('cv2.dnn_TextRecognitionModel',self.fake),patch('archive_research.extractors.ocr.extract',return_value=(b'<alto/>',[])):
             _,words,result,crops=extract(self.image,self.page,Transform(400,100,(1,0,0,0,1,0)),self.roots,
                                          settings_for(self.task),self.output,'a'*64)
         self.assertEqual(result['coverage']['mode'],'manual_lines');self.assertFalse(result['coverage']['scan_complete'])
@@ -70,7 +69,7 @@ class LineTests(unittest.TestCase):
         self.assertEqual(variants[0]['transform']['to_source'],variants[1]['transform']['to_source'])
 
     def test_cache_reuse_checks_model_and_preserves_prior_receipt(self):
-        with patch('cv2.dnn_TextRecognitionModel',self.fake),patch('archive_research.ocr.extract',return_value=(b'<alto/>',[])):
+        with patch('cv2.dnn_TextRecognitionModel',self.fake),patch('archive_research.extractors.ocr.extract',return_value=(b'<alto/>',[])):
             first=extract_one(self.roots,'artifacts',self.task)
         self.assertEqual(first['state'],'partial');p=self.output/(first['key']+'.json');before=p.read_bytes()
         second=extract_one(self.roots,'artifacts',self.task);self.assertTrue(second['reused'])

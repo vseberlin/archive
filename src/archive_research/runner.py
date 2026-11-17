@@ -17,7 +17,7 @@ from .sources import Roots
 from . import storage
 
 # Explicit adapters keep feature implementations out of the page runner.
-FEATURE_ADAPTERS = {'visual': 'visual_features', 'pdf-layout': 'layout', 'scan-layout': 'scan_layout'}
+FEATURE_ADAPTERS = {'visual': 'extractors.visual_features', 'pdf-layout': 'extractors.layout', 'scan-layout': 'extractors.scan_layout'}
 
 
 def page_from_record(value):
@@ -37,11 +37,11 @@ def recipe_for(task):
     if extractor in FEATURE_ADAPTERS:
         return importlib.import_module('.'+FEATURE_ADAPTERS[extractor], __package__).recipe_for(task)
     if extractor == 'line-ocr':
-        from .line_ocr import recipe_for as line_recipe
+        from .extractors.line_ocr import recipe_for as line_recipe
         return line_recipe(task)
     if extractor == 'text-regions':
         require(task.get('region') is None, 'Text discovery scans the complete selected page')
-        from .text_regions import recipe_for as discovery_recipe
+        from .extractors.text_regions import recipe_for as discovery_recipe
         return discovery_recipe(task)
     require(extractor in ('pdf-text', 'ocr'), 'Unknown extractor')
     require(not task.get('region') or extractor == 'ocr', 'Region extraction currently requires OCR')
@@ -100,10 +100,10 @@ def extract_one(roots, work, task):
                 adapter = importlib.import_module('.'+FEATURE_ADAPTERS[task['extractor']], __package__)
                 adapter.validate_inputs(roots, work, task, recipe)
             if task['extractor']=='ocr' and 'caption_origin' in task.get('settings',{}):
-                from .caption_regions import validate_inputs
+                from .extractors.caption_regions import validate_inputs
                 validate_inputs(roots,work,task,recipe)
             if task['extractor'] == 'line-ocr':
-                from .line_ocr import model_paths
+                from .extractors.line_ocr import model_paths
                 model_paths(roots, recipe.record()['parameters']['settings'])
             if task['extractor'] == 'text-regions':
                 model = Artifact(**recipe.record()['parameters']['settings']['model'])
@@ -119,30 +119,30 @@ def extract_one(roots, work, task):
                 image, transform, rotation = render(roots, page, Path(temporary), dpi=settings['dpi'],
                                                      clockwise=settings['clockwise'], region=region)
                 if task['extractor'] == 'visual':
-                    from .visual_features import extract
+                    from .extractors.visual_features import extract
                     raw, feature = extract(image, roots, recipe)
                     words = []; suffix, kind = '.visual.json', 'normalized-visual-embedding'
                     note = 'Local visual features for retrieval; no identification or OCR claim.'
                 elif task['extractor'] == 'scan-layout':
-                    from .scan_layout import extract
+                    from .extractors.scan_layout import extract
                     raw, words, feature, extra_artifacts = extract(image,page,transform,roots,settings,Path(temporary),key,work)
                     suffix, kind = '.layout.json', 'scan-figure-and-caption-candidates'
                     note = 'Scanned-page figure candidates and reused OCR; semantic coverage remains incomplete.'
                 elif task['extractor'] == 'pdf-layout':
-                    from .layout import extract
+                    from .extractors.layout import extract
                     raw, words, feature, extra_artifacts = extract(image,page,transform,roots,settings,Path(temporary),key)
                     suffix, kind = '.layout.json', 'pdf-figure-and-caption-candidates'
                     note = 'Embedded raster placements and nearby text; full-page scans/vector figures need further segmentation.'
                 elif task['extractor'] == 'pdf-text':
-                    from .pdf_text import extract
+                    from .extractors.pdf_text import extract
                     raw, words = extract(roots, page)
                     suffix, kind = '.bbox.xhtml', 'native-or-embedded-pdf-text'
                     note = 'Native or pre-existing embedded PDF text; its original OCR provenance may be unknown.'
                 elif task['extractor'] in ('text-regions', 'line-ocr'):
                     if task['extractor'] == 'line-ocr':
-                        from .line_ocr import extract
+                        from .extractors.line_ocr import extract
                     else:
-                        from .text_regions import extract
+                        from .extractors.text_regions import extract
                     try:
                         raw, words, discovery, extra_artifacts = extract(
                             image, page, transform, roots, settings, Path(temporary), key)
@@ -156,7 +156,7 @@ def extract_one(roots, work, task):
                         for variant in candidate['variants']:
                             variant.pop('raw_alto', None)  # Full raw output remains in .regions.json.
                 else:
-                    from .ocr import extract
+                    from .extractors.ocr import extract
                     raw, words = extract(image, page, transform, languages=settings['languages'],
                                          psm=settings['psm'], timeout=settings['timeout'],
                                          **({'thresholding_method':settings['thresholding_method']}

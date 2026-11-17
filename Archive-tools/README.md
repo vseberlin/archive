@@ -1,5 +1,13 @@
 # Archive tools
 
+Research code now lives in the installed `iss-archive-research` package; see the
+[application guide](../src/archive_research/README.md). Install it in the interpreter
+used for these retained tools as well: shared helpers and research routes forward
+to that canonical implementation. Older commands below retain their scope; they
+are not an instruction to rerun completed jobs. The new workflow uses
+`archive-research`, without adding this directory to its Python path.
+
+
 Source lives in `/home/vladimir/archive-local/source/Archive-tools` on `archive/scripts`.
 The old `/home/vladimir/Archive-tools` compatibility link has been retired.
 Use this real source directory directly. Runtime data remains under

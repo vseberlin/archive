@@ -8,11 +8,10 @@ import unittest
 from unittest.mock import patch
 import zlib
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from archive_research import Root,Roots,Source
 from archive_research.preparation import inspect_page
 from archive_research.runner import extract_one
-from archive_research.layout import text_blocks,caption_candidates
+from archive_research.extractors.layout import text_blocks,caption_candidates
 
 
 def raster_pdf(rotation=0,full_page=False,mirror=False):

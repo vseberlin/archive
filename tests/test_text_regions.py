@@ -8,9 +8,8 @@ import unittest
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
-sys.path.insert(0,str(ROOT/'src'))
 from archive_research import Artifact,Page,Root,Roots,Source,Transform
-from archive_research.text_regions import (compose,extract,merge_candidates,recognition_status,
+from archive_research.extractors.text_regions import (compose,extract,merge_candidates,recognition_status,
                                           rectified_crop,settings_for,tile_windows,unrotate_point,
                                           enhance_crop,ENHANCEMENTS,recipe_for)
 
@@ -79,7 +78,7 @@ class ExtractionTests(unittest.TestCase):
         return extract(self.image,self.page,self.transform,self.roots,self.settings,self.output,'a'*64,self.detector)
 
     def test_unreadable_and_budget_omitted_candidates_survive(self):
-        with patch('archive_research.ocr.extract',return_value=(b'<alto/>',[])):
+        with patch('archive_research.extractors.ocr.extract',return_value=(b'<alto/>',[])):
             raw,words,result,crops=self.run_extract()
         self.assertFalse(words)
         self.assertTrue(any(r['status']=='unreadable' for r in result['regions']))
@@ -108,7 +107,7 @@ class ExtractionTests(unittest.TestCase):
         self.assertFalse(result['coverage']['scan_complete'])
 
     def test_recognizer_failure_retains_detected_region_and_crop(self):
-        with patch('archive_research.ocr.extract',side_effect=RuntimeError('unavailable recognizer')):
+        with patch('archive_research.extractors.ocr.extract',side_effect=RuntimeError('unavailable recognizer')):
             _,words,result,crops=self.run_extract()
         self.assertFalse(words);self.assertTrue(crops)
         self.assertEqual(result['regions'][0]['status'],'recognition_failed')
@@ -152,7 +151,7 @@ class ExtractionTests(unittest.TestCase):
 
     def test_each_enhancement_has_bound_preview_and_separate_reading(self):
         self.settings['enhancements']=['original','levels','unsharp']
-        with patch('archive_research.ocr.extract',return_value=(b'<alto/>',[])):
+        with patch('archive_research.extractors.ocr.extract',return_value=(b'<alto/>',[])):
             _,_,result,crops=self.run_extract()
         region=result['regions'][0]
         self.assertEqual(result['coverage']['expected_variants_per_region'],3)

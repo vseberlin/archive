@@ -30,23 +30,29 @@ artifacts.
 
 ## Dependency Direction
 
-`src/archive_research/` is the new stage-2 standard-library boundary for explicit
-sources, pages, recipes, results and machine roots. Its
-[API guide](../../src/archive_research/README.md) owns use and limits.
-`archive_research.visual.preview` wraps an explicitly supplied existing renderer;
-it does not import the legacy tools, Django or numerical libraries. Existing
-photo CLIs do not depend on this package yet, and retain their original outputs.
-The bounded positioned-extraction slice adds separate `units`, `preparation`,
-`pdf_text`, `ocr`, `geometry`, `runner` and `storage` modules. Existing catalogue
-and manifest mappings supply selected members; no Master selection is introduced.
-One manual per-page runner writes readable derived receipts under explicit work
-roots. Optional Pillow/Poppler/Tesseract are used only during processing.
-The existing Django pilot reads receipts through `research_web.extraction` for
-page search, source regions and existing visual leads. It adds no database/table,
-daemon, review authority or automatic extraction inside HTTP requests.
+`src/archive_research/` owns the active installed research application. Its
+[application guide](../../src/archive_research/README.md) describes commands and
+module ownership. Dependency direction is CLI/web → shared application operations
+→ contracts, storage, extractors and retrieval. HTTP reads prepared outputs;
+processing and external submission are explicit CLI operations.
 
-This is the intended direction for small shared extractions, not a description
-of all current imports. The retained `archive_core/`, `interfaces/`, and
+| Owner | Responsibility |
+| --- | --- |
+| `cli.py`, `config.py`, `pipeline.py` | One command, existing configuration and bounded orchestration |
+| `extractors/`, `runner.py` | Optional extraction adapters and isolated resumable tasks |
+| `retrieval.py`, `evidence.py`, `profiles.py`, `sift.py` | Local cross-references and source-bound evidence |
+| `assessment/` | Request preparation, explicit transport and validated proposals |
+| `web/` | Installed Django workbench and templates; existing app/table identities |
+| `Archive-tools/research_*.py`, `Archive-tools/research_web/` | Compatibility forwarding paths |
+
+Core imports remain lightweight; optional libraries load for selected operations.
+No active package module imports `Archive-tools`. Installed CLI workers and web
+commands run outside the checkout without path injection. Existing source IDs,
+readable receipts, configuration files and review authority remain unchanged.
+`archive_research.visual.preview` still supports an explicitly supplied legacy
+renderer for callers that need that separate historical interface.
+
+The following older structure applies only to retained tools. The retained `archive_core/`, `interfaces/`, and
 `workflows/` directories below are legacy code, not a target package layout.
 
 ```text

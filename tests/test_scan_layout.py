@@ -8,12 +8,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from archive_research import Root,Roots,Source
 from archive_research.preparation import inspect_page
 from archive_research.runner import extract_one
-from archive_research.scan_layout import detect, ocr_layout
-from archive_research.layout import visual_tasks
+from archive_research.extractors.scan_layout import detect, ocr_layout
+from archive_research.extractors.layout import visual_tasks
 
 
 class ScanLayoutTests(unittest.TestCase):

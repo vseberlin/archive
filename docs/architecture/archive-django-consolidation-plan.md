@@ -269,34 +269,42 @@ source bindings during this documentation change.
 
 ## Package and extractor contract
 
-Use normal Python packaging and explicit imports. The delivered stage-2 layout is:
+The user approved consolidation into one installed application on 17 November
+2026. Its implementation now lives under `src/archive_research`, installed by
+`pyproject.toml` with the `archive-research` command:
 
 ```text
-pyproject.toml
 src/archive_research/
-    contracts.py
-    sources.py
-    visual.py      opt-in wrapper around the existing preview callable
-    README.md      API/configuration and acceptance limits
-tests/              bounded behavior and contract fixtures
+    cli.py, config.py, pipeline.py
+    contracts.py, sources.py, storage.py, units.py
+    extractors/       OCR, text regions, PDF/scan layout, visual features
+    runner.py         isolated selected-task workers and resumable receipts
+    retrieval.py, evidence.py, profiles.py, sift.py
+    assessment/       request preparation, transports and validation
+    web/              Django application, templates and synthetic fixtures
+tests/                contracts and installed application behavior
 ```
 
-The package has no runtime dependencies. Setuptools is build-only; an offline
-wheel build used the already installed tool in the visual environment without
-installing or changing anything. Core imports work without site packages.
-The result contract preserves source identity, separate member/page/frame order,
-coordinate units, optional affine transforms, per-extractor settings and outcomes.
-Recipe keys include source/page/region/transform/settings; no processing cache
-or resume mechanism is implemented yet. The legacy preview's inverse transform
-is unknown and source highlighting is withheld rather than inferred.
+CLI and HTTP adapters share package operations. The bounded `run` command can
+extract, index, search and prepare a packet/request; it never submits externally.
+HTTP consumes prepared artifacts. Legacy research script paths and old import
+names forward to canonical implementations. The active package imports no legacy
+tools and needs no checkout-specific `PYTHONPATH`. Reconciliation/accession and
+completed unit jobs stay in their existing scopes.
 
-Add a small explicit extractor registry and separate runner/processor modules only
-when the bounded trial needs them. No unit-manifest adapter or new processing
-framework is implied by this package. Keep extraction independent of Django and HTTP.
-Existing CLIs can become thin entry points during transition, with unchanged
-public formats where consumers depend on them. Import optional/heavy libraries
-only for the selected extractor. Preserve pinned environments and CPU constraints;
-no generic plugin framework, daemon, queue service or new database server is needed.
+Core imports have no third-party runtime dependency. Optional web/image/vision/
+embedding requirements are declared in `pyproject.toml`; heavy libraries load
+only for selected operations. Existing pinned environments and local model files
+are preserved. A normal wheel includes templates and invented fixture data.
+The Django app label stays `research_web`, preserving existing SQLite table and
+permission identities. No schema migration or new service/database is introduced.
+
+The runner records progress after each isolated task, reuses matching completed
+receipts and rejects changed bindings. Existing source/page/result schemas,
+output formats, review authority and explicit root constraints are unchanged.
+See the [application guide](../../src/archive_research/README.md) for commands
+and dependency boundaries. This packaging step does not qualify new operating
+systems, archive-wide processing or extraction accuracy.
 
 Each extractor declares its input kind, implementation/model version, settings,
 dependencies and output kind. A result must identify:

@@ -73,3 +73,6 @@ tools/archive-preservation/copyhash
 
 # Explicitly approved public benchmark measurements (no raw archive data)
 !/docs/reference-v12-building-benchmark-20261114.json
+
+# Invented, versioned fixture data required by the installed application.
+!/src/archive_research/web/fixture.json

@@ -1,0 +1,278 @@
+[
+  {
+    "synthetic": true,
+    "items": [
+      {
+        "key": "photo",
+        "kind": "photograph",
+        "description": "Apparatus on a bench; no legible serial number"
+      },
+      {
+        "key": "report-C",
+        "kind": "report",
+        "description": "Illustrated test report"
+      },
+      {
+        "key": "patent-D",
+        "kind": "patent",
+        "description": "A potentially related circuit invention"
+      }
+    ],
+    "representations": [
+      {
+        "item_key": "photo",
+        "candidate_id": "full",
+        "root": "sample",
+        "path": "photo.tiff",
+        "binding": "fixture:photo-v1"
+      },
+      {
+        "item_key": "report-C",
+        "root": "sample",
+        "path": "report.pdf",
+        "binding": "fixture:report-v1"
+      },
+      {
+        "item_key": "patent-D",
+        "root": "sample",
+        "path": "patent.pdf",
+        "binding": "fixture:patent-v1"
+      }
+    ],
+    "citations": [
+      {
+        "key": "photo-view",
+        "item_key": "photo",
+        "representation_binding": "fixture:photo-v1",
+        "page_sequence": 1,
+        "printed_page_label": null,
+        "region_xywh": [
+          0.1,
+          0.1,
+          0.8,
+          0.8
+        ],
+        "observation": "Three controls in a row; no legible maker or serial number"
+      },
+      {
+        "key": "report-figure",
+        "item_key": "report-C",
+        "representation_binding": "fixture:report-v1",
+        "page_sequence": 14,
+        "printed_page_label": "12",
+        "figure": "3",
+        "region_xywh": [
+          0.1,
+          0.2,
+          0.7,
+          0.5
+        ],
+        "transcription": "Type B apparatus, test arrangement",
+        "transcription_method": "manual, synthetic"
+      },
+      {
+        "key": "patent-passage",
+        "item_key": "patent-D",
+        "representation_binding": "fixture:patent-v1",
+        "page_sequence": 2,
+        "printed_page_label": "2",
+        "passage_label": "claim 1",
+        "region_xywh": [
+          0.1,
+          0.3,
+          0.8,
+          0.2
+        ],
+        "transcription": "Circuit arrangement with three controls",
+        "transcription_method": "manual, synthetic"
+      }
+    ],
+    "source_records": [
+      {
+        "key": "report-local",
+        "describes": "report-C",
+        "origin": "local report",
+        "derived_from": null
+      },
+      {
+        "key": "report-republication",
+        "describes": "report-C",
+        "origin": "catalogue republication",
+        "derived_from": "report-local"
+      }
+    ]
+  },
+  [
+    {
+      "key": "photo-type",
+      "revision": 0,
+      "subject": "photo",
+      "relation": "depicts_type",
+      "value": "Type B",
+      "scope": "product type, not individual apparatus",
+      "citation_keys": [
+        "photo-view",
+        "report-figure"
+      ],
+      "uncertainty": "tentative visual correspondence",
+      "review": "unreviewed",
+      "reviewer": null,
+      "reviewed_at": null,
+      "supersedes_revision": null,
+      "reason": "Candidate from comparison",
+      "metadata_adopted": false
+    },
+    {
+      "key": "alternative-type",
+      "revision": 0,
+      "subject": "photo",
+      "relation": "depicts_type",
+      "value": "Type X",
+      "scope": "product type, not individual apparatus",
+      "citation_keys": [
+        "photo-view",
+        "report-figure"
+      ],
+      "uncertainty": "alternative hypothesis",
+      "review": "unreviewed",
+      "reviewer": null,
+      "reviewed_at": null,
+      "supersedes_revision": null,
+      "reason": "Alternative candidate",
+      "metadata_adopted": false
+    },
+    {
+      "key": "type-patent",
+      "revision": 0,
+      "subject": "Type B",
+      "relation": "possibly_implements_invention_described_by",
+      "value": "patent-D",
+      "scope": "technical relation, not proof of manufacture or use",
+      "citation_keys": [
+        "report-figure",
+        "patent-passage"
+      ],
+      "uncertainty": "documentary link missing",
+      "review": "unreviewed",
+      "reviewer": null,
+      "reviewed_at": null,
+      "supersedes_revision": null,
+      "reason": "Similar arrangement only",
+      "metadata_adopted": false
+    }
+  ],
+  [
+    {
+      "key": "photo-type",
+      "revision": 1,
+      "subject": "photo",
+      "relation": "depicts_type",
+      "value": "Type B",
+      "scope": "product type, not individual apparatus",
+      "citation_keys": [
+        "photo-view",
+        "report-figure"
+      ],
+      "uncertainty": "serial number and individual identity unresolved",
+      "review": "accepted",
+      "reviewer": "Synthetic reviewer",
+      "reviewed_at": "2026-11-14T12:00:00Z",
+      "supersedes_revision": 0,
+      "reason": "Control layout agrees with the report figure",
+      "metadata_adopted": false
+    },
+    {
+      "key": "alternative-type",
+      "revision": 1,
+      "subject": "photo",
+      "relation": "depicts_type",
+      "value": "Type X",
+      "scope": "product type, not individual apparatus",
+      "citation_keys": [
+        "photo-view",
+        "report-figure"
+      ],
+      "uncertainty": "rejected only for these bound views",
+      "review": "rejected",
+      "reviewer": "Synthetic reviewer",
+      "reviewed_at": "2026-11-14T12:01:00Z",
+      "supersedes_revision": 0,
+      "reason": "Type X's proposed control layout conflicts with the photographed layout",
+      "metadata_adopted": false
+    },
+    {
+      "key": "type-patent",
+      "revision": 1,
+      "subject": "Type B",
+      "relation": "possibly_implements_invention_described_by",
+      "value": "patent-D",
+      "scope": "technical relation, not proof of manufacture or use",
+      "citation_keys": [
+        "report-figure",
+        "patent-passage"
+      ],
+      "uncertainty": "documentary link missing",
+      "review": "unresolved",
+      "reviewer": "Synthetic reviewer",
+      "reviewed_at": "2026-11-14T12:02:00Z",
+      "supersedes_revision": 0,
+      "reason": "The report does not cite the patent; similar controls are insufficient",
+      "metadata_adopted": false
+    }
+  ],
+  {
+    "key": "photo-type",
+    "revision": 2,
+    "subject": "photo",
+    "relation": "depicts_type",
+    "value": "B family; variant unresolved",
+    "scope": "product family, not exact variant or individual apparatus",
+    "citation_keys": [
+      "photo-view",
+      "report-figure"
+    ],
+    "uncertainty": "variant, serial number and individual identity unresolved",
+    "review": "accepted",
+    "reviewer": "Synthetic reviewer",
+    "reviewed_at": "2026-11-14T12:10:00Z",
+    "supersedes_revision": 1,
+    "reason": "Figure 3 supports the family only; earlier wording was too specific",
+    "metadata_adopted": false
+  },
+  {
+    "synthetic": true,
+    "purpose": "research review only",
+    "metadata_adopted": false,
+    "accession_authorized": false,
+    "deletion_authorized": false,
+    "evidence_member": "evidence.json",
+    "assertion_history_member": "assertions.jsonl",
+    "current": [
+      {
+        "key": "photo-type",
+        "revision": 2,
+        "review": "accepted"
+      },
+      {
+        "key": "alternative-type",
+        "revision": 1,
+        "review": "rejected"
+      },
+      {
+        "key": "type-patent",
+        "revision": 1,
+        "review": "unresolved"
+      }
+    ],
+    "included": [
+      "readable evidence and citation records",
+      "all assertion revisions and reasons"
+    ],
+    "omitted": [
+      "source images and PDFs",
+      "credentials",
+      "disposable OCR and browsing indexes"
+    ],
+    "citation_access": "requires separately permitted source files and verified root mapping"
+  }
+]

@@ -1,21 +1,65 @@
-# Archive research boundary
+# Archive research application
 
-The [consolidation plan](../../docs/architecture/archive-django-consolidation-plan.md)
-now has a shared boundary and a bounded page extraction runner.
-The source layout is `src/archive_research`; `pyproject.toml` packages only this
-namespace. Python 3.11 or newer is required. Runtime imports use only the standard
-library; processing explicitly invokes existing Pillow, Poppler and Tesseract.
-Optional text-region discovery additionally loads an explicit PP-OCRv3 model
-through a separately qualified OpenCV/NumPy environment.
-Optional visual features use the existing pinned CPU OpenCLIP environment and
-explicit local safetensors. PDF layout uses installed Poppler; no PyMuPDF dependency
-was added. Heavy processing libraries are imported only inside their adapters.
-Setuptools is a build-time dependency. Nothing runs on import.
+One installed Python application owns local extraction, cross-unit retrieval,
+evidence packets, assessment and the Django workbench. The
+[consolidation plan](../../docs/architecture/archive-django-consolidation-plan.md)
+owns scope; private project/machine configuration selects existing data and roots.
 
-From the source checkout, use `PYTHONPATH="$PWD/src"` to import the package.
-An installed wheel exposes the same API without adding the legacy tools to the
-environment. Existing photo/research commands keep their original entry points,
-dependencies, output formats and caches.
+```text
+src/archive_research/
+    cli.py, __main__.py     archive-research / python -m archive_research
+    config.py              project, machine and extraction-root configuration
+    pipeline.py            shared extract → index → search → packet operations
+    contracts.py, sources.py, storage.py, units.py
+    extractors/            OCR, PDF text, regions, layout, visual features
+    preparation.py, geometry.py, runner.py
+    retrieval.py, evidence.py, profiles.py, sift.py
+    assessment/            request preparation, transports, response validation
+    web/                   Django views, models, templates and synthetic fixture
+```
+
+Python 3.11+ and setuptools are required for installation. From the repository,
+install into the selected environment with `python -m pip install .`; an offline
+installation with dependencies already available uses
+`python -m pip install --no-deps --no-build-isolation .`. The console command works
+from any directory, without `PYTHONPATH` or imports from `Archive-tools`.
+
+Optional dependencies are declared in `pyproject.toml`: `.[web]`, `.[images]`,
+`.[vision]`, `.[embeddings]`. The pinned CPU torch wheels need the matching PyTorch
+CPU wheel index; installing this project does not download model weights.
+Existing qualified environments can install the package alone with `--no-deps`.
+Poppler and Tesseract remain explicitly invoked system executables. Local model
+paths are required for optional OpenCLIP/text-region adapters. Core imports and
+CLI help use only the standard library; heavy dependencies load on demand.
+
+The CLI and workbench call the same application modules. HTTP reads prepared
+receipts and never launches extraction or submits model requests. Old package
+imports and `Archive-tools/research_{packet,retrieve,assessment}.py` remain thin
+forwarders; reconciliation/accession and completed unit jobs retain their own
+legacy entry points. New research implementation belongs here.
+
+## One bounded workflow
+
+```sh
+archive-research run --roots /approved/trial/roots.toml \
+  --retrieval-selection /approved/trial/retrieval-selection.json \
+  --packet-selection /approved/trial/packet-selection.json \
+  --output-prefix selected-research --sift
+```
+
+Add `--plan /approved/trial/plan.json` to run selected extraction tasks first;
+omit it to reuse existing receipts. Add `--model MODEL` to prepare a local model
+request. `run` never submits externally. Its output prefix must be unused, and
+selected sources and receipts are rechecked at every stage. Individual commands
+are `extract`, `index`, `search`, `packet`, `assess` and `web`; each has `--help`.
+`retrieve` retains the earlier combined index/search interface.
+
+Processing commands accept `--roots`, or `--project` and `--machine` to resolve
+`extraction_roots` from the existing project configuration. `assess` takes explicit
+`--roots`; `web` uses project/machine configuration. Environment variables
+`ARCHIVE_RESEARCH_PROJECT` and `ARCHIVE_RESEARCH_MACHINE` select those same files.
+No new registry, metadata authority, database or service is introduced.
+See the [workbench guide](web/README.md) for installed launch and review commands.
 
 ## Explicit roots
 
@@ -111,8 +155,8 @@ No source data or review record is written by these APIs.
 `archive_research.visual.preview` takes an explicit `renderer` callable. For the
 existing tool, use `visual_research.make_preview` and its `VERSION`, with actual
 Pillow/vips versions. The source checkout caller can import that module by also
-including `Archive-tools` on its Python path. The core wheel does not install the
-legacy tool, Pillow, vips, numerical libraries or Django.
+including `Archive-tools` on its Python path. The wheel includes the web application but does not install the legacy tool;
+Pillow, numerical libraries and Django are optional dependencies, and vips is external.
 
 ```python
 from archive_research.visual import preview
@@ -155,10 +199,10 @@ and an explicit `tasks` list. Each task contains a unique `id`, a serialized
 `clockwise`, `languages`, `psm`, `timeout`. No recursive discovery is performed.
 
 ```sh
-PYTHONPATH="$PWD/src" python3 -B -m archive_research \
-  --roots /approved/trial/roots.toml --plan /approved/trial/plan.json run --limit 2
-PYTHONPATH="$PWD/src" python3 -B -m archive_research \
-  --roots /approved/trial/roots.toml --plan /approved/trial/plan.json run
+archive-research extract \
+  --roots /approved/trial/roots.toml --plan /approved/trial/plan.json --limit 2
+archive-research extract \
+  --roots /approved/trial/roots.toml --plan /approved/trial/plan.json
 ```
 
 One manual writer starts one fresh worker per page and records progress after
@@ -168,7 +212,7 @@ refused by workers. Source changes withhold old results without overwriting thei
 receipt. Raw output, processed PNG, word regions, dependency versions, elapsed
 time, peak process/child RSS and retained artifact bytes remain readable files.
 `run-summary.json` is a rebuildable projection, not review authority. Use
-`run --summary another-run.json` for a separate trial without replacing it.
+`extract --summary another-run.json` for a separate trial without replacing it.
 File stamps guard reuse; they are not a new full-content verification claim.
 
 No-text output is `partial`, never proof of a blank page. A successful extractor
@@ -195,7 +239,7 @@ for `pdf-text` is currently refused. Crop receipts contain the selected detail;
 include a separate whole-page evidence view for context. `geometry.processed_region`
 maps a source region into either a whole-page image or a crop for highlighting.
 
-`Archive-tools/research_routes.py` owns the combinable `buildings`, `people`,
+`archive_research.profiles` owns the combinable `buildings`, `people`,
 `equipment` and `tubes` profiles under its existing subject routes. Selection does
 not change route overrides, archival identity or curator decisions. Regions are
 explicit/manual for semantic objects and captions. Optional text-region discovery
@@ -208,7 +252,7 @@ into an existing work root. No network, model request, database change or export
 permission is involved:
 
 ```sh
-python3 -B Archive-tools/research_packet.py \
+archive-research packet \
   --roots /approved/trial/roots.toml \
   --selection /approved/trial/selection.json --output local-packet.json \
   --prompt-output local-assessment-draft.json
@@ -299,7 +343,7 @@ figure crops, candidate text and omissions are retained in flat work artifacts.
 tasks from a verified layout receipt. The originating receipt digest, figure position
 and source region are bound into the recipe and checked before cache reuse.
 
-`Archive-tools/research_retrieve.py` accepts a selection containing `keys`,
+`archive-research retrieve` accepts a selection containing `keys`,
 `visual_queries`, `text_queries` and `limit`. It writes a flat JSON index and search
 results under the existing artifact root. Both include coverage and unavailable
 evidence. Visual comparison excludes the same archival object and isolates model
@@ -308,7 +352,7 @@ visual leads using the existing geometric comparator. Scores and geometry never
 adopt identity, dates, captions or metadata.
 
 ```sh
-PYTHONPATH=src python3 -B Archive-tools/research_retrieve.py \
+archive-research retrieve \
   --roots /approved/trial/roots.toml --selection /approved/trial/retrieval.json \
   --index-output local-index.json --output local-leads.json --sift
 ```
@@ -475,9 +519,9 @@ transmission and preserves raw responses; a timeout is an unknown outcome, never
 permission to retry. No secret is written to records.
 
 ```sh
-python -B Archive-tools/research_assessment.py --roots ROOTS --packet PACKET.json \
+archive-research assess --roots ROOTS --packet PACKET.json \
   --output TRANSPORT.json prepare --model MODEL --request-output REQUEST.json
-python -B Archive-tools/research_assessment.py --roots ROOTS --packet PACKET.json \
+archive-research assess --roots ROOTS --packet PACKET.json \
   --output ASSESSMENT.json validate --response RESPONSE.json --transport TRANSPORT.json
 ```
 
