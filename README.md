@@ -20,7 +20,7 @@ results, accounts and runtime databases live outside the repository.
   agreed direction, delivered work and remaining limitations.
 - [Tool map](docs/architecture/archive-application-structure.md): active, retained
   and unit-specific code.
-- [Project instructions](AGENTS.md) and [archive contract](docs/architecture/archive-preservation-architecture-adr.md):
+- [Archive contract](docs/architecture/archive-preservation-architecture-adr.md):
   source protection, authority and permitted operations.
 
 ## Repository layout
@@ -190,31 +190,32 @@ intentional source/documentation assets. One resolved archival object has one
 selected Master; derivatives belong to authorized accession. Marking another
 copy redundant does not authorize deletion.
 
-On the maintained workstation, the source checkout is
-`/home/vladimir/archive-local/source`, branch `archive/scripts` → GitHub `main`.
-The private hub `/home/vladimir/archive-local/README.md` owns runtime/data locations;
-`/home/vladimir/archive-local/HANDOFF.md` is the sole current checkpoint. Private
-runtime stays outside this source tree. Historical paths and completed scripts
-are not launch instructions. A source publication does not deploy services or
-change archive data. See [continuity](docs/architecture/archive-continuity.md).
+Machine paths, mount identities, private runtime locations and current operating
+state belong in local configuration and an untracked handoff. Public documentation
+uses repository-relative source paths and illustrative `/path/to/...` inputs.
+`AGENTS.md` is local operator guidance and is intentionally excluded from Git.
+A source publication does not deploy services or change archive data. See
+[continuity](docs/architecture/archive-continuity.md).
 
 ## Guarded Git workflow
 
 [tools/repo-guard.py](tools/repo-guard.py) selects this repository from its own
 location, independent of the caller's working directory. It uses standard-library
-Python and system Git; it has no website or runtime dependency.
+Python and system Git; it has no website or runtime dependency. The guard is
+deployment-bound, not a generic bootstrap for arbitrary clones. Check local
+operator instructions before use. Run these commands from the approved checkout:
 
 ```sh
-python3 /home/vladimir/archive-local/source/tools/repo-guard.py install
-python3 /home/vladimir/archive-local/source/tools/repo-guard.py check
-python3 /home/vladimir/archive-local/source/tools/repo-guard.py status
-python3 /home/vladimir/archive-local/source/tools/repo-guard.py stage path/to/reviewed-file.py
-python3 /home/vladimir/archive-local/source/tools/repo-guard.py commit "Describe the reviewed change"
-python3 /home/vladimir/archive-local/source/tools/repo-guard.py sync
-python3 /home/vladimir/archive-local/source/tools/repo-guard.py push
+python3 tools/repo-guard.py install
+python3 tools/repo-guard.py check
+python3 tools/repo-guard.py status
+python3 tools/repo-guard.py stage path/to/reviewed-file.py
+python3 tools/repo-guard.py commit "Describe the reviewed change"
+python3 tools/repo-guard.py sync
+python3 tools/repo-guard.py push
 ```
 
-The policy binds the canonical root's `.git`, branch `archive/scripts`, and the
+The deployment policy binds the approved checkout's `.git`, configured branch, and the
 effective fetch/push URLs for `vseberlin/archive`. Another clone, detached/unexpected
 branch, Git environment redirection, custom `core.hooksPath` (even empty), changed
 remote, or unfinished Git operation is refused before mutation. A legitimate future
@@ -252,5 +253,5 @@ Destructive recovery requires explicit scope; never use hook bypass as a workaro
 Run the isolated regression checks with:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/tests/archive-preservation/test_repo_guard.py -q
+python3 -B tests/archive-preservation/test_repo_guard.py -q
 ```

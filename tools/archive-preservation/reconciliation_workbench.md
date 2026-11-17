@@ -23,7 +23,7 @@ From the repository root, choose a **new or empty** temporary demo directory:
 
 ```sh
 python3 tools/archive-preservation/reconciliation_workbench.py \
-  --demo --work-root /tmp/archive-reconciliation-demo --actor 'Your name'
+  --demo --work-root /path/to/new-demo --actor 'Your name'
 ```
 
 The command creates only synthetic images, a two-page PDF and an input manifest
@@ -45,7 +45,7 @@ entrypoint against the retained work root as needed.
 
 Run against an approved existing work area, never an accession/archive/source
 root. Do not run two different workbench implementations as writers to the
-same unit. Read the central `/home/vladimir/archive-local/HANDOFF.md` and the
+same unit. Read the private handoff and the
 unit's completion/review notes and receipts before mapping it.
 
 ```sh
@@ -155,7 +155,7 @@ Minimal example (use actual prepared stamps, not these placeholder numbers):
   "format": "archive-reconciliation-1",
   "title": "Named unit",
   "read_only": false,
-  "read_roots": ["/media/vladimir/Elements"],
+  "read_roots": ["/path/to/protected-source"],
   "completion_receipts": ["/absolute/existing/unit/publication.json"],
   "objects": [{
     "id": "existing-object-key",
@@ -170,7 +170,7 @@ Minimal example (use actual prepared stamps, not these placeholder numbers):
       "role": "candidate",
       "evidence": "Existing preparation established complete scope",
       "members": [{
-        "path": "/media/vladimir/Elements/exact/source.tif",
+        "path": "/path/to/protected-source/exact/source.tif",
         "size_bytes": 123456,
         "mtime_ns": 1234567890000000000,
         "pages": 1
@@ -264,7 +264,9 @@ discrepancy explicitly rather than silently rebinding an accepted decision.
 Source previews are decoded in memory, with bounded render concurrency and
 a small cache keyed by recorded file stamps. Preview IDs resolve only to
 prepared members under approved roots. Symlink sources/outputs are refused.
-Elements access requires exactly `/dev/sdf1 /media/vladimir/Elements ntfs3 ro`.
+Protected-media access requires the exact deployment-specific device, mount,
+filesystem and read-only options. Consult private operator instructions; these
+source protection checks are unchanged by the illustrative paths above.
 No source hash is recomputed for browsing. Loopback binding, Host/Origin checks,
 a per-process request token and bounded JSON protect decision requests.
 
@@ -285,4 +287,4 @@ restriction is not a reason to disable its assertions.
 
 Live collection integration remains a separate verification against the unit's
 existing evidence, handoff, receipt paths, prior choices and representation rules.
-This implementation does not deploy to `/mnt/volume` or retire older interfaces.
+This implementation does not deploy a runtime or retire older interfaces.

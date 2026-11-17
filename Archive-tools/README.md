@@ -8,12 +8,11 @@ are not an instruction to rerun completed jobs. The new workflow uses
 `archive-research`, without adding this directory to its Python path.
 
 
-Source lives in `/home/vladimir/archive-local/source/Archive-tools` on `archive/scripts`.
-The old `/home/vladimir/Archive-tools` compatibility link has been retired.
-Use this real source directory directly. Runtime data remains under
-`/mnt/volume/iss-archive-work`; the sole private checkpoint is
-`/home/vladimir/archive-local/HANDOFF.md`. Read it when resuming this job if its
-state is missing or changed; reuse unchanged guidance after compaction.
+Maintained source is in `Archive-tools/` in this repository. Keep runtime data
+and current operator notes outside Git. Read the private handoff when resuming a
+job if its state is missing or changed; reuse unchanged guidance after compaction.
+Examples below run from the checkout root unless a `cd` command says otherwise.
+All `/path/to/...` arguments are placeholders for explicitly selected locations.
 
 Six independent tools for archive reconciliation and maintenance, starting with
 the workbench. `workbench.py` and the folder-to-collection preparation command
@@ -23,16 +22,16 @@ workbench uses prepared evidence and the shared meanings below.
 ## Run the workbench
 
 Requires Python 3.11+ on Linux and Pillow for image previews. PDF previews and
-embedded text use Poppler (`pdftoppm`, `pdftotext`). These are already installed
-on this workstation. No package installation, database, or background service
-is required.
+embedded text use Poppler (`pdftoppm`, `pdftotext`). Verify these dependencies
+in the selected environment before use. No database or background service
+is required for the retained workbench.
 
 Start a synthetic demonstration in a **new or empty** work directory:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/workbench.py \
-  --demo --work-root /mnt/volume/iss-archive-work/archive-tools-demo \
-  --actor Vladimir
+python3 -B Archive-tools/workbench.py \
+  --demo --work-root /path/to/new-demo \
+  --actor "Your name"
 ```
 
 Open <http://127.0.0.1:8782/>. Stop with Ctrl-C. Subsequent starts use the same
@@ -44,8 +43,8 @@ pHash distance is an illustration, not a computed result.
 For a prepared collection, point `--work-root` at its existing review directory:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/workbench.py \
-  --work-root /absolute/path/to/review-work-area --actor Vladimir
+python3 -B Archive-tools/workbench.py \
+  --work-root /absolute/path/to/review-work-area --actor "Your name"
 ```
 
 Use A/B selectors, linked zoom and pan, overlay, or difference view to inspect
@@ -155,19 +154,19 @@ Repeat `--source` and `--archive` as needed. Overlapping inspected folders are
 deduplicated by canonical path. Default source and Master formats include both
 TIFF and JPEG. `--against` remains an alias for `--archive`.
 
-This example compares Avantmedia with both TFA and Kurt Schwarz and reuses both
-previous preparations. Use a **new** work directory:
+This example compares one source collection with two archive units and reuses
+two previous preparations. Use a **new** work directory:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/search.py \
-  --source /media/vladimir/Elements/restore/archive/Avantmedia \
-  --archive /mnt/volume/iss-archive/units/tfa \
-  --archive /mnt/volume/iss-archive/units/kurt-schwarz \
-  --prior-review /mnt/volume/iss-archive-work/avantmedia-305-review \
-  --prior-review /mnt/volume/iss-archive-work/avantmedia-tfa-review \
-  --index /home/vladimir/archive-local/indexes/visual/visual-index.sqlite \
-  --czkawka /mnt/volume/iss-archive-work/kurt-schwarz/work/tools/czkawka_cli-12.0.1 \
-  --work-root /mnt/volume/iss-archive-work/avantmedia-multiunit-review \
+python3 -B Archive-tools/search.py \
+  --source /path/to/source-collection \
+  --archive /path/to/archive-unit-a \
+  --archive /path/to/archive-unit-b \
+  --prior-review /path/to/prior-review-a \
+  --prior-review /path/to/prior-review-b \
+  --index /path/to/visual-index.sqlite \
+  --czkawka /path/to/czkawka_cli \
+  --work-root /path/to/new-review \
   --threads 2
 ```
 
@@ -188,8 +187,8 @@ Reuse earlier preparations only through `--prior-review` in a new work root.
 Inspect these files when you return:
 
 ```sh
-cat /mnt/volume/iss-archive-work/avantmedia-multiunit-review/preparation-run.json
-tail -n 20 /mnt/volume/iss-archive-work/avantmedia-multiunit-review/preparation.log
+cat /path/to/new-review/preparation-run.json
+tail -n 20 /path/to/new-review/preparation.log
 ```
 
 `preparation-run.json` records the command, PID, start/finish times, state and
@@ -215,16 +214,17 @@ references even when their completion receipts lock their original workbenches.
 Reviewing proposals never unlocks or modifies those units.
 
 Preparation requires Python 3.11+, Pillow and ExifTool. The visual index and
-Czkawka are optional; missing search coverage remains visible. Elements must be
-mounted exactly as `/dev/sdf1 /media/vladimir/Elements ntfs3 ro`. Commands check
-this condition and never mount or remount media.
+Czkawka are optional; missing search coverage remains visible. Protected media
+must match the deployment guard's exact device, mount target, filesystem and
+read-only options. Consult private operator instructions for those values.
+Commands verify them and never mount or remount media.
 
 Open the resulting review:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/workbench.py \
-  --work-root /mnt/volume/iss-archive-work/avantmedia-multiunit-review \
-  --actor Vladimir --port 8784
+python3 -B Archive-tools/workbench.py \
+  --work-root /path/to/new-review \
+  --actor "Your name" --port 8784
 ```
 
 Use filters for similarities, proposed new objects, metadata questions and
@@ -307,7 +307,7 @@ Add these flags to the preparation command to run the requested combination:
   --czkawka-scope unconfirmed
 ```
 
-Alternatively use `--czkawka-profile /home/vladimir/archive-local/source/Archive-tools/czkawka-profile.example.json`.
+Alternatively use `--czkawka-profile Archive-tools/czkawka-profile.example.json`.
 Copy that source-only example into your job's work area to keep project-specific
 settings. Repeated `--czkawka-pass` flags replace the profile's visual-pass list;
 individual CLI options override the corresponding JSON settings. The example
@@ -393,14 +393,14 @@ any configured Czkawka comparisons and full-resolution pixel coverage. It does n
 that those methods never suggested. Use `--czkawka-scope unconfirmed` if current
 tentative leads should also receive the configured Czkawka discovery passes.
 
-Run with the installed SIFT environment instead of system Python:
+With the selected SIFT environment activated, run from the checkout root:
 
 ```sh
-/mnt/volume/iss-archive-work/archive-tools-venv/bin/python -B \
-  /home/vladimir/archive-local/source/Archive-tools/search.py --help
+python -B \
+  Archive-tools/search.py --help
 ```
 
-Use that executable with the usual source/archive/work-root options and add
+Use that environment with the usual source/archive/work-root options and add
 `--sift --background` for independent execution. The background worker preserves
 the selected Python interpreter. SIFT is opt-in and requires OpenCV. The default
 full-resolution coverage check also runs without SIFT and does not use OpenCV.
@@ -412,8 +412,8 @@ actual feature extraction and matching. To reproduce this environment, install
 the requirements into the existing virtual environment:
 
 ```sh
-/mnt/volume/iss-archive-work/archive-tools-venv/bin/python -m pip install \
-  --only-binary=:all: -r /home/vladimir/archive-local/source/Archive-tools/requirements-sift.txt
+python -m pip install \
+  --only-binary=:all: -r Archive-tools/requirements-sift.txt
 ```
 
 SIFT reads primary images/composites at up to 1600 pixels on the longest edge,
@@ -477,10 +477,10 @@ remain in review. The known SimpleViewer `sandstone.jpg` asset is excluded from
 the collection review. These links record the user's assumption, not pixel proof.
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/avantmedia_derivatives.py \
-  --prior-review /mnt/volume/iss-archive-work/avantmedia-multiunit-review-tightened-20261103 \
-  --source /media/vladimir/Elements/restore/archive/Avantmedia \
-  --work-root /mnt/volume/iss-archive-work/avantmedia-master-review-20261103
+python3 -B Archive-tools/avantmedia_derivatives.py \
+  --prior-review /path/to/prior-review \
+  --source /path/to/source-collection \
+  --work-root /path/to/new-master-review
 ```
 
 This reads existing evidence and current file stamps without image comparisons.
@@ -648,7 +648,7 @@ The CSV includes explicit retained-Master links and rejected-pair IDs.
 Validate a prepared work area without writing:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/workbench.py --work-root /path/to/review --check
+python3 -B Archive-tools/workbench.py --work-root /path/to/review --check
 ```
 
 Exit status is 0 for valid, available inputs, 1 for unavailable/stale source
@@ -656,7 +656,7 @@ files, and 2 for invalid input or execution errors. Missing/outdated CSV is
 reported separately and can be repaired without reading its old schema:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/workbench.py --work-root /path/to/review --rebuild-csv
+python3 -B Archive-tools/workbench.py --work-root /path/to/review --rebuild-csv
 ```
 
 Edits use a revision check and local file lock. File size and modification time
@@ -680,15 +680,16 @@ completeness, quality, or byte equality.
 ## Verification
 
 ```sh
-cd /home/vladimir/archive-local/source/Archive-tools
+cd Archive-tools
 python3 -B -m unittest -v test_workbench test_search test_contract test_czkawka_config
 node --check workbench.js
 ```
 
-For all tests including actual SIFT extraction and background execution:
+For all tests including actual SIFT extraction and background execution, activate
+the qualified processing environment and stay in `Archive-tools/`:
 
 ```sh
-/mnt/volume/iss-archive-work/archive-tools-venv/bin/python -B -m unittest -v \
+python -B -m unittest -v \
   test_workbench test_search test_contract test_czkawka_config test_sift test_pixel_coverage test_preparation_guards
 ```
 
@@ -804,11 +805,10 @@ list; full findings remain in the original research record.
 Current runner: `reference_batch.py` (v12). The older runner under
 `work-area/visual-similarity` is retained history. The versioned
 `berlin-photo-reference-sources.json` contains the 19-source website registry;
-the workstation default is now
-`/home/vladimir/archive-local/berlin-photo-reference-sources.json` (outside Git);
-use `--registry /home/vladimir/archive-local/source/Archive-tools/berlin-photo-reference-sources.json`
-explicitly to select it. Existing plans still require their frozen script and
-registry hashes; historical snapshots retain their original paths.
+the retained CLI has a workstation-specific default outside Git. From the
+checkout root, pass `--registry Archive-tools/berlin-photo-reference-sources.json`
+to select the public registry explicitly. Existing plans still require their
+frozen script and registry hashes; historical snapshots retain their bindings.
 
 v8 preserves an explicitly discovered `image_url` alongside its `page_url`.
 Article images retain captions, gallery context and observed resolution links;

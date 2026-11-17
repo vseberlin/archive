@@ -1,9 +1,9 @@
 # Retained local transcription scripts
 
 These existing manual batch scripts moved here on 16 November 2026. No batch
-was resumed. The private workspace is `/home/vladimir/archive-local/transcripts`;
-it contains URL lists, audio, outputs, completion markers and logs. Machine text
-remains unverified research material, not an adopted transcript or exact quotation.
+was resumed. A separately configured private workspace contains URL lists,
+audio, outputs, completion markers and logs. Machine text remains unverified
+research material, not an adopted transcript or exact quotation.
 
 | Script | Existing engine and inputs |
 | --- | --- |
@@ -16,16 +16,17 @@ run them together. Review existing logs and outputs before explicitly starting
 another batch; relocation does not reconcile their historical model provenance.
 
 All scripts accept `ISS_TRANSCRIPTS_DIR` as an environment override. The shell
-scripts also accept `WHISPER_CPP_HOME`, defaulting to
-`$HOME/.local/opt/whisper.cpp`. Their executable/model paths are independent of
-the caller's working directory. `yt-dlp` remains an external shell dependency;
+scripts also accept `WHISPER_CPP_HOME`. Set these variables explicitly for the
+approved data and engine locations instead of relying on workstation defaults.
+Their executable/model paths are independent of the caller's working directory.
+`yt-dlp` remains an external shell dependency;
 the Python script requires a Python Whisper environment. The workstation's default
 `python3` had no `whisper` module at relocation; this is a pre-existing runtime
 limitation, and no dependency was installed during cleanup.
 
-whisper.cpp is an independent upstream checkout under `.local/opt`, with existing
-models. It is separate from the website's optional container transcription
+whisper.cpp is a separately configured upstream checkout with existing models.
+It is separate from the website's optional container transcription
 experiment. Source relocation does not install Python packages or download models.
 
-Full original scripts, data and build are recoverable from
-`/mnt/volume/sites-backup/home-cleanup-20261116/workspaces-before-relocation.tar`.
+Original scripts, data and builds are retained privately; the local recovery map
+owns their locations.

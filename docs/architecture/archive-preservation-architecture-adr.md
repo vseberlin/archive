@@ -13,13 +13,13 @@ not a banking, forensic, or adversarial-security system.
 
 ## Authority
 
-`/home/vladimir/archive-local/source/AGENTS.md` is the archive agent entrypoint. This document is
+The untracked local `AGENTS.md` is the archive agent entrypoint. This document is
 the detailed, repo-owned workflow contract for agents that need more context.
 If this document, older ADRs, local memories, downloaded drafts, or a tool
 README conflict with `AGENTS.md`, follow `AGENTS.md` and treat the other source
 as historical evidence until it is corrected.
 
-The shared documentation and harness repository is `/home/vladimir/archive-local/source`.
+This repository owns shared documentation and harnesses.
 Archive policy belongs under `docs/`; reusable harness routing belongs in
 `docs/architecture/archive-application-structure.md`; tool entrypoint notes
 belong in `tools/archive-preservation/README.md`.
@@ -27,7 +27,7 @@ belong in `tools/archive-preservation/README.md`.
 ## Isolated WF research pilot exception
 
 On 15 November 2026 the user explicitly approved the bounded exception in
-[root AGENTS.md](../../AGENTS.md) and the
+local operator instructions and the
 [WF pilot scope](archive-research-pilot-scope.md). It permits the isolated Django
 ORM/authentication/admin, pinned environment and one rebuildable SQLite research
 projection at the listed locations. The first implementation uses synthetic
@@ -44,10 +44,10 @@ Process one project or archival unit, referred to below as `PROJECT_X`.
 The workflow is linear:
 
 1. discover and match candidates;
-2. gather evidence under `iss-archive-work`;
+2. gather evidence under the explicitly approved work root;
 3. let a human select exactly one Master per resolved object;
 4. record all other candidates as redundant without deletion authority;
-5. prepare one approved accession output under `iss-archive`;
+5. prepare one approved accession output under the designated archive root;
 6. generate derivatives during accession;
 7. write final hashes, SQLite catalogue data, and human-readable manifests.
 
@@ -165,7 +165,7 @@ require duplicate preservation packages or historical file generations.
 
 ## 2. Work Evidence And Metadata Enrichment
 
-Use one work area for `PROJECT_X` under `iss-archive-work`. Sources are
+Use one work area for `PROJECT_X` under the approved work root. Sources are
 evidence:
 
 - never modify source files;
@@ -379,7 +379,7 @@ Archive reports and receipts belong with the run under the approved work root.
 Do not copy every command, check, intermediate count, or corrected row into
 root continuity documents.
 
-- `/home/vladimir/archive-local/HANDOFF.md` is the sole archive checkpoint,
+- The private handoff is the sole archive checkpoint,
   at most 900 words: current state, risks, protected boundaries and next action.
   Follow [continuity and selective loading](archive-continuity.md); unit receipts
   and historical notes remain evidence, not additional current handoffs.

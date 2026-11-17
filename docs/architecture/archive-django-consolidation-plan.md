@@ -4,39 +4,16 @@ Created: 14 November 2026. Current checkpoint: 17 November 2026.
 
 ## Continuity consolidation — 16 November 2026
 
-The central hub now owns the sole private checkpoint at
-`/home/vladimir/archive-local/HANDOFF.md`. It is capped at 900 words;
-historical evidence and unit notes remain private beside their work.
-See [continuity](archive-continuity.md). This supersedes earlier handoff
-locations below and does not start the extraction or migration phase.
+One private checkpoint owns current operating state and is capped at 900 words.
+Historical evidence and unit notes remain private beside their work. See
+[continuity](archive-continuity.md).
 
-## Home consolidation completed — 15 November 2026
-
-Following the planning checkpoint, the user approved consolidating the archive
-working folders into `/home/vladimir/archive-local`. Source now lives at
-`/home/vladimir/archive-local/source`; the private pilot and recreated environment
-are in `research-pilot/`; visual/restoration indexes are under `indexes/`.
-Earlier home-based preservation/provenance work and loose databases are retained
-under `retained/`, with no disposal classification. On 16 November, the separately
-approved home cleanup relocated the large inactive Paragon recovery tree into a
-verified volume tar bundle; referenced `archive-core-v2-preservation` and active
-pilot/index state remain local. This is retention relocation, not the planned
-runtime or extraction migration. The hub KEEP README owns current locations.
-The KEEP README and private
-migration receipt in that home root record the exact locations. Historical source
-paths in evidence and receipts were preserved. Accessioned holdings, protected
-USB originals and volume-based work remain in place.
-
-This is the approved home-layout change, not implementation of the extraction
-pipeline or the later volume consolidation. Existing code/index consumers,
-inactive service definitions, routing and current operating documentation now
-use the real new paths. Old home aliases and home-facing navigation symlinks were
-removed. No indexing or shutdown service was started; new bulk work still requires
-adequate free space. The private handoff records validation and current runtime.
-
-Necessary Linux runtime remains on home ext4 in this single folder. The
-portability TODO below remains binding: NTFS quirks must not become a permanent
-blocker. Retained environments and old work are not authorized cleanup targets.
+The approved workspace consolidation is complete. Source, private runtime and
+retained recovery material have distinct owners; their exact locations and dated
+migration receipts belong in the private location guide. This did not authorize
+bulk extraction, disposal, accession or further runtime migration. Public planning
+documents retain architectural constraints and acceptance criteria, not the
+workstation directory map.
 
 ## Current agreed direction and checkpoint
 
@@ -56,7 +33,7 @@ The following paragraphs retain the earlier bounded implementation history.
 The user requested this consolidated plan and a local commit before starting
 new changes, then authorized the stage-1 tools/source/consumer/storage audit on
 16 November, followed by the next package/configuration slice. That bounded audit is complete; the
-[private report](/mnt/volume/iss-archive-work/tools-inventory-20261116.md) records
+private inventory report, located through the handoff, records
 coverage, unresolved mappings, storage estimates and verification limits. The
 [tool map](archive-application-structure.md#extraction-and-support-inventory--16-november-2026)
 owns reusable routing. Stage 2 now delivers the standard-library
@@ -66,7 +43,7 @@ for the existing visual preview function; see its
 authorization delivered a bounded stage-3/4 implementation: explicit selected
 members, positioned native PDF text and ALTO OCR, per-page resume, and workbench
 page search/retained image leads. The private
-[trial report](/mnt/volume/iss-archive-work/positioned-extraction-trial-20261116/report.md)
+trial report, located through the handoff,
 records 13 tasks, measured resources, static alignment checks and remaining
 acceptance limits. Explicit private project configuration connects the trial;
 one manual loopback pilot runs. No broad indexing, migration, dependency
@@ -99,23 +76,21 @@ symlinks back to scattered old directories.
 
 **Portability is an explicit requirement. NTFS-specific limitations must not
 become a permanent product or deployment blocker.** Retaining necessary Linux
-runtime components in `~` is a temporary workstation accommodation, not an
-architectural dependency on this user's home directory or on NTFS.
+runtime components on a qualified filesystem is a deployment choice, not an
+architectural dependency on a user home directory or on NTFS.
 
 ## Observed baseline for the next phase
 
-The 16 November audit supersedes the older storage observations below: home
-has substantial free space after cleanup and the required Elements mount is
-absent. The later trial starts one manual pilot; consult the handoff for current
-socket ownership. The private report contains fresh
-catalogue/index counts and the proposed current-root map. All 14 unit catalogues
-and their named mapping tables were inventoried; exact PDF/TIFF alignment, full
-payload readability, complete page/frame counts and destination runtime properties
-remain unproven. Keep these limits separate from completion of the inventory.
+The 16 November audit supersedes earlier storage observations. The private report
+contains dated capacity, mount and process checks, catalogue/index counts and
+source mappings. Recheck them before operations. All 14 unit catalogues and their
+named mapping tables were inventoried; exact PDF/TIFF alignment, full payload
+readability, complete page/frame counts and destination runtime properties remain
+unproven. Keep these limits separate from completion of the inventory.
 
 Read-only inspection on 15 November 2026 found:
 
-- Fourteen units under `/mnt/volume/iss-archive/units`, with heterogeneous
+- Fourteen accessioned units, with heterogeneous
   catalogues, ordered Master representations, derivative and provenance records.
   Existing mappings are inputs; completeness across every unit is not yet audited.
 - `work-area/document-index/document_index.py` matches its current runtime copy.
@@ -136,52 +111,27 @@ Read-only inspection on 15 November 2026 found:
   bounding-box extraction. No new model availability or accuracy is assumed.
 - Visual code already records some extractor versions and processing recipes;
   multiple entry points and differing contracts remain to be reconciled.
-- `/home` is ext4, about 99% used with 1.9 GB available. `/mnt/volume` is currently
-  NTFS/FUSE with about 4.5 TB available. Source is about 32 MB; the home visual
-  index is about 312 MB, legacy restoration directory 1.2 GB and pilot 142 MB.
-  These are observations, not cleanup targets or a complete disk-use census.
-  The document index already occupies about 6.3 GB on the volume.
-- `/mnt/volume/archive-system` is currently a navigation/setup repository whose
-  links do not relocate their targets. Mount device names have changed between
-  observations; operational checks must use verified identity, not a stale note.
+- Storage qualification was incomplete. Capacity, mount identity and compatibility
+  observations belong in private operational evidence and must be rechecked before
+  a move. A navigation link does not relocate its target or qualify its storage.
 
 ## Storage now, consolidation later
 
-For now retain the canonical source checkout
-`/home/vladimir/archive-local/source` and the necessary Linux-sensitive runtime
-in its consolidated private home location:
-Python environments/executables, private credentials/configuration and the live
-pilot account/session database and review records. The subsequent authorized home
-move is recorded above; further volume migration remains separate from the
-extraction work. No blanket exemption permits
-unbounded new model downloads, renders or OCR output into home.
+Keep one maintained source checkout and explicitly configured private locations
+for environments, credentials, account/session data and review records. Further
+migration is separate from extraction work; this plan does not authorize cleanup
+or unbounded model downloads, renders or OCR output.
 
-Future bulky indexes, extraction artifacts, models, renders and temporary
-processing output should use explicitly configured volume locations after a
-bounded destination/space check. Existing volume-backed work stays where it is
-until its consumers are mapped. A temporary split must be visible in one machine
-configuration; tools must not silently fall back to `~` if a configured volume
-is absent, full or unsuitable. Runtime output is always excluded from Git.
+Bulky indexes, extraction artifacts, models and temporary output require a bounded
+destination and free-space check. Map existing consumers before moving their data.
+Machine configuration must distinguish authoritative records, rebuildable indexes,
+disposable caches and environments. It must not silently select a different
+location when configured storage is absent, full or unsuitable. Runtime output is
+excluded from Git; exact directory choices belong in private configuration.
 
-Long-term intended real layout beneath `/mnt/volume/archive-system`:
-
-```text
-source/        the actual maintained Git checkout, if/when relocated
-work/          readable research records and operational receipts (handoff: archive-local)
-indexes/       rebuildable document, visual and provenance projections
-artifacts/     reusable OCR, regions/crops and extraction results
-cache/         disposable renders and model caches
-environments/  recreated compatible runtimes
-config/        private machine configuration and named source-root mappings
-```
-
-This is a proposed destination, not directories to create now. The eventual
-source remains one repository with its history, not a second editable clone or
-a nested duplicate authority. Update the current setup repository's ownership
-and navigation documentation when that move is actually undertaken.
-Accessioned holdings already live at `/mnt/volume/iss-archive`; relocating those
-units is a separate, explicitly scoped operation because evidence uses their
-paths. Protected Elements sources remain read-only and outside workspace moves.
+The source remains one repository with its history. Moving accessioned holdings
+requires separate scope because evidence refers to those sources. Protected source
+media remain read-only and outside workspace moves.
 
 Qualify storage before moving active runtimes: effective access protection
 (0700/0600 checks for the current Linux deployment, native effective-access
@@ -559,7 +509,7 @@ explicitly established; portable software is distinct from redistributable data.
   Bibliothek's four selected files (12 PDF pages and one JPEG). The combined
   91-task run has 53 text-bearing, 36 no-text partial and two deliberate synthetic
   failure results. Other units are outside that run. The private
-  [follow-up report](/mnt/volume/iss-archive-work/positioned-extraction-trial-20261116/followup-report.md)
+  follow-up report (located through the handoff)
   records coverage/quality limits and a measured 6-second snapshot-read cost;
   address repeated mount/receipt-read overhead before materially larger search.
   The 17 November continuation reuses this bounded corpus in a 138-receipt
@@ -640,8 +590,8 @@ introducing commit:
 | [face_index.py](../../work-area/visual-similarity/face_index.py) | `232ac46dcd1ebb2af3e724c1abcefffce90c3089` | Retained standalone draft; imports sibling `visual_knn` |
 | [visual_knn.py](../../work-area/visual-similarity/visual_knn.py) | `f4a37ad5756870627ef04ca9dd11f7fb35668965` | Retained catalogue-image visual retrieval draft |
 
-The recoverable Git objects remain in the private pre-reset Git directory
-`/home/vladimir/archive-local/retained/archive-source-git-before-reset-20261116T125433Z`.
+The recoverable Git objects remain in a private retained Git directory, located
+through the private recovery map.
 The table records the original recovered blobs. Subsequent integration moves visual
 retrieval/voting into `archive_research.reference` and `reference_catalogue`; the
 old visual script forwards there. The retained face draft now uses shared safe
@@ -906,8 +856,8 @@ reselection, accession, publication or new service follows from this step.
 ## Earlier pilot proposal and delivery history
 
 Status: Revised after the consolidated WF proposal and its review. The user
-authorised this plan update, a handoff reference, and a local project home at
-`/mnt/volume/archive-system`. Application implementation, dependency installation,
+authorised this plan update, a handoff reference, and a private project home.
+Application implementation, dependency installation,
 runtime migration, and changes to catalogue authority remained proposed at that
 stage. On 15 November the user approved the scoped exception and first synthetic
 setup; local login and read-only comparison were implemented and verified. The
@@ -986,30 +936,19 @@ The research application owns evidence and proposal review; the existing archive
 workflow retains accession and catalogue authority. This is an explicit scope
 extension beyond the present reconciliation screen, not only a framework swap.
 
-## One local project home
+## Private deployment configuration
 
-The current project home is `/home/vladimir/archive-local`; its README owns
-locations. The maintained source checkout is `source/`, and the sole private
-checkpoint is `/home/vladimir/archive-local/HANDOFF.md`. This plan remains in the
-source checkout's canonical docs directory; do not maintain a second editable
-plan copy. Future experiments use only the paths approved for their scope.
+The private location guide owns operating paths and the sole current handoff.
+This plan remains in the source checkout; do not maintain a second editable plan.
+Historical setup material and design inputs remain evidence, not launch instructions
+or governing policy. Private indexes, research records and credentials stay outside
+Git. Future experiments use only locations approved for their scope.
 
-The initial `/mnt/volume/archive-system` setup repository, its `workspace.toml`,
-supplied design references and ignored local experiments are retained history.
-That initial setup used `/home/vladimir/archive` as source and
-`/mnt/volume/iss-archive-work/HANDOFF.md` as its checkpoint. Those are historical
-paths, not current launch instructions. Architectural DOCX inputs remain design
-evidence, not governing policy. Private indexes, records and credentials remain
-outside the source Git repository.
-
-The initial setup recorded a device name for `/mnt/volume` using NTFS/FUSE;
-that name is historical. Verify the currently mounted filesystem and device.
-Do not assume it is suitable for a moved virtual environment or application
-database. Record environment locations and validate filesystem locking, atomic
-replacement, and executable requirements before deployment. Recreate Python
-environments from dependency specifications on a compatible filesystem rather
-than copying installed environments. The workspace itself is workstation
-configuration; it is not the portable research project format described below.
+Before deployment, verify the actual mounted filesystem, access permissions,
+locking, atomic replacement and executable requirements. Recreate Python
+environments from dependency specifications on qualified storage rather than
+copying installed environments. Workstation configuration is separate from the
+portable research project format described below.
 
 ## Evidence and current structure
 
@@ -1024,7 +963,7 @@ every script:
 | `Archive-tools/workbench.py` and its HTML/JS/CSS | Candidate comparison, decisions, reviewed proposals | Separate decision/storage logic from HTTP handling without changing semantics. |
 | `Archive-tools/visual_research.py`, `visual_evaluation.py` | Embeddings, neighbours, controlled evaluation | Research currently imports `Workbench`; expose a smaller shared read interface. |
 | `Archive-tools/reference_batch.py` | Bounded external research and evidence assessment | The 2,122-line runner combines fetching, parsing, image preparation, model calls, and orchestration. |
-| `Archive-tools/research_routes.py` and source registry | Subject routing and source configuration | The workstation default is `archive-local/berlin-photo-reference-sources.json`; `--registry` selects an explicit alternative. Preserve existing frozen-plan hashes. |
+| `Archive-tools/research_routes.py` and source registry | Subject routing and source configuration | Use `--registry` to select an explicit registry; workstation defaults are private configuration. Preserve existing frozen-plan hashes. |
 | `tools/archive-preservation/`, `work-area/` | Shared compatibility tools and collection-specific history | Distinguish maintained entry points from completed jobs before selecting anything for reuse. |
 
 The root README and maintained application structure document now identify the
@@ -1437,9 +1376,9 @@ verified replacement path for the superseded interface.
 
 ## References
 
-- [Archive instructions](../../AGENTS.md), [workflow contract](archive-preservation-architecture-adr.md), and [application structure](archive-application-structure.md).
-- [Current tools](../../Archive-tools/README.md) and [current research entry point](../../README.md#current-photo-research-source).
-- Supplied document: *WF research workbench architecture and migration plan*, consolidated 14 November 2026; principal input for this revision. Retained in the local project home's `references/wf_research_workbench_consolidated.docx`.
+- Local operator instructions, [workflow contract](archive-preservation-architecture-adr.md), and [application structure](archive-application-structure.md).
+- [Current tools](../../Archive-tools/README.md) and [current research entry point](../../README.md#research-workflow).
+- Supplied document: *WF research workbench architecture and migration plan*, consolidated 14 November 2026; principal input for this revision. Retained privately and located through the local evidence guide.
 - Earlier supplied document: *Image recognition and metadata enrichment — Architecture proposal for an archive research workbench*, 14 November 2026. Retained as design history, not governing policy.
 - [Django admin](https://docs.djangoproject.com/en/6.0/ref/contrib/admin/): automatic model-based administration and guidance on custom process-oriented views.
 - [Django databases](https://docs.djangoproject.com/en/6.0/ref/databases/): SQLite support and concurrency limitations.

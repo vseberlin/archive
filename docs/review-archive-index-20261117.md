@@ -24,7 +24,7 @@ Fixing these is cheaper than the extraction run, and they decide whether the run
 `origin/main` and `origin/archive/scripts` have **no common ancestor**. Your local `archive/scripts` now tracks `vseberlin/archive:main` (AGENTS.md on `main` says so), so the remote `archive/scripts` branch is an orphaned old line.
 
 - Since 14 November my review commits (`2b0598a`, `2564e37`) went to that orphaned branch. `main` has the earlier three reviews but not the 64be40c review or the local-index design note.
-- The two copies of `Archive-tools/reference_batch.py` differ only in `DEFAULT_REGISTRY` (`~/Downloads/…` vs `~/archive-local/…`).
+- The two copies of `Archive-tools/reference_batch.py` differ only in `DEFAULT_REGISTRY` (different workstation-local defaults).
 - Done 17 November: the two files unique to that branch (`docs/review-64be40c.md`, `work-area/visual-similarity/REFERENCE_BATCH_REVIEW_64be40c.md`) were ported to `main` with this report, and the remote `archive/scripts` branch was deleted at the user's request. Every other file differing between the branches was older on `archive/scripts` (path updates only). Its last commit was `2564e37`.
 
 ## 1. Attached review findings, verified
@@ -45,7 +45,7 @@ The attached review's "What future changes should cost" table and its benchmark 
 
 ## 2. Where I disagree or rate differently
 
-- **Cache key binds mtime, path, root and role: I rate this release-blocking; the attached review lists it under "additional limitations".** Probe on `contracts.Recipe.cache_key`: changing mtime, path, root name, `original_path`, `role` or filling in `sha256` later each changes the key. Your plan includes moving to `/mnt/volume/archive-system`, and accession embeds TIFF metadata, which rewrites master bytes with identical pixels. Every one of these orphans every receipt. This is the most direct cause of "re-run next week". Fix: key on existing identity (unit, object, representation, member, page/frame) plus content hash; keep mtime and size only as change detection.
+- **Cache key binds mtime, path, root and role: I rate this release-blocking; the attached review lists it under "additional limitations".** Probe on `contracts.Recipe.cache_key`: changing mtime, path, root name, `original_path`, `role` or filling in `sha256` later each changes the key. Your plan includes moving to another configured workspace, and accession embeds TIFF metadata, which rewrites master bytes with identical pixels. Every one of these orphans every receipt. This is the most direct cause of "re-run next week". Fix: key on existing identity (unit, object, representation, member, page/frame) plus content hash; keep mtime and size only as change detection.
 - **Benchmark before vectors, not before OCR alone.** Embeddings are cheap to regenerate from retained prepared views; OCR and rendering are the expensive steps. Freeze render and OCR recipes first, treat vectors as disposable projections.
 - **The release condition misses identity and the catalogue layer.** Without them a globally indexed corpus still cannot answer "what else in the archive shows this object or place".
 

@@ -1,6 +1,6 @@
 # Photograph metadata research prompt
 
-Retained research prompt, moved from `~/meta-search.md` on 16 November 2026.
+Retained research prompt, added to the repository on 16 November 2026.
 Apply it only within the requested research scope and current archive instructions.
 It is reference guidance, not a new workflow or permission to adopt metadata.
 

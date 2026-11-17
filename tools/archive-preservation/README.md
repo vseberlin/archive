@@ -5,7 +5,7 @@ legacy compatibility code. It is not the archive policy source.
 
 Current authority:
 
-1. `/home/vladimir/archive-local/source/AGENTS.md` (archive rules; the home-level file only routes workspaces)
+1. Local, untracked `AGENTS.md` (operator instructions for the approved deployment)
 2. `../../docs/architecture/archive-preservation-architecture-adr.md`
 3. `../../docs/architecture/archive-application-structure.md`
 4. unit manifests, receipts, catalogues, and current handoff state
@@ -38,18 +38,21 @@ artifacts as policy.
 | `LEGACY_DO_NOT_EXTEND` | Old package, generation, registry, or broad workbench code. | Do not load for ordinary tasks. Extract only a small proven helper when explicitly needed. |
 | `SUPPORT_INDEX` | Rebuildable technical, visual, metadata, or provenance indexes. | Use read-only where possible. Never treat as archival authority. |
 
-## Active Entrypoints
+## Entrypoints
+
+Paths below are repository-relative source, not runtime locations. Check the
+private handoff and unit receipts before resuming any retained job.
 
 - Consolidated reconciliation interface: `reconciliation_workbench.py`.
   See [input, startup and test instructions](reconciliation_workbench.md).
   Uses prepared evidence and readable decisions; does not deploy or replace
   existing unit workbenches automatically.
 - Avantmedia image and metadata review:
-  `/mnt/volume/iss-archive-work/avantmedia-305-review/workbench.py`
+  `work-area/avantmedia-305-review/workbench.py`
 - TFA remaining image review:
-  `/mnt/volume/iss-archive-work/tfa/work/tools/tfa_workbench.py`
+  `work-area/tfa/work/tools/tfa_workbench.py`
 - Collection 551 review:
-  `/mnt/volume/iss-archive-work/collection-551/collection_551_workbench.py`
+  `work-area/collection-551/collection_551_workbench.py`
 - Paragon source review and drain are completed. Retain their code as evidence;
   consult the unit's current records before any separate catalogue repair.
 - Read-only status audit:
@@ -103,15 +106,18 @@ Every active workbench must be direct and bounded:
 
 ## Before Running Anything
 
-1. Read `/home/vladimir/archive-local/HANDOFF.md` if current archive state matters.
+1. Read the private handoff if current archive state matters.
 2. Identify the unit and bucket from
    `../../docs/architecture/archive-application-structure.md`.
 3. Verify the protected source when in scope:
 
    ```bash
-   findmnt -n -o SOURCE,TARGET,FSTYPE,OPTIONS --target /media/vladimir/Elements
+   # Set from the existing private deployment configuration.
+   ARCHIVE_SOURCE_MOUNT=/path/to/protected-mount
+   findmnt -n -o SOURCE,TARGET,FSTYPE,OPTIONS --target "$ARCHIVE_SOURCE_MOUNT"
    ```
 
-   Required Elements state is `/dev/sdf1 /media/vladimir/Elements ntfs3 ro`.
+   Compare device, target, filesystem and read-only options with the exact local
+   guard requirements. A mounted directory alone is insufficient.
 4. Prefer the unit's own `--check`.
 5. Report what is verified and what remains blocked.

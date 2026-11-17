@@ -1,12 +1,10 @@
 # Industriesalon Video Inventory Workbench
 
 This tool maintains a local discovery projection for reconciling
-the two read-only source repositories:
+two read-only source repositories selected through private configuration:
 
-- `/mnt/data/IS-videos/`: Industriesalon production, editing, source-capture,
-  export, and thumbnail material.
-- `/media/vladimir/Elements/restore/archive/MEDIATHEK-Backup/`: mixed reference
-  and research media. Material here is not publication-cleared by default.
+- Production, editing, source-capture, export and thumbnail material.
+- Mixed reference and research media; publication rights are not implied.
 
 The source repositories are never renamed, moved, deleted, or rewritten by
 this tool. The SQLite database, CSV files, and reports below are not the
@@ -33,25 +31,19 @@ SHA-256 verified, and independently backed up. Rights status and publication
 status are explicit human decisions; filename or repository location never
 grants publication rights.
 
-## Project evidence
+## Project evidence and invocation
 
-See [private project notes](/mnt/volume/iss-archive-work/video-inventory/project-notes.md) for the dated discovery checkpoint.
-Current archive continuation is in `/home/vladimir/archive-local/HANDOFF.md`;
-website delivery uses `/home/vladimir/wp-website/handoff_CURRENT.md`.
+Dated discovery notes, runtime locations and current status belong in the private
+handoff. Website delivery has separate operating records. The maintained source
+is `tools/archive-preservation/video_inventory.py` in this repository.
 
-## Current locations and invocation
-
-- Source: `tools/archive-preservation/video_inventory.py` in this repository.
-- Private database, reports and historical notes:
-  `/mnt/volume/iss-archive-work/video-inventory/`.
-- Default WordPress Compose directory: `/home/vladimir/wp-website`.
-- Override locations with `--workbench` and the `wordpress` subcommand's
-  `--compose-dir`; use `--help` to inspect commands without starting a job.
+Use `--workbench` for an explicit private output directory and the `wordpress`
+subcommand's `--compose-dir` for an explicit Compose project. Legacy defaults are
+deployment-specific; use `--help` without starting a job:
 
 ```sh
 python3 tools/archive-preservation/video_inventory.py --help
 ```
 
-The paused July census was relocated on 16 November 2026, not resumed or
-recensused. Its historical path references remain evidence. Relocation does not
-authorize scanning protected media, merging files, publication or accession.
+Existing census records remain private evidence. Documentation or source changes
+do not authorize scanning protected media, merging files, publication or accession.

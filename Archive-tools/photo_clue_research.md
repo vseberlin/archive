@@ -47,7 +47,7 @@ catalogue metadata. Existing pilot scripts and outputs remain untouched.
 ## Commands and inputs
 
 Use `python3 -B photo_clue_research.py --help`. All output parents must already
-exist under `/mnt/volume/iss-archive-work`; existing output files are refused.
+exist under the approved private work root; existing output files are refused.
 
 The plan is compatible with `openai-reference10-plan.json`: `images` records have
 `number`, `id`, `filename`, `source_path_from_manifest`, `preview_path`, and

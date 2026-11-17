@@ -2,9 +2,9 @@
 
 ## Canonical files
 
-- Central workstation hub: `/home/vladimir/archive-local/README.md`.
-- Sole current private checkpoint: `/home/vladimir/archive-local/HANDOFF.md`.
-- Governing instructions: repository root `AGENTS.md`.
+- Private location guide: maintained locally, outside the source repository.
+- Sole current private checkpoint: an untracked handoff selected by that guide.
+- Local governing instructions: untracked repository-root `AGENTS.md`.
 - Workflow contract: [preservation ADR](archive-preservation-architecture-adr.md).
 - Tool ownership: [application structure](archive-application-structure.md).
 - Research permissions/acceptance: [pilot scope](archive-research-pilot-scope.md).
@@ -14,7 +14,7 @@
 This contract replaces the old work-root/unit-handoff convention. There is no
 second editable checkpoint or compatibility handoff symlink. The home routing
 file chooses archive or website before loading project instructions. The
-website has its own sole checkpoint under `/home/vladimir/wp-website`.
+website has its own checkpoint, separate from archive operations.
 
 ## What belongs where
 
@@ -30,15 +30,16 @@ bindings, case findings, review decisions, unit completion receipts, machine
 configuration and operational history remain outside the source repository.
 Do not publish research evidence merely to shorten a handoff.
 
-The private retained-file map at
-`/home/vladimir/archive-local/retained/continuity-migration-20261116.md` locates
-retired notes. The old session history is
-`/mnt/volume/iss-archive-work/archive-session-history-through-20261115.md`;
-its paths and statements describe their original dates. Existing unit notes and
-receipts remain beside the work they document. Completed units must not become
-active tasks merely because their historical instructions describe a next step.
-Captured backups, release trees, export snapshots and the preserved mixed checkout
-may contain old filenames; they are historical artifacts, never startup inputs.
+Private location maps identify retained notes and session history. Their paths and
+statements describe their original dates. Existing unit notes and receipts remain
+beside the work they document. Completed units must not become active tasks merely
+because historical instructions describe a next step. Captured backups, release
+trees and export snapshots are evidence, never startup inputs.
+
+Public README files and documentation describe repository structure, interfaces,
+formats and reproducible examples. Do not include a workstation's directory map,
+user-home paths, device names, private evidence links or live process details.
+Keep those in local configuration, operator instructions and the private handoff.
 
 ## Startup and compaction
 
@@ -68,8 +69,10 @@ Check changed links, whitespace, the word ceiling and preservation of private
 evidence. A documentation-only cleanup does not require application tests.
 
 ```sh
-wc -w /home/vladimir/archive-local/HANDOFF.md
-test "$(wc -w < /home/vladimir/archive-local/HANDOFF.md)" -le 900
+# Set this to the existing private checkpoint, outside the repository.
+ARCHIVE_HANDOFF=/path/to/private/HANDOFF.md
+wc -w "$ARCHIVE_HANDOFF"
+test "$(wc -w < "$ARCHIVE_HANDOFF")" -le 900
 git diff --check
 ```
 

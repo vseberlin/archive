@@ -158,28 +158,23 @@ identity matching/evaluation commands have not been integrated or run.
 
 `Roots.from_toml(path)` loads a caller-selected machine file. It has no default
 path, environment fallback, implicit home directory or automatic root creation.
-This example describes the root format. The private trial has its own explicit
-roots file and does not write into existing visual outputs:
+This example describes the root format using placeholders. Select existing,
+approved directories; this is not an operational configuration:
 
 ```toml
 [roots.archive]
-path = "/mnt/volume/iss-archive"
+path = "/path/to/archive"
 access = "read"
-mount_target = "/mnt/volume"
 
-[roots.elements]
-path = "/media/vladimir/Elements"
+[roots.source]
+path = "/path/to/protected-source"
 access = "read"
-mount_target = "/media/vladimir/Elements"
-mount_source = "/dev/sdf1"
-mount_fstype = "ntfs3"
-mount_options = ["ro"]
+# Configure mount_target, mount_source, mount_fstype and mount_options
+# from the verified deployment requirements where mount checks are needed.
 
 [roots.artifacts]
-# Select an existing, explicitly approved research output directory.
-path = "/mnt/volume/iss-archive-work/visual-similarity"
+path = "/path/to/research-output"
 access = "work"
-mount_target = "/mnt/volume"
 min_free_bytes = 1073741824
 ```
 
@@ -188,10 +183,11 @@ work roots cannot overlap. Work roots cannot overlap protected workstation media
 Root/member symlinks, path traversal, absent mounts and insufficient configured
 free space are refused. A mountpoint directory that remains after an unmount is
 not a valid mounted destination. Checks repeat when paths are used.
-The current Elements device/target/ntfs3/read-only safeguard cannot be weakened by
-omitting a setting or choosing a broader read root. Volume paths require the
-volume mount. Other compatible locations use their explicit mount constraints;
-filesystem names and mount paths are not part of object identity.
+Deployment-specific protected device/target/filesystem/read-only safeguards cannot
+be weakened by omitting a setting or choosing a broader read root. Locations on
+guarded volumes require their verified mounts. Other compatible locations use
+their explicit mount constraints. Filesystem names and mount paths are not part
+of object identity.
 
 These checks do not qualify storage privacy, durability, executable compatibility
 or SQLite migration. Configuration neither authorizes writes nor grants access

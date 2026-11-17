@@ -67,7 +67,8 @@ a fresh `codex exec`, receipted, never retried automatically.
 ## Suggested order
 
 ```sh
-cd /mnt/volume/iss-archive-work/visual-similarity
+# Historical runner, from the checkout root; private work paths must be configured.
+cd work-area/visual-similarity
 # 1. measure the gap on the AI-assisted pilot images first
 python3 reference_batch.py prepare --pilot-only --prefix reference-bench-20261109-v2
 python3 reference_batch.py run --prefix reference-bench-20261109-v2

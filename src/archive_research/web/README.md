@@ -9,28 +9,28 @@ existing authority files. Citation links open a region viewer and bound source.
 Generic research administration remains read-only.
 All real observations start unreviewed. See the [approved scope](../../../docs/architecture/archive-research-pilot-scope.md).
 
-## Run on the approved workstation
+## Run with explicit configuration
 
-The private environment is `/home/vladimir/archive-local/research-pilot/.venv`;
-the installed `iss-archive-research[web]` package includes the application,
+Activate the selected private Python environment. The installed
+`iss-archive-research[web]` package includes the application,
 templates and invented fixture data. `pyproject.toml` pins the web dependencies. Poppler supplies fixture PNGs.
 Project and machine TOML files must already exist in the private runtime root.
-The running project selects `mode = "local_review"`; a standalone synthetic
+A real-evidence project selects `mode = "local_review"`; a standalone synthetic
 demonstration selects `mode = "synthetic"`. The machine file supplies `runtime_root`
 and a private random `secret_key` of at least 50 characters. Do not copy that file
 or `operator-login.txt` into Git.
 
 ```sh
-export ARCHIVE_RESEARCH_PROJECT=/home/vladimir/archive-local/research-pilot/project.toml
-export ARCHIVE_RESEARCH_MACHINE=/home/vladimir/archive-local/research-pilot/machine.toml
-/home/vladimir/archive-local/research-pilot/.venv/bin/archive-research web check
-/home/vladimir/archive-local/research-pilot/.venv/bin/archive-research web serve
+export ARCHIVE_RESEARCH_PROJECT=/path/to/project.toml
+export ARCHIVE_RESEARCH_MACHINE=/path/to/machine.toml
+archive-research web check
+archive-research web serve
 ```
 
 Check port 8785 before starting one manually owned process. The launcher refuses
 other runserver arguments. Stop the owned foreground process with Ctrl-C.
 Open <http://127.0.0.1:8785/> and read credentials locally from
-`/home/vladimir/archive-local/research-pilot/operator-login.txt` (mode 0600).
+the configured runtime's `operator-login.txt` (mode 0600 on Linux).
 `archive-research web init` initializes an explicitly configured fresh runtime;
 it is not part of the normal launch of this existing pilot. This is a local
 development process; there is no service or startup automation.
@@ -158,7 +158,9 @@ captured bytes produce the revision token. Stale projections withhold browsing
 until rebuilt. Missing or changed source/preview bindings withhold that image;
 there is no fallback. Relative paths remain inside their declared root. External
 roots are accepted only in local-review mode with the exact machine mappings;
-Elements access first requires `/dev/sdf1` at `/media/vladimir/Elements`, `ntfs3 ro`.
+protected-media access first requires the exact device, mount and read-only
+filesystem options enforced by the deployment guard. Keep those values in private
+operator configuration; generic examples do not override the guard.
 SQLite never becomes the authority for research assertions.
 
 Each comparison links to review forms for its own existing assertions. They
@@ -213,8 +215,9 @@ it refuses reloading those cases so saved reviews cannot be overwritten.
 Prepared receipts and source details remain private in the runtime cache.
 Preparation uses existing Poppler and workstation Pillow, outside HTTP requests.
 The application gains no dependency or additional database. Machine source roots
-must be exactly `archive = "/mnt/volume/iss-archive"` and
-`elements = "/media/vladimir/Elements"` under `[source_roots]`.
+use the `archive` and `elements` keys under `[source_roots]` and must match the
+exact deployment allowlist. Consult local operator instructions for those paths;
+a fresh clone does not include a configured or authorized real-evidence runtime.
 
 This is local inspection, not a frozen benchmark or permission to redistribute.
 Case review outcomes, missing report sections and independent human acceptance
@@ -226,11 +229,11 @@ currently describe whole pages/images, not inferred figure crops.
 With the environment variables above:
 
 ```sh
-/home/vladimir/archive-local/research-pilot/.venv/bin/archive-research web rebuild
-/home/vladimir/archive-local/research-pilot/.venv/bin/archive-research web export --case photo
-/home/vladimir/archive-local/research-pilot/.venv/bin/archive-research web ocr --view report-figure
-/home/vladimir/archive-local/research-pilot/.venv/bin/archive-research web storage-check
-/home/vladimir/archive-local/research-pilot/.venv/bin/archive-research web test -v1
+archive-research web rebuild
+archive-research web export --case photo
+archive-research web ocr --view report-figure
+archive-research web storage-check
+archive-research web test -v1
 ```
 
 Storage checks exercise cross-process lock exclusion, atomic replacement and

@@ -9,7 +9,7 @@ Preparation selects `proposed_new_object` cases through its shared scope rules.
 A saved selection supplies the research image; otherwise exactly one eligible
 source must exist. Choosing that research view does not save a Master decision.
 
-All generated data stays under the explicitly supplied `iss-archive-work` root.
+All generated data stays under the explicitly supplied private work root.
 Source and archive payloads remain read-only. No accession, metadata embedding,
 identity assignment, deletion or publication is performed. Existing archive
 catalogues are read through `catalogues.read_unit`; catalogued access images
@@ -20,16 +20,18 @@ supplied units, not every historical museum-digital record.
 
 Use the existing archive-tools environment for preparation, and the isolated
 research environment with compatible CPU torch/open_clip for embedding/reporting.
+Run from the checkout root; all paths below are illustrative.
 
 ```sh
-ROOT=/mnt/volume/iss-archive-work/visual-similarity
-SCRIPT=/home/vladimir/archive-local/source/Archive-tools/visual_research.py
-/mnt/volume/iss-archive-work/archive-tools-venv/bin/python -B "$SCRIPT" --work-root "$ROOT" prepare \
-  --review /mnt/volume/iss-archive-work/avantmedia-master-review-20261103 \
-  --unit /mnt/volume/iss-archive/units/tfa \
-  --unit /mnt/volume/iss-archive/units/kurt-schwarz --expected 111
-"$ROOT/venv/bin/python" -B "$SCRIPT" --work-root "$ROOT" embed --threads 2 --batch 8
-"$ROOT/venv/bin/python" -B "$SCRIPT" --work-root "$ROOT" report --k 6
+VISUAL_WORK=/path/to/visual-research
+EMBED_PYTHON=/path/to/embedding-environment/bin/python
+SCRIPT=Archive-tools/visual_research.py
+python -B "$SCRIPT" --work-root "$VISUAL_WORK" prepare \
+  --review /path/to/prepared-review \
+  --unit /path/to/archive-unit-a \
+  --unit /path/to/archive-unit-b --expected 111
+"$EMBED_PYTHON" -B "$SCRIPT" --work-root "$VISUAL_WORK" embed --threads 2 --batch 8
+"$EMBED_PYTHON" -B "$SCRIPT" --work-root "$VISUAL_WORK" report --k 6
 ```
 
 Preparation records the review revision, source stamps, existing candidate
@@ -70,8 +72,8 @@ After the first preparation, apply inspected view settings without rereading the
 whole reference catalogue:
 
 ```sh
-/mnt/volume/iss-archive-work/archive-tools-venv/bin/python -B "$SCRIPT" --work-root "$ROOT" views --views "$ROOT/views.json"
-"$ROOT/venv/bin/python" -B "$SCRIPT" --work-root "$ROOT" run --views "$ROOT/views.json" --threads 2 --batch 8 --k 6 --background
+python -B "$SCRIPT" --work-root "$VISUAL_WORK" views --views "$VISUAL_WORK/views.json"
+"$EMBED_PYTHON" -B "$SCRIPT" --work-root "$VISUAL_WORK" run --views "$VISUAL_WORK/views.json" --threads 2 --batch 8 --k 6 --background
 ```
 
 The detached `run` command embeds and then generates the report. It records its
@@ -88,8 +90,8 @@ preparation did not produce a usable manifest or candidate view checks are missi
 ## Evaluate the cached reference embeddings
 
 ```sh
-OPENBLAS_NUM_THREADS=2 /mnt/volume/iss-archive-work/archive-tools-venv/bin/python -B -u "$SCRIPT" \
-  --work-root "$ROOT" evaluate --sample 400 --seed 47 --name evaluation-400-seed47-baselines
+OPENBLAS_NUM_THREADS=2 python -B -u "$SCRIPT" \
+  --work-root "$VISUAL_WORK" evaluate --sample 400 --seed 47 --name evaluation-400-seed47-baselines
 ```
 
 `evaluate` delegates to the bounded `visual_evaluation.py` helper. It reads only

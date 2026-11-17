@@ -1,18 +1,10 @@
-**Additional support tools (16 November 2026):**
-[video inventory](video-inventory.md) owns the paused census; private state is on
-the work volume. [Transcription scripts](../../tools/archive-preservation/transcription/README.md)
-use private data under `archive-local/transcripts` and shared whisper.cpp under
-`~/.local/opt`. [Photograph research prompt](photo-metadata-research-prompt.md)
-is an optional reference, not policy. These moves did not resume any job.
-
-**Current home locations (15 November consolidation):** source is
-`/home/vladimir/archive-local/source`, private pilot is
-`/home/vladimir/archive-local/research-pilot`, and home indexes are under
-`/home/vladimir/archive-local/indexes`. Earlier checkpoint paths below are
-historical. Use the canonical consolidation plan and private handoff for current
-operations; old home aliases have been retired.
-
 # Archive Tool Structure
+
+[Video inventory](video-inventory.md) and
+[transcription scripts](../../tools/archive-preservation/transcription/README.md)
+are retained support tools with separately configured private inputs and engines.
+The [photograph research prompt](photo-metadata-research-prompt.md) is an optional
+reference, not policy. Their presence does not authorize restarting a job.
 
 ## Status
 
@@ -20,10 +12,9 @@ Implementation map for the existing Python tools. The archive contract is
 `docs/architecture/archive-preservation-architecture-adr.md`; this document
 does not define a second package, catalog, identity, or workflow model.
 
-`/home/vladimir/archive-local/source` is the source-code and documentation repository for this
-workstation. Unit scripts are versioned under `work-area/`, mirroring their
-paths under `/mnt/volume/iss-archive-work`. The hub README and private handoff own
-current runtime locations; a commit does not deploy or execute them.
+This repository owns source code and documentation. Unit scripts are versioned
+under `work-area/`; runtime data and current operating details remain private,
+outside the repository. A source commit does not deploy or execute those scripts.
 Use this file to route harnesses. Do not infer current policy from
 old downloaded ADRs, local memories, historical handoffs, or completed run
 artifacts.
@@ -88,7 +79,7 @@ The [consolidation plan](archive-django-consolidation-plan.md) and
 expansion. On 15 November the approved first [Django pilot](../../Archive-tools/research_web/README.md)
 added synthetic login and read-only comparison. Its source is
 `Archive-tools/research_web/`; its isolated environment, readable records and
-single SQLite database now live in `/home/vladimir/archive-local/research-pilot/`.
+single SQLite database live in an explicitly configured private runtime.
 The intended pilot address is `127.0.0.1:8785`; check the private handoff and live
 sockets before launch. The following slice descriptions record the 15 November
 implementation sequence; the linked operating guide owns current usage.
@@ -130,8 +121,8 @@ handoff and explicit task; copying their source here did not migrate services.
 The user-authorized tools audit extends the earlier photo-only map. The complete
 dated file inventory, unit mapping schemas, consumer references, runtime counts
 and verification limits remain in the private
-[audit report](/mnt/volume/iss-archive-work/tools-inventory-20261116.md) and its
-adjacent JSON. The ordered next work remains in the consolidation plan.
+audit report and its companion JSON, located through the private handoff.
+The ordered next work remains in the consolidation plan.
 The earlier pilot slice descriptions above are delivery history: the real-case
 pilot and physical-object reference slice have already been delivered.
 
@@ -168,15 +159,10 @@ has not been qualified for private runtime/SQLite migration by this read-only au
 
 ### Runtime and environment boundary
 
-The 14 November observation recorded a process executing
-`/home/vladimir/archive/Archive-tools/workbench.py` with
-`/mnt/volume/iss-archive-work/archive-tools-venv/bin/python`, using
-`/mnt/volume/iss-archive-work/avantmedia-master-review-20261103`, actor Vladimir,
-and loopback port 8783. `/api/overview` returned 1,083 objects, 111 proposals and
-an agreeing CSV projection. This is HTTP/data verification, not browser acceptance.
-These are historical observations, not current startup paths or service claims.
-Private process details and continuation belong in the sole checkpoint at
-`/home/vladimir/archive-local/HANDOFF.md`; follow [continuity](archive-continuity.md).
+The 14 November HTTP/data inspection returned 1,083 objects, 111 proposals and
+an agreeing CSV projection. This was not browser acceptance. Process paths,
+operator details and current startup state belong in the private handoff;
+follow [continuity](archive-continuity.md).
 
 The observed interpreter is Python 3.13.5 with Pillow. Its environment lacks
 `jsonschema`; it is not a verified all-tools environment. System `python3` has
@@ -193,14 +179,13 @@ deployment was performed: an existing Python process retains its loaded code.
 
 ### Configuration and write contracts
 
-- Canonical source is `/home/vladimir/archive-local/source`; the former
-  `/home/vladimir/Archive-tools` compatibility link is retired. The hub README
-  owns locations; `/mnt/volume/archive-system` is retained earlier setup material.
-- The v12 CLI defaults to `/home/vladimir/archive-local/berlin-photo-reference-sources.json`.
-  Use the existing explicit `--registry` option to select the versioned copy for
-  a new authorised plan. Existing frozen plans retain their recorded paths and
-  hashes; do not rewrite them as part of relocation. Codex's executable
-  path remains configured in `codex_image_pilot.py`.
+- This checkout owns maintained source. Runtime and retained recovery locations
+  are private deployment configuration, not public launch instructions.
+- The v12 CLI has a workstation-specific registry default. For a new authorized
+  plan, explicitly pass `--registry Archive-tools/berlin-photo-reference-sources.json`
+  from the checkout root to select the versioned registry. Existing frozen plans
+  retain their recorded paths and hashes; do not rewrite them during relocation.
+  Codex's executable remains configured by the retained pilot script.
 - Source membership/bindings come from prepared input. Archive identity remains
   canonical unit path plus original record key. Human decisions live in readable
   records; the document, visual and provenance indexes are support projections.
@@ -236,7 +221,7 @@ publication concepts.
 | `ACTIVE_ENTRYPOINT` | Maintained tool for unfinished work; running state is established separately. | `Archive-tools/workbench.py`, `search.py`, and `reference_batch.py`; unit-specific `tfa_workbench.py`/`collection_551_workbench.py` only when the central checkpoint and unit receipts confirm unfinished work. | May be run or changed only within the current task and with the protected-mount and no-delete guards intact. |
 | `COMPLETED_UNIT_EVIDENCE` | Tool or receipt used to produce an already accessioned/published unit. | `collection_549_accession.py`, `collection_553_accession.py`, `baeckerhandwerk_accession.py`, `brigadebuecher_accession.py`, `wf_alben_accession.py`, `tfa_accession.py`, `wf_sender_accession.py`, Trafo accession tools. | Preserve for evidence and reproducibility. Do not reuse as a template without reconciling it to current `AGENTS.md`. |
 | `LEGACY_DO_NOT_EXTEND` | Older architecture or compatibility path that conflicts with the current KISS workflow. | `core_workbench.py`, `archive_v3.py`, `catalog_core.py`, `archive_core/`, `interfaces/`, `workflows/`, `jobs/provenance_restoration/`, backup files named `*.pre-*`. | Do not extend. If needed, extract only the smallest proven helper into the current unit-specific workflow. |
-| `SUPPORT_INDEX` | Rebuildable search, technical, visual, or provenance index. | `/mnt/volume/iss-archive-work/document-index`, `/mnt/volume/iss-archive-work/identity-provenance`, visual index tools. | Use read-only when possible. Never treat as archival authority. |
+| `SUPPORT_INDEX` | Rebuildable search, technical, visual, or provenance index. | Document, provenance and visual index tools with explicit private output roots. | Use read-only when possible. Never treat as archival authority. |
 
 For a status audit, prefer a small read-only harness that reports mount state,
 unit directories, receipt presence, SQLite quick checks, deletion flags, and

@@ -2,8 +2,9 @@
 
 `codex_image_pilot.py` runs a bounded sequential batch using the existing
 ChatGPT-authenticated Codex CLI. It reads existing research previews only and
-never applies catalogue metadata. The fixed work area is
-`/mnt/volume/iss-archive-work/visual-similarity`; files use `openai-batch10-`.
+never applies catalogue metadata. Its work area is deployment-specific and
+private; files use `openai-batch10-`. This retained script is tied to an existing
+selection. Inspect its local configuration and prior receipts before any launch.
 
 The owner confirmed Berlin and Kurt Schwarz for all ten selected photographs.
 The plan records ten distinct candidates: two earlier pilot controls and eight
@@ -17,12 +18,12 @@ disabled. Web search is disabled. The exact prompt, schema, instructions, image
 hashes, commands, raw events and results are retained locally. Results containing
 unexpected tool activity, invalid schema or missing completion/usage fail checks.
 
-Run with the installed Python that provides `jsonschema`:
+From the checkout root, use the selected Python that provides `jsonschema`:
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py check
-python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py start
-python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py status
+python3 -B Archive-tools/codex_image_pilot.py check
+python3 -B Archive-tools/codex_image_pilot.py start
+python3 -B Archive-tools/codex_image_pilot.py status
 ```
 
 `start` detaches the worker and writes `openai-batch10-launch.json`; that receipt
@@ -58,9 +59,9 @@ checks exact 111-candidate coverage with no overlap. Its prompt, schema and
 instructions are byte-identical to batch10. Existing batch10 files are preserved.
 
 ```sh
-python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py check --batch openai-remaining101
-python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py start --batch openai-remaining101
-python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py status --batch openai-remaining101
+python3 -B Archive-tools/codex_image_pilot.py check --batch openai-remaining101
+python3 -B Archive-tools/codex_image_pilot.py start --batch openai-remaining101
+python3 -B Archive-tools/codex_image_pilot.py status --batch openai-remaining101
 ```
 
 The same progress, completion, result and receipt suffixes use the prefix
