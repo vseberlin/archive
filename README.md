@@ -1,4 +1,4 @@
-# Industriesalon archive
+# Archive
 
 Local archive research and cross-referencing for the Industriesalon collection.
 The main application connects photographs, scanned documents, books, newspapers
