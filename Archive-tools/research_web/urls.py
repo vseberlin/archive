@@ -7,6 +7,12 @@ from . import views
 
 urlpatterns = [
     path('', views.index, name='index'),
+    path('research/', views.page_search, name='page_search'),
+    path('research/leads/', views.image_leads, name='image_leads'),
+    path('research/leads/<int:index>/<slug:side>/', views.image_lead_media, name='image_lead_media'),
+    path('research/pages/<slug:key>/', views.extraction_citation, name='extraction_citation'),
+    path('research/media/<slug:key>/', views.extraction_media, name='extraction_media'),
+    path('research/sources/<slug:key>/', views.extraction_source, name='extraction_source'),
     path('login/', auth.LoginView.as_view(template_name='research_web/login.html'), name='login'),
     path('logout/', auth.LogoutView.as_view(), name='logout'),
     path('cases/<slug:key>/', views.case, name='case'),

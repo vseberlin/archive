@@ -23,7 +23,7 @@ research environment with compatible CPU torch/open_clip for embedding/reporting
 
 ```sh
 ROOT=/mnt/volume/iss-archive-work/visual-similarity
-SCRIPT=/home/vladimir/archive/Archive-tools/visual_research.py
+SCRIPT=/home/vladimir/archive-local/source/Archive-tools/visual_research.py
 /mnt/volume/iss-archive-work/archive-tools-venv/bin/python -B "$SCRIPT" --work-root "$ROOT" prepare \
   --review /mnt/volume/iss-archive-work/avantmedia-master-review-20261103 \
   --unit /mnt/volume/iss-archive/units/tfa \

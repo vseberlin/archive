@@ -48,7 +48,7 @@ from research_routes import ROUTING_SCHEMA, classify, routing_for, guidance, sou
 
 DEFAULT_WORK = Path('/mnt/volume/iss-archive-work/visual-similarity')
 DEFAULT_REVIEW = Path('/mnt/volume/iss-archive-work/avantmedia-master-review-20261103')
-DEFAULT_REGISTRY = Path('/home/vladimir/Downloads/berlin-photo-reference-sources.json')
+DEFAULT_REGISTRY = Path('/home/vladimir/archive-local/berlin-photo-reference-sources.json')
 EXTRA_DOMAINS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org', 'www.wikidata.org'}
 COMMONS_HOSTS = {'commons.wikimedia.org', 'upload.wikimedia.org', 'thumb.wikimedia.org'}
 

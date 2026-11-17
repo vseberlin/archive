@@ -5,18 +5,50 @@
 This is the dedicated archive source repository, checked out locally at
 `/home/vladimir/archive-local/source` on branch `archive/scripts`.
 
+Use `python3 /home/vladimir/archive-local/source/tools/repo-guard.py` for `status`,
+`stage`, `commit`, `sync`, and `push`; it selects this project regardless of cwd.
+Run `install` after a fresh canonical clone. It validates Git storage, branch and
+effective remotes and repairs missing managed hooks. Never bypass a refusal with
+raw Git, `--no-verify`, configuration overrides or direct GitHub updates. The
+[README Git workflow](README.md#guarded-git-workflow) covers recovery and the
+required `publish-check` receipt for explicitly requested GitHub API publication.
+
 It versions reusable helpers, unit-specific scripts, review interfaces, tests,
 and archive workflow documentation. `work-area/` mirrors script paths relative
 to `/mnt/volume/iss-archive-work`; it contains no live review data.
 
-Existing services still run from their original work-area paths. A source commit
-is not deployment or permission to rerun a completed job. Read the central checkpoint and relevant unit
+Resolve current runtime and data locations through `/home/vladimir/archive-local/README.md`
+and the sole private checkpoint `/home/vladimir/archive-local/HANDOFF.md`; historical
+work-area paths are not launch instructions. A source commit is not deployment or
+permission to rerun a completed job. Read the checkpoint and relevant unit
 completion/review notes and receipts before executing a script. Keep data, images, decisions,
 SQLite files, credentials, generated reports and backups out of this repository.
 
 The website checkout at `/home/vladimir/wp-website` is separate and self-contained.
 The former mixed `/home/vladimir/wp` checkout is retired to volume retention.
 Do not switch, merge, clean or rewrite website source as part of archive work.
+
+### Working locations on this workstation
+
+| Purpose | Location |
+| --- | --- |
+| Archive source and Git storage | `/home/vladimir/archive-local/source` and its `.git`; `archive/scripts` → `vseberlin/archive:main` |
+| Archive persistent handoff / location guide | `/home/vladimir/archive-local/HANDOFF.md` / `/home/vladimir/archive-local/README.md` |
+| Private local state and inputs | Under `/home/vladimir/archive-local/`: `research-pilot/`, `indexes/`, `transcripts/`, `retained/`; outside `source/` |
+| Visual-reference registry | `/home/vladimir/archive-local/berlin-photo-reference-sources.json` |
+| Reconciliation work / accessioned holdings | `/mnt/volume/iss-archive-work` / `/mnt/volume/iss-archive`; existing protections apply |
+| Website source and Git storage | `/home/vladimir/wp-website` and its `.git`; `main` → `vseberlin/industriesalon:main` |
+| Website persistent handoff | `/home/vladimir/wp-website/handoff_CURRENT.md`; website tasks start at their root `AGENTS.md` |
+| Retained backups | `/mnt/volume/home-retained/` and `/mnt/volume/sites-backup/`; not runtime/source roots |
+
+Before edits, select this depot and run the absolute guard command above with
+`check`. Keep maintained scripts here and private inputs in their existing owners;
+Downloads is an incoming tray, not a permanent script or registry path. Do not
+initialise Git in `~`, `archive-local`, data directories or backups, recreate retired
+`~/archive`, `~/Archive-tools` or `~/wp` aliases, or copy website source here.
+Read the hub guide before cleanup. An explicitly authorised relocation must update
+the home routing map, both project AGENTS files and their current handoffs together.
+These locations do not authorise writes, processing or accession beyond the task.
 
 This workspace uses a deliberately simple archive workflow:
 

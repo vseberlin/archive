@@ -20,15 +20,30 @@ Implementation map for the existing Python tools. The archive contract is
 `docs/architecture/archive-preservation-architecture-adr.md`; this document
 does not define a second package, catalog, identity, or workflow model.
 
-`/home/vladimir/archive` is the source-code and documentation repository for this
+`/home/vladimir/archive-local/source` is the source-code and documentation repository for this
 workstation. Unit scripts are versioned under `work-area/`, mirroring their
-paths under `/mnt/volume/iss-archive-work`. Existing services still use the
-original work paths; a commit does not deploy or execute them.
+paths under `/mnt/volume/iss-archive-work`. The hub README and private handoff own
+current runtime locations; a commit does not deploy or execute them.
 Use this file to route harnesses. Do not infer current policy from
 old downloaded ADRs, local memories, historical handoffs, or completed run
 artifacts.
 
 ## Dependency Direction
+
+`src/archive_research/` is the new stage-2 standard-library boundary for explicit
+sources, pages, recipes, results and machine roots. Its
+[API guide](../../src/archive_research/README.md) owns use and limits.
+`archive_research.visual.preview` wraps an explicitly supplied existing renderer;
+it does not import the legacy tools, Django or numerical libraries. Existing
+photo CLIs do not depend on this package yet, and retain their original outputs.
+The bounded positioned-extraction slice adds separate `units`, `preparation`,
+`pdf_text`, `ocr`, `geometry`, `runner` and `storage` modules. Existing catalogue
+and manifest mappings supply selected members; no Master selection is introduced.
+One manual per-page runner writes readable derived receipts under explicit work
+roots. Optional Pillow/Poppler/Tesseract are used only during processing.
+The existing Django pilot reads receipts through `research_web.extraction` for
+page search, source regions and existing visual leads. It adds no database/table,
+daemon, review authority or automatic extraction inside HTTP requests.
 
 This is the intended direction for small shared extractions, not a description
 of all current imports. The retained `archive_core/`, `interfaces/`, and
@@ -58,8 +73,10 @@ The [consolidation plan](archive-django-consolidation-plan.md) and
 expansion. On 15 November the approved first [Django pilot](../../Archive-tools/research_web/README.md)
 added synthetic login and read-only comparison. Its source is
 `Archive-tools/research_web/`; its isolated environment, readable records and
-single SQLite database live in `/home/vladimir/archive-research-pilot/`.
-One manual process listens on `127.0.0.1:8785`; the old workbench remains stopped.
+single SQLite database now live in `/home/vladimir/archive-local/research-pilot/`.
+The intended pilot address is `127.0.0.1:8785`; check the private handoff and live
+sockets before launch. The following slice descriptions record the 15 November
+implementation sequence; the linked operating guide owns current usage.
 `archive_common.content_revision` is shared by the pilot and old workbench;
 no live review root is shared. The next approved slice adds bounded synthetic
 assertion review/correction, rebuild recovery and unadopted JSON export. Review
@@ -93,14 +110,56 @@ the currently observed photo workbench. `md_export_discovery.py`,
 helpers for their documented callers. Unit tools execute only under their unit
 handoff and explicit task; copying their source here did not migrate services.
 
+### Extraction and support inventory — 16 November 2026
+
+The user-authorized tools audit extends the earlier photo-only map. The complete
+dated file inventory, unit mapping schemas, consumer references, runtime counts
+and verification limits remain in the private
+[audit report](/mnt/volume/iss-archive-work/tools-inventory-20261116.md) and its
+adjacent JSON. The ordered next work remains in the consolidation plan.
+The earlier pilot slice descriptions above are delivery history: the real-case
+pilot and physical-object reference slice have already been delivered.
+
+| Owning source | Role and consumers | Boundary to preserve |
+| --- | --- | --- |
+| `Archive-tools/catalogues.py`, `search.py`, matching/consolidation helpers | Photo catalogue adapters and candidate preparation, consumed by review and visual research | TIFF/JPEG scope; multiple selected photo members require an ordered-representation adapter. Do not silently broaden the current photo contract. |
+| `Archive-tools/visual_research.py`, `visual_evaluation.py` | Prepared-view OpenCLIP embeddings and research evaluation | Checked source/preview recipes and proposal-only results; optional numerical dependencies stay outside Django. Candidate freeze currently requires one member. |
+| `Archive-tools/photo_clue_research.py` | First-frame source OCR, reduced overview and native crops; text/TSV and partial-result receipts | Existing positioned-word precedent, not all-page OCR. Processed-image coordinates need explicit crop/scale/rotation lineage before shared page search. |
+| `Archive-tools/research_web/` | Bound evidence, prepared views, readable review history and Django browsing projection | Its optional CLI OCR reads a prepared PNG and emits plain English text. No rendering/OCR in HTTP requests. Named real-source roots remain restricted to approved workstation paths. |
+| `work-area/document-index/document_index.py` | Document discovery SQLite/FTS, used by Bibliothek, collection and TFA/WF preparation/review harnesses | Preserve known-unit skipping and bounded PDF headers. Content-hash-only cache reuse cannot safely implement different page coverage or recipes. Source and runtime copies matched during the audit. |
+| `tools/archive-preservation/visual_index.py`, `visual_indexer.py`, `visual_candidate_search.py` | aHash/dHash/pHash index and ranked candidates, also read by unit preparation | Separate from OpenCLIP vectors; first-image normalization and path-derived occurrence IDs are not archival object authority. Adapt existing results before changing internals. |
+| `tools/archive-preservation/kurt_schwarz_identity_provenance.py` and related provenance consumers | Read the retained restoration index and write bounded evidence for their existing workflows | Preserve schema/path consumers. `source_registry.py` and `jobs/provenance_restoration/` are retained compatibility architecture, not the shared research design. |
+| `tools/archive-preservation/video_inventory.py` | Paused AV discovery, technical metadata, rights/project review and optional WordPress comparison | Separate AV workflow; no implied rescan, source merge or publication. See [video inventory](video-inventory.md). |
+| `tools/archive-preservation/transcription/` | Manual whisper.cpp and Python Whisper batches | Distinct engines and completion markers; preserve model provenance and existing outputs. See its [README](../../tools/archive-preservation/transcription/README.md). |
+| `work-area/` unit scripts; accession, TIFF/metadata and recovery helpers | Unit-specific preparation, workbenches and completed output evidence | Route through current receipts. Listing a script does not authorize running an accession, drain, deletion or publication command. |
+
+Two operational ownership gaps remain outside source: the visual-index `bin/`
+launch/shutdown wrappers and the restoration-index builders. The hub guide owns
+their locations. They were not executed or copied into source. Review ownership,
+old root assumptions and exact consumers before maintaining or relocating them.
+
+The delivered stage-2 boundary is source/member/page/result plus explicit named
+roots and one opt-in existing-preview adapter. Preserve historical identities: photo IDs
+include canonical unit paths; visual IDs include root paths and file stamps;
+document IDs use source-root/relative-path strings. Do not regenerate them when
+adding portable locators. Unit adapters must join established ordered-member
+manifests instead of inventing order from filenames or choosing Masters by format.
+
+Environment metadata inspection is not execution acceptance. Keep the three-package
+pilot, photo/SIFT environment, visual embedding environment and system utilities
+separate. Use the existing pinned requirements and CPU constraints; no dependency
+installation or heavy-library import was performed. The volume has capacity but
+has not been qualified for private runtime/SQLite migration by this read-only audit.
+
 ### Runtime and environment boundary
 
-The observed process executes
+The 14 November observation recorded a process executing
 `/home/vladimir/archive/Archive-tools/workbench.py` with
 `/mnt/volume/iss-archive-work/archive-tools-venv/bin/python`, using
 `/mnt/volume/iss-archive-work/avantmedia-master-review-20261103`, actor Vladimir,
 and loopback port 8783. `/api/overview` returned 1,083 objects, 111 proposals and
 an agreeing CSV projection. This is HTTP/data verification, not browser acceptance.
+These are historical observations, not current startup paths or service claims.
 Private process details and continuation belong in the sole checkpoint at
 `/home/vladimir/archive-local/HANDOFF.md`; follow [continuity](archive-continuity.md).
 
@@ -119,12 +178,13 @@ deployment was performed: an existing Python process retains its loaded code.
 
 ### Configuration and write contracts
 
-- Canonical source is `/home/vladimir/archive`; `/home/vladimir/Archive-tools`
-  is its compatibility link. `/mnt/volume/archive-system/workspace.toml` maps
-  workstation locations; it is not an application/project schema.
-- The v12 CLI still defaults to the registry in Downloads. Use the existing
-  explicit `--registry` option to select the versioned copy for a new authorised
-  plan; changing defaults/frozen plans is outside this slice. Codex's executable
+- Canonical source is `/home/vladimir/archive-local/source`; the former
+  `/home/vladimir/Archive-tools` compatibility link is retired. The hub README
+  owns locations; `/mnt/volume/archive-system` is retained earlier setup material.
+- The v12 CLI defaults to `/home/vladimir/archive-local/berlin-photo-reference-sources.json`.
+  Use the existing explicit `--registry` option to select the versioned copy for
+  a new authorised plan. Existing frozen plans retain their recorded paths and
+  hashes; do not rewrite them as part of relocation. Codex's executable
   path remains configured in `codex_image_pilot.py`.
 - Source membership/bindings come from prepared input. Archive identity remains
   canonical unit path plus original record key. Human decisions live in readable

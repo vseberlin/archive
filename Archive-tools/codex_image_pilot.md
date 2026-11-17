@@ -20,9 +20,9 @@ unexpected tool activity, invalid schema or missing completion/usage fail checks
 Run with the installed Python that provides `jsonschema`:
 
 ```sh
-python3 -B /home/vladimir/archive/Archive-tools/codex_image_pilot.py check
-python3 -B /home/vladimir/archive/Archive-tools/codex_image_pilot.py start
-python3 -B /home/vladimir/archive/Archive-tools/codex_image_pilot.py status
+python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py check
+python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py start
+python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py status
 ```
 
 `start` detaches the worker and writes `openai-batch10-launch.json`; that receipt
@@ -58,9 +58,9 @@ checks exact 111-candidate coverage with no overlap. Its prompt, schema and
 instructions are byte-identical to batch10. Existing batch10 files are preserved.
 
 ```sh
-python3 -B /home/vladimir/archive/Archive-tools/codex_image_pilot.py check --batch openai-remaining101
-python3 -B /home/vladimir/archive/Archive-tools/codex_image_pilot.py start --batch openai-remaining101
-python3 -B /home/vladimir/archive/Archive-tools/codex_image_pilot.py status --batch openai-remaining101
+python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py check --batch openai-remaining101
+python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py start --batch openai-remaining101
+python3 -B /home/vladimir/archive-local/source/Archive-tools/codex_image_pilot.py status --batch openai-remaining101
 ```
 
 The same progress, completion, result and receipt suffixes use the prefix

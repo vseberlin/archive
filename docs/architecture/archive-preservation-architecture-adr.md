@@ -13,13 +13,13 @@ not a banking, forensic, or adversarial-security system.
 
 ## Authority
 
-`/home/vladimir/archive/AGENTS.md` is the archive agent entrypoint. This document is
+`/home/vladimir/archive-local/source/AGENTS.md` is the archive agent entrypoint. This document is
 the detailed, repo-owned workflow contract for agents that need more context.
 If this document, older ADRs, local memories, downloaded drafts, or a tool
 README conflict with `AGENTS.md`, follow `AGENTS.md` and treat the other source
 as historical evidence until it is corrected.
 
-The shared documentation and harness repository is `/home/vladimir/archive`.
+The shared documentation and harness repository is `/home/vladimir/archive-local/source`.
 Archive policy belongs under `docs/`; reusable harness routing belongs in
 `docs/architecture/archive-application-structure.md`; tool entrypoint notes
 belong in `tools/archive-preservation/README.md`.

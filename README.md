@@ -8,6 +8,7 @@ accession, and bounded local review workbenches.
 | Path | Source and purpose |
 | --- | --- |
 | `Archive-tools/` | Shared photo reconciliation preparation and workbench, with configurable Czkawka profiles. See its README for the contract and commands. |
+| `src/archive_research/` | Shared source/page/result contracts, explicit roots, bounded positioned extraction and adapters for existing visual research. See its [API guide](src/archive_research/README.md). |
 | `tools/archive-preservation/` | Shared helpers and retained compatibility tools, copied from the mixed `/home/vladimir/wp` checkout. |
 | `tests/archive-preservation/` | Existing tests for the shared tools. |
 | `work-area/` | Unit-specific scripts and UI assets, preserving their relative paths under `/mnt/volume/iss-archive-work`. Includes Avantmedia, TFA, Paragon, Kurt Schwarz, Costa and other collections. |
@@ -21,9 +22,12 @@ source evidence; their presence does not authorize running them again.
 The [WF research workbench plan](docs/architecture/archive-django-consolidation-plan.md)
 proposes a bounded Django pilot connecting photographs, documents, and patents,
 with portable research configuration and an optional FiftyOne comparison.
-The volume project entry point is `/mnt/volume/archive-system`; its location map
-points to the consolidated home workspace `/home/vladimir/archive-local` and the
-existing private handoff. Read that home workspace's KEEP README before cleanup.
+The project home is `/home/vladimir/archive-local`; its KEEP README owns current
+locations and links to the sole private handoff. `/mnt/volume/archive-system` is
+retained earlier setup material, not the current startup authority.
+The 16 November retention-only cleanup moved the large historical Paragon recovery
+tree into a verified volume bundle; the hub README owns its exact recovery location.
+Referenced legacy helpers and active pilot/index state remain in their current roots.
 The approved [local research pilot](Archive-tools/research_web/README.md) now shows
 16 real photograph/report/relationship cases, including book and patent evidence,
 with 51 prepared images and one explicitly unreadable source. It supports local
@@ -35,21 +39,25 @@ records the next phase: modular extractors, global unit/page mappings, positione
 OCR and cross-unit evidence search. Its ordered TODO includes portable root
 configuration and eventual storage consolidation without permanent compatibility
 symlinks. Necessary Linux runtime components stay in home for now; NTFS-specific
-limitations must not become a permanent portability blocker. This is the planning
-checkpoint before new implementation, indexing or migration begins.
+limitations must not become a permanent portability blocker. The tools audit,
+shared package/configuration boundary, positioned PDF text/ALTO extraction and
+bounded workbench page search/image leads are delivered. The current private
+handoff records approved coverage, acceptance and the manually owned pilot.
+Whole-archive indexing and storage migration remain later work.
 
 ## Local checkout and runtime
 
 The dedicated checkout is `/home/vladimir/archive-local/source`, branch `archive/scripts`,
-tracking `origin/archive/scripts` at <https://github.com/vseberlin/archive>.
-The verified source is published on `main` and mirrored to `archive/scripts`;
+tracking `origin/main` at <https://github.com/vseberlin/archive>.
+On 16 November 2026 the user approved a fresh source baseline on `main`.
+Older remote branches retain their earlier history and are not maintained mirrors;
 the workstation keeps its established `archive/scripts` checkout.
-The initial source import was collected on 30 October 2026. It includes current
+The initial source import was collected on 30 October 2026. It included then
 uncommitted archive scripts from the old checkout, without importing WordPress
 code or the old repository's mixed history.
 
-Existing services continue to execute their original script paths. This
-repository does not automatically deploy scripts, start workbenches, or change
+Resolve current runtime and data paths through the home workspace's KEEP README
+and private handoff. This repository does not automatically deploy scripts, start workbenches, or change
 archive data. Many unit scripts expect their original local data beside them or
 use absolute workstation paths. They are not standalone applications that can
 run against an empty clone.
@@ -89,7 +97,7 @@ contains 19 public reference sources and subject routing. It is search
 configuration, not a catalogue or a file of research results. Its access notes
 are dated observations, not a guarantee of current website availability.
 The published copy matches the workstation registry in
-`/home/vladimir/Downloads/berlin-photo-reference-sources.json` at this sync.
+`/home/vladimir/archive-local/berlin-photo-reference-sources.json` at this sync.
 The runner retains that workstation default; select the versioned copy with
 `--registry /home/vladimir/archive-local/source/Archive-tools/berlin-photo-reference-sources.json`
 when preparing and running a new, explicitly authorized batch. Existing plans
@@ -100,6 +108,63 @@ The former `/home/vladimir/wp` mixed checkout is retained in verified bundles at
 `/mnt/volume/sites-backup/website-consolidation-20261116/`; it is not a runtime or
 source dependency. Maintained helpers use this archive checkout directly. Publishing here does not deploy or
 remove any of those retained copies.
+
+## Guarded Git workflow
+
+[tools/repo-guard.py](tools/repo-guard.py) selects this repository from its own
+location, independent of the caller's working directory. It uses standard-library
+Python and system Git; it has no website or runtime dependency.
+
+```sh
+python3 /home/vladimir/archive-local/source/tools/repo-guard.py install
+python3 /home/vladimir/archive-local/source/tools/repo-guard.py check
+python3 /home/vladimir/archive-local/source/tools/repo-guard.py status
+python3 /home/vladimir/archive-local/source/tools/repo-guard.py stage path/to/reviewed-file.py
+python3 /home/vladimir/archive-local/source/tools/repo-guard.py commit "Describe the reviewed change"
+python3 /home/vladimir/archive-local/source/tools/repo-guard.py sync
+python3 /home/vladimir/archive-local/source/tools/repo-guard.py push
+```
+
+The policy binds the canonical root's `.git`, branch `archive/scripts`, and the
+effective fetch/push URLs for `vseberlin/archive`. Another clone, detached/unexpected
+branch, Git environment redirection, custom `core.hooksPath` (even empty), changed
+remote, or unfinished Git operation is refused before mutation. A legitimate future
+move needs an explicit policy update; the guard never guesses a new destination.
+
+`install` installs local hooks without staging, committing, fetching or publishing.
+`check` verifies them read-only. Other commands recreate a missing hooks directory
+and repair missing/non-executable managed hooks after validating identity.
+Unrelated hooks and symlinked hook files or directories
+are preserved and refused; inspect/integrate them explicitly. Hooks are local Git
+metadata and do not travel with a clone: install them at a new approved checkout.
+
+`stage` takes explicit project-relative files (including reviewed deletions), not
+directories or pathspec patterns. Escaping paths, external symlinks and nested Git
+repositories are refused. Commit hooks reject staged gitlinks/submodules too.
+`commit` commits the existing reviewed index. `sync` requires a clean tree and
+only fast-forwards from fetched `origin/main`; ahead commits are retained and
+divergence stops without stash/reset/rebase. `push` requires clean source and a
+fast-forward from freshly fetched `origin/main`; its sole target is `HEAD:main`.
+Pre-push hooks also reject other refs/remotes, deletion and divergent force pushes.
+
+For explicitly requested publication through the connected GitHub tools, run
+`publish-check` first. Its receipt identifies the root, HEAD, tree, destination and
+`expected_remote_head`; use those exact values and an expected-head API update
+that preserves ancestry. Rerun if either side changes. Terminal Git authentication
+must be available for guarded terminal push; hooks do not provide credentials.
+
+These checks protect project commands and normal hooks, not arbitrary shell or
+API operations. Git in a third-party checkout cannot infer an intended archive
+operation. Raw reset/clean, disabled hooks, edited policy and direct API calls can
+bypass the boundary; agent instructions require the guarded entrypoint and receipt.
+On refusal preserve state, inspect the cause and repair only the verified mismatch.
+Destructive recovery requires explicit scope; never use hook bypass as a workaround.
+
+Run the isolated regression checks with:
+
+```sh
+python3 -B /home/vladimir/archive-local/source/tests/archive-preservation/test_repo_guard.py -q
+```
 
 ## Tests and dependencies
 

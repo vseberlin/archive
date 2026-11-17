@@ -1,4 +1,5 @@
 import io
+import os
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -13,6 +14,7 @@ from .forms import PhysicalObjectForm, ReviewForm
 from .records import assertion_case, bound_bytes, case_synthetic, check_binding, checked_cases, display_region, export_bundle, rebuild, save_review, snapshot
 from .processing import ocr_status
 from .records import physical_assessment, save_physical_object
+from . import extraction
 
 
 class PrivateResponseMiddleware:
@@ -25,6 +27,102 @@ class PrivateResponseMiddleware:
             response['Cache-Control'] = 'no-store'
         response['Referrer-Policy'] = 'same-origin'
         return response
+
+
+@login_required
+@require_GET
+def page_search(request):
+    operator(request)
+    try:
+        query = request.GET.get('q', '')[:200]
+        hits, rows, revision = extraction.search(query)
+        available = sum(row['available'] for row in rows)
+        return render(request, 'research_web/search.html', {
+            'query': query, 'hits': hits, 'revision': revision, 'total': len(rows),
+            'available': available, 'unavailable': len(rows)-available, 'configured': extraction.configured()})
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def image_leads(request):
+    operator(request)
+    try:
+        roots, leads, revision = extraction.visual_leads()
+        return render(request, 'research_web/image_leads.html', {'leads': leads, 'revision': revision})
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def image_lead_media(request, index, side):
+    operator(request)
+    try:
+        data = extraction.lead_image(index, side, request.GET.get('revision'))
+        return FileResponse(io.BytesIO(data), content_type='image/jpeg')
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def extraction_citation(request, key):
+    operator(request)
+    try:
+        roots, row, revision = extraction.lookup(key, request.GET.get('revision'))
+        word, region = extraction.word_region(row, int(request.GET['word'])) if 'word' in request.GET else (None, None)
+        source_path = roots.source(row['result'].page.source)
+        cases = [case for case in checked_cases() if any(
+            all(view.get('source', {}).get(field) == row['page']['source'][field]
+                for field in ('path', 'size_bytes', 'mtime_ns')) and
+            check_binding(view['source']) == source_path and
+            view.get('page_sequence') == (row['page']['index'] if row['page']['kind'] == 'pdf' else 1)
+            for view in case.payload['views'] if view.get('source'))]
+        return render(request, 'research_web/extraction_citation.html', {
+            'row': row, 'revision': revision, 'word': word, 'region': region, 'cases': cases})
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def extraction_media(request, key):
+    operator(request)
+    try:
+        roots, row, revision = extraction.lookup(key, request.GET.get('revision'))
+        return FileResponse(io.BytesIO(extraction.preview_bytes(roots, row)), content_type='image/png')
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def extraction_source(request, key):
+    operator(request)
+    try:
+        roots, row, revision = extraction.lookup(key, request.GET.get('revision'))
+        source = row['result'].page.source
+        path = roots.source(source)
+        content_types = {'.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
+                         '.jpeg': 'image/jpeg', '.tif': 'image/tiff', '.tiff': 'image/tiff'}
+        if path.suffix.lower() not in content_types:
+            raise ReviewError('Unsupported source format')
+        handle = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb')
+        try:
+            info = os.fstat(handle.fileno())
+            current = roots.source(source).stat()
+            if (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns) != (
+                    current.st_dev, current.st_ino, source.size_bytes, source.mtime_ns):
+                raise ReviewError('Source changed before opening')
+        except Exception:
+            handle.close()
+            raise
+        return FileResponse(handle, content_type=content_types[path.suffix.lower()],
+                            as_attachment=path.suffix.lower() in ('.tif', '.tiff'), filename=path.name)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
 
 
 def unavailable(request, error):

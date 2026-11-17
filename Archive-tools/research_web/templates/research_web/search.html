@@ -1,0 +1,12 @@
+{% extends 'research_web/base.html' %}{% block title %}Page search{% endblock %}{% block content %}
+<h1>Search source pages</h1>
+<p>Search the explicitly processed pages across units. Machine text remains unreviewed; source roles and page order are retained.</p>
+<form method="get"><label for="query">Text, name or reference</label><input id="query" name="q" value="{{ query }}" maxlength="200"><button>Search pages</button></form>
+{% if not configured %}<p class="notice">Page extraction has not been configured for this pilot.</p>{% else %}
+<p class="muted">{{ total }} attempted page/extractor results · {{ available }} available · {{ unavailable }} unavailable. This is bounded trial coverage, not a complete archive index.</p>
+{% for hit in hits %}<article class="card"><span class="badge">{{ hit.state }}</span> {% if hit.page.source.role == 'synthetic' %}<span class="badge">Synthetic fixture</span>{% endif %}
+<h2>{% if hit.available %}<a href="{% url 'extraction_citation' hit.key %}?revision={{ revision }}{% if hit.word != None %}&amp;word={{ hit.word }}{% endif %}">{{ hit.id }}</a>{% else %}{{ hit.id }}{% endif %}</h2>
+<p>{{ hit.page.source.unit }} · {{ hit.page.source.role }} · member {{ hit.page.member }} · {{ hit.page.kind }} index {{ hit.page.index }}{% if hit.page.printed_label %} · printed {{ hit.page.printed_label }}{% endif %}</p>
+{% if hit.snippet %}<p>{{ hit.snippet }}</p>{% elif hit.available %}<p>No words returned; inspect the page before drawing conclusions.</p>{% endif %}
+{% if hit.error %}<p class="notice">{{ hit.error }}</p>{% endif %}</article>{% empty %}<p>No matching processed page. This does not establish that the archive lacks the requested evidence.</p>{% endfor %}{% endif %}
+{% endblock %}

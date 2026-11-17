@@ -23,6 +23,7 @@ or `operator-login.txt` into Git.
 cd /home/vladimir/archive-local/source/Archive-tools
 export ARCHIVE_RESEARCH_PROJECT=/home/vladimir/archive-local/research-pilot/project.toml
 export ARCHIVE_RESEARCH_MACHINE=/home/vladimir/archive-local/research-pilot/machine.toml
+export PYTHONPATH=/home/vladimir/archive-local/source/src:/home/vladimir/archive-local/source/Archive-tools
 /home/vladimir/archive-local/research-pilot/.venv/bin/python -B -m research_web.bootstrap init
 /home/vladimir/archive-local/research-pilot/.venv/bin/python -B research_web/manage.py runserver 127.0.0.1:8785 --noreload
 ```
@@ -33,6 +34,31 @@ Open <http://127.0.0.1:8785/> and read credentials locally from
 `/home/vladimir/archive-local/research-pilot/operator-login.txt` (mode 0600).
 Initialization preserves existing fixture records and accounts. This is a local
 development process; there is no service or startup automation.
+
+## Prepared page search and image leads
+
+The project may explicitly select `extraction_roots`, `extraction_plan` and
+`visual_leads`, pointing to private files in one approved work directory. The
+shared [extraction package](../../src/archive_research/README.md) must be importable
+for these optional routes. No extra Python dependency or database is introduced.
+
+`/research/` searches existing page receipts across units and opens exact word
+regions on bound processed pages. Source role, representation member, physical
+page/frame and printed label stay distinct. No-text, failed and offline results
+remain explicit. Search covers only the selected trial, not the entire archive.
+Existing comparison links preserve the case's review/correction workflow; search
+never edits assertions or adopts machine text. Native PDF text and new OCR remain
+separate results. Image/source links carry a snapshot revision and withhold stale
+or changed bindings. HTTP requests never render, extract or rerun a model.
+
+`/research/leads/` shows a bounded projection of retained visual neighbours.
+Similarity remains a lead. Each side requires its original source to be available;
+the old preview is not silently substituted when the source is offline.
+
+The 16 November private trial report and acceptance limits are linked from the
+current handoff. Automated request tests and static coordinate figures passed;
+the user confirmed the requested browser word highlight after automation failed.
+This acceptance is specific to that hit, not all OCR text or all browser flows.
 
 ## Authority and limits
 

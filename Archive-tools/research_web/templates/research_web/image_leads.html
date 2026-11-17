@@ -1,0 +1,8 @@
+{% extends 'research_web/base.html' %}{% block title %}Existing image leads{% endblock %}{% block content %}
+<h1>Existing related-image leads</h1><p>These pairs come from the retained visual research results. Similarity is a retrieval lead, not identity, independent corroboration or an adopted relationship. No model was rerun for this view.</p>
+<p class="muted">{{ leads|length }} bounded historical pairs. Each image requires its original source binding; unavailable sources remain explicit.</p>
+{% for lead in leads %}<section class="card"><h2>Pair {{ forloop.counter }} · retrieval score {{ lead.similarity|floatformat:3 }}</h2><div class="grid lead-pair">
+{% for asset in lead.assets %}<article><h3>{{ asset.side|title }} · {{ asset.title }}</h3>
+{% if asset.available %}<div class="image-link"><img src="{% url 'image_lead_media' lead.index asset.side %}?revision={{ revision }}" alt="Existing research preview: {{ asset.title }}"></div>{% else %}<p class="notice">Source unavailable. {{ asset.error }}</p>{% endif %}
+<details><summary>Source binding</summary><p>{{ asset.id }}</p><p>{{ asset.source.path }}</p></details></article>{% endfor %}</div></section>{% empty %}<p>No existing visual lead projection has been configured.</p>{% endfor %}
+{% endblock %}

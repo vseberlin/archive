@@ -55,7 +55,7 @@ def main():
     with path('lock').open('w') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         if path('harvest.json').exists(): raise SystemExit('Existing run: refusing overwrite')
-        registry=read(Path('/home/vladimir/Downloads/berlin-photo-reference-sources.json'))
+        registry=read(Path('/home/vladimir/archive-local/berlin-photo-reference-sources.json'))
         plan=read(WORK/'openai-batch10-plan.json')
         baseline={r['candidate_id']:r['result'] for r in read(WORK/'openai-set111-harvest.json')}
         notes={r['object_id']:r['note'] for r in map(json.loads,Path('/mnt/volume/iss-archive-work/avantmedia-master-review-20261103/decisions.jsonl').read_text().splitlines())}

@@ -1,6 +1,6 @@
 # Archive research, extraction and workspace consolidation plan
 
-Created: 14 November 2026. Current decisions: 15 November 2026.
+Created: 14 November 2026. Current checkpoint: 16 November 2026.
 
 ## Continuity consolidation — 16 November 2026
 
@@ -17,7 +17,12 @@ working folders into `/home/vladimir/archive-local`. Source now lives at
 `/home/vladimir/archive-local/source`; the private pilot and recreated environment
 are in `research-pilot/`; visual/restoration indexes are under `indexes/`.
 Earlier home-based preservation/provenance work and loose databases are retained
-under `retained/`, with no deletion classification. The KEEP README and private
+under `retained/`, with no disposal classification. On 16 November, the separately
+approved home cleanup relocated the large inactive Paragon recovery tree into a
+verified volume tar bundle; referenced `archive-core-v2-preservation` and active
+pilot/index state remain local. This is retention relocation, not the planned
+runtime or extraction migration. The hub KEEP README owns current locations.
+The KEEP README and private
 migration receipt in that home root record the exact locations. Historical source
 paths in evidence and receipts were preserved. Accessioned holdings, protected
 USB originals and volume-based work remain in place.
@@ -36,11 +41,28 @@ blocker. Retained environments and old work are not authorized cleanup targets.
 ## Current agreed direction and checkpoint
 
 The user requested this consolidated plan and a local commit before starting
-new changes. This section is the current next-phase plan; the earlier pilot
-proposal and delivery history below remain context. The present task is planning
-and checkpointing only: no new extractor, package refactor, bulk indexing,
-workspace migration, filesystem change, dependency installation or disk cleanup.
-The user will address home-disk cleanup. Do not infer deletion authority.
+new changes, then authorized the stage-1 tools/source/consumer/storage audit on
+16 November, followed by the next package/configuration slice. That bounded audit is complete; the
+[private report](/mnt/volume/iss-archive-work/tools-inventory-20261116.md) records
+coverage, unresolved mappings, storage estimates and verification limits. The
+[tool map](archive-application-structure.md#extraction-and-support-inventory--16-november-2026)
+owns reusable routing. Stage 2 now delivers the standard-library
+`src/archive_research` package, explicit TOML root mapping and an opt-in wrapper
+for the existing visual preview function; see its
+[API guide](../../src/archive_research/README.md). The subsequent end-to-end
+authorization delivered a bounded stage-3/4 implementation: explicit selected
+members, positioned native PDF text and ALTO OCR, per-page resume, and workbench
+page search/retained image leads. The private
+[trial report](/mnt/volume/iss-archive-work/positioned-extraction-trial-20261116/report.md)
+records 13 tasks, measured resources, static alignment checks and remaining
+acceptance limits. Explicit private project configuration connects the trial;
+one manual loopback pilot runs. No broad indexing, migration, dependency
+installation or disk cleanup occurred. Existing visual/photo commands retain
+their formats. The user confirmed the requested browser word highlight after browser-control
+errors. Collection transcription accuracy remains unverified. The user then directed
+mounting Elements; the exact protected read-only mount was verified. Follow-up
+processing stays within the already selected sources and pages.
+The earlier pilot proposal and delivery history below remain context.
 
 The already-delivered local pilot is checkpointed separately as `6ebe63b`.
 It includes login, 16 real evidence cases, 51 readable previews plus one explicit
@@ -68,6 +90,15 @@ runtime components in `~` is a temporary workstation accommodation, not an
 architectural dependency on this user's home directory or on NTFS.
 
 ## Observed baseline for the next phase
+
+The 16 November audit supersedes the older storage observations below: home
+has substantial free space after cleanup and the required Elements mount is
+absent. The later trial starts one manual pilot; consult the handoff for current
+socket ownership. The private report contains fresh
+catalogue/index counts and the proposed current-root map. All 14 unit catalogues
+and their named mapping tables were inventoried; exact PDF/TIFF alignment, full
+payload readability, complete page/frame counts and destination runtime properties
+remain unproven. Keep these limits separate from completion of the inventory.
 
 Read-only inspection on 15 November 2026 found:
 
@@ -151,24 +182,30 @@ repartitioning is outside this plan's implementation scope.
 
 ## Package and extractor contract
 
-Use normal Python packaging, explicit imports and a small explicit extractor
-registry in the existing repository. A proposed layout is:
+Use normal Python packaging and explicit imports. The delivered stage-2 layout is:
 
 ```text
 pyproject.toml
 src/archive_research/
     contracts.py
     sources.py
-    runner.py
-    storage.py
-    cli.py
-    adapters/       unit-manifest and existing-tool adapters
-    extractors/     separate pdf_text, ocr, layout, visual and embedding modules
+    visual.py      opt-in wrapper around the existing preview callable
+    README.md      API/configuration and acceptance limits
 tests/              bounded behavior and contract fixtures
 ```
 
-Exact module boundaries follow the consumer audit; this is not authorization
-for a wholesale rewrite. Keep extraction independent of Django and HTTP.
+The package has no runtime dependencies. Setuptools is build-only; an offline
+wheel build used the already installed tool in the visual environment without
+installing or changing anything. Core imports work without site packages.
+The result contract preserves source identity, separate member/page/frame order,
+coordinate units, optional affine transforms, per-extractor settings and outcomes.
+Recipe keys include source/page/region/transform/settings; no processing cache
+or resume mechanism is implemented yet. The legacy preview's inverse transform
+is unknown and source highlighting is withheld rather than inferred.
+
+Add a small explicit extractor registry and separate runner/processor modules only
+when the bounded trial needs them. No unit-manifest adapter or new processing
+framework is implied by this package. Keep extraction independent of Django and HTTP.
 Existing CLIs can become thin entry points during transition, with unchanged
 public formats where consumers depend on them. Import optional/heavy libraries
 only for the selected extractor. Preserve pinned environments and CPU constraints;
@@ -272,35 +309,72 @@ explicitly established; portable software is distinct from redistributable data.
 
 - [x] **0 — Commit this plan before implementation.** Preserve the delivered pilot
   as a separate baseline. Keep one canonical plan and private handoff; no push.
-- [ ] **1 — Audit sources, consumers and storage.** Inventory all 14 unit mapping
+- [x] **1 — Audit sources, consumers and storage.** Inventory all 14 unit mapping
   formats, PDF/TIFF coverage, existing extractors/index consumers, environment
   requirements, path-derived identities and absolute paths. Produce bounded
   coverage/error counts and a proposed root map. No broad rehash or OCR run.
   Include expected output volume, home-space needs and destination suitability.
-- [ ] **2 — Establish the package/configuration boundary.** Introduce the smallest
+  Completed 16 November at bounded metadata/static-inspection depth; see the
+  private audit above. Storage capacity was checked, not runtime qualification.
+  Unresolved page counts/order/alignments are recorded for adapters and the trial;
+  no global complete-coverage or source-readability claim was made.
+- [x] **2 — Establish the package/configuration boundary.** Introduce the smallest
   shared source/page/region/result contract and explicit root configuration.
   Wrap existing visual code; preserve existing outputs and supported CLI behavior.
   Verify missing-volume failure, changed-source rejection and dependency isolation.
-- [ ] **3 — Prove page mappings and positioned extraction.** Use a bounded sample
+  Delivered 16 November: standard-library contracts/roots, optional legacy-preview
+  wrapper, synthetic refusal/identity/recipe tests and unchanged legacy preview
+  output. The core wheel imports without optional dependencies. No real source
+  processing, live configuration deployment or storage qualification occurred.
+- [x] **3 — Prove page mappings and positioned extraction.** Use a bounded sample
   across a TIFF sequence, PDF-only report, mixed book/photo material, rotated page,
   small label/marginal text and missing/unreadable source. Measure text/region
   accuracy, coordinate transforms, coverage, time, peak memory and disk output.
   Demonstrate interruption/resume and recipe-aware cache invalidation. No large
   batch until the exact-source-to-highlight flow is visually checked.
-- [ ] **4 — Connect archive-wide evidence to the workbench.** Show page hits and
+  Implemented and trialled on 16 November: 6 text-bearing results, 5 explicit
+  no-text partial results and 2 expected synthetic failures. Full-resolution
+  processing, native/new OCR separation, orthogonal transforms, measured resources,
+  resume and selective recipe invalidation are verified. Three static alignment
+  figures passed visual inspection; the user confirmed the requested browser
+  word highlight. A paired diagnostic of two source snippets records spelling
+  and insertion errors separately; upright preparation improves that small sample.
+  This closes bounded engineering acceptance, not collection transcription quality.
+- [x] **4 — Connect archive-wide evidence to the workbench.** Show page hits and
   related-image leads across units through the existing case/citation interface.
   Verify source attribution, retained reviewer edits, correction history and
   partial-result presentation. Do not add automatic metadata adoption.
+  Implemented bounded search across Trafo/FEB/Bibliothek and six retained image
+  leads. Automated requests check attribution, stale-link/source refusal, review
+  byte preservation and partial results; existing review/history behavior passes.
+  The requested browser word highlight is user-confirmed. Elements was mounted
+  read-only on explicit user instruction; its existing bound image leads are
+  checked again before use. Broader independent-operator acceptance remains open.
 - [ ] **5 — Expand coverage with measured limits.** Process the agreed archive
   scope resumably, report complete/partial/error coverage and reuse existing valid
   work. Keep discovery-index consumers compatible. Add layout, crop, embedding
   or caption extractors only for demonstrated needs with separate evaluation.
+  Bounded follow-up covers the seven remaining pages of the same three trial
+  PDFs, an upright OCR comparison and all readable existing pilot source views.
+  The private trial directory owns exact scope and progress. The user then
+  explicitly approved Bibliothek's two remaining objects/eight PDF pages as
+  the first whole-unit expansion. Completed: all 51 readable pilot views and
+  Bibliothek's four selected files (12 PDF pages and one JPEG). The combined
+  91-task run has 53 text-bearing, 36 no-text partial and two deliberate synthetic
+  failure results. Other units are outside that run. The private
+  [follow-up report](/mnt/volume/iss-archive-work/positioned-extraction-trial-20261116/followup-report.md)
+  records coverage/quality limits and a measured 6-second snapshot-read cost;
+  address repeated mount/receipt-read overhead before materially larger search.
 - [ ] **6 — Consolidate bulky storage after qualification.** Resolve the audited
   consumers, stop writers, make consistent database copies, preserve journals/
   WAL correctly and retain verified recovery material. Switch configuration to
   real destination paths; verify search, citations and resume. Recreate runtimes
   from specifications when moving them. No two active writable authorities and
   no permanent compatibility symlinks. Cleanup/deletion remains separately scoped.
+  The bounded work-volume probe passed process lock exclusion and atomic replace/
+  sync smoke checks, but requested 0700/0600 modes became 0755. Private runtime
+  therefore stays on compatible home storage; database migration was not tested
+  or attempted after this failed prerequisite. The probe is not durability proof.
 - [ ] **7 — Prove portability beyond this NTFS workstation.** On another compatible
   location/machine, rebuild environments and projections, remap roots without
   Python edits, open exact page regions and reproduce retained review history.
@@ -312,7 +386,8 @@ explicitly established; portable software is distinct from redistributable data.
 Stages 1–3 define the next implementable work, not a new obligation to stop after
 every small slice. Follow the user's end-to-end preference once implementation
 is requested, within the agreed scope and existing archive protections. This
-checkpoint itself stops after documentation and commits. Revisit concrete
+checkpoint includes the stage-3/4 bounded extraction/workbench trial and the
+user-confirmed source-word highlight. Revisit concrete
 storage/dependency/migration scope when its audit supplies the needed facts;
 do not infer approval for reformatting, archive relocation or destructive cleanup.
 
@@ -413,26 +488,19 @@ extension beyond the present reconciliation screen, not only a framework swap.
 
 ## One local project home
 
-`/mnt/volume/archive-system` is a local-only Git repository for workspace setup,
-orientation, and supplied design references. It provides links to the existing
-source checkout, canonical docs, private handoff, work area, and support indexes.
-There is one maintained source checkout, `/home/vladimir/archive`; no source or
-runtime relocation is part of the initial setup.
+The current project home is `/home/vladimir/archive-local`; its README owns
+locations. The maintained source checkout is `source/`, and the sole private
+checkpoint is `/home/vladimir/archive-local/HANDOFF.md`. This plan remains in the
+source checkout's canonical docs directory; do not maintain a second editable
+plan copy. Future experiments use only the paths approved for their scope.
 
-The workspace README and `workspace.toml` describe these locations and the
-distinction between tracked setup files and ignored runtime contents. The
-handoff was then `/mnt/volume/iss-archive-work/HANDOFF.md`
-(retired on 16 November in favor of `/home/vladimir/archive-local/HANDOFF.md`). The plan stays
-in this canonical docs directory, reachable through the project home's `docs`
-link; do not maintain a second editable plan copy.
-
-Collect the two supplied architectural DOCX files as retained inputs under the
-local project's `references/`. They are design evidence, not governing policy.
-Existing indexes and private review records stay in their current locations and
-are linked, not copied into Git. New local experiments belong in the ignored
-`local/` area when their implementation scope is authorised. Credentials remain
-outside tracked content; no remote or publication is configured for this local
-repository.
+The initial `/mnt/volume/archive-system` setup repository, its `workspace.toml`,
+supplied design references and ignored local experiments are retained history.
+That initial setup used `/home/vladimir/archive` as source and
+`/mnt/volume/iss-archive-work/HANDOFF.md` as its checkpoint. Those are historical
+paths, not current launch instructions. Architectural DOCX inputs remain design
+evidence, not governing policy. Private indexes, records and credentials remain
+outside the source Git repository.
 
 The initial setup recorded a device name for `/mnt/volume` using NTFS/FUSE;
 that name is historical. Verify the currently mounted filesystem and device.
@@ -456,7 +524,7 @@ every script:
 | `Archive-tools/workbench.py` and its HTML/JS/CSS | Candidate comparison, decisions, reviewed proposals | Separate decision/storage logic from HTTP handling without changing semantics. |
 | `Archive-tools/visual_research.py`, `visual_evaluation.py` | Embeddings, neighbours, controlled evaluation | Research currently imports `Workbench`; expose a smaller shared read interface. |
 | `Archive-tools/reference_batch.py` | Bounded external research and evidence assessment | The 2,122-line runner combines fetching, parsing, image preparation, model calls, and orchestration. |
-| `Archive-tools/research_routes.py` and source registry | Subject routing and source configuration | Resolve one explicit configuration source; the runner currently defaults to a registry in Downloads. |
+| `Archive-tools/research_routes.py` and source registry | Subject routing and source configuration | The workstation default is `archive-local/berlin-photo-reference-sources.json`; `--registry` selects an explicit alternative. Preserve existing frozen-plan hashes. |
 | `tools/archive-preservation/`, `work-area/` | Shared compatibility tools and collection-specific history | Distinguish maintained entry points from completed jobs before selecting anything for reuse. |
 
 The root README and maintained application structure document now identify the

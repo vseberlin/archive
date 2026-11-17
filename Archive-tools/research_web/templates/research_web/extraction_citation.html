@@ -1,0 +1,13 @@
+{% extends 'research_web/base.html' %}{% block title %}{{ row.id }} · Source page{% endblock %}{% block content %}
+<a href="{% url 'page_search' %}">← Page search</a><h1>{{ row.id }}</h1>
+<p>{{ row.page.source.unit }} · {{ row.page.source.role }}{% if row.page.source.role == 'synthetic' %} · Synthetic fixture{% endif %}</p>
+<p class="locator">Member {{ row.page.member }} · {{ row.page.kind }} index {{ row.page.index }}{% if row.page.logical_page %} · logical page {{ row.page.logical_page }}{% endif %}{% if row.page.printed_label %} · printed {{ row.page.printed_label }}{% endif %}</p>
+{% if word %}<p>Machine-text hit: <strong>{{ word.text }}</strong>{% if word.confidence != None %} · machine score {{ word.confidence|floatformat:2 }}{% endif %}. Check against the source image.</p>{% endif %}
+<figure class="citation-figure"><img src="{% url 'extraction_media' row.key %}?revision={{ revision }}" alt="Bound processed source page {{ row.id }}">
+{% if region %}<span class="citation-region" style="left:{{ region.x|floatformat:3 }}%;top:{{ region.y|floatformat:3 }}%;width:{{ region.width|floatformat:3 }}%;height:{{ region.height|floatformat:3 }}%" aria-hidden="true"></span>{% endif %}
+</figure>
+<p><a href="{% url 'extraction_source' row.key %}?revision={{ revision }}{% if row.page.kind == 'pdf' %}#page={{ row.page.index }}{% endif %}" target="_blank" rel="noopener">Open bound original source</a></p>
+{% for case in cases %}<p><a href="{% url 'case' case.key %}">Existing comparison: {{ case.title }}</a></p>{% endfor %}
+<details class="card"><summary>Source and extraction details</summary><dl><dt>Object</dt><dd>{{ row.page.source.object_id }}</dd><dt>Representation</dt><dd>{{ row.page.source.representation }}</dd><dt>Source</dt><dd>{{ row.page.source.path }}</dd><dt>Extractor</dt><dd>{{ row.result.recipe.extractor }} · {{ row.result.recipe.version }}</dd><dt>State</dt><dd>{{ row.state }}</dd></dl>{% for note in row.result.limitations %}<p>{{ note }}</p>{% endfor %}</details>
+<details class="card"><summary>Unreviewed extracted text</summary><p>{{ row.text }}</p></details>
+{% endblock %}

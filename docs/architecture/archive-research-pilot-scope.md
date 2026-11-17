@@ -4,8 +4,8 @@
 `/home/vladimir/archive-local/research-pilot`. Source is now
 `/home/vladimir/archive-local/source/Archive-tools/research_web`. Use the current
 [operating instructions](../../Archive-tools/research_web/README.md) for commands
-and configuration. Earlier paths below describe their historical checkpoints;
-the old home paths and compatibility links are retired. Readable records, source
+and configuration. Operational paths below reflect the approved relocation;
+the old home paths and compatibility links are retired. Dated results remain historical. Readable records, source
 bindings and accounts were retained; the environment was recreated at its final
 path. The private handoff records current process ownership and verification.
 
@@ -137,33 +137,35 @@ pilot operator; it conveys no archival authority.
 
 ## Approved concrete setup
 
-The source and runtime paths below were created for the approved first slice.
+The source and runtime paths below reflect the approved first slice and its
+subsequently approved home consolidation.
 The isolated runtime root is
 an explicit, narrow write exception outside the current work/archive roots, chosen
 to keep the environment and SQLite on the inspected `/home` ext4 filesystem.
-The current navigation home and its NTFS/FUSE volume remain in place.
+The current navigation home is `/home/vladimir/archive-local`; retained earlier
+setup material remains on the NTFS/FUSE volume.
 
 | Purpose | Approved location or setting |
 | --- | --- |
-| Maintained application source | `/home/vladimir/archive/Archive-tools/research_web/` |
+| Maintained application source | `/home/vladimir/archive-local/source/Archive-tools/research_web/` |
 | Template directories | `research_web/templates/research_web/` beneath that source location |
 | Shared operations and tests | Existing `Archive-tools/` directory; extract only the first real shared consumer boundary |
-| Private runtime root | `/home/vladimir/archive-research-pilot/` |
-| Virtual environment | `/home/vladimir/archive-research-pilot/.venv/` and its package-managed descendants |
-| Authoritative isolated research files | `/home/vladimir/archive-research-pilot/records/` |
-| Explicitly permitted sample copies | `/home/vladimir/archive-research-pilot/sample/` |
-| Disposable viewing/processing cache | `/home/vladimir/archive-research-pilot/cache/` |
-| Explicit unadopted research exports | `/home/vladimir/archive-research-pilot/exports/` |
-| One SQLite database | `/home/vladimir/archive-research-pilot/pilot.sqlite3` |
-| Project configuration | `/home/vladimir/archive-research-pilot/project.toml` |
-| Machine configuration and local secret | `/home/vladimir/archive-research-pilot/machine.toml`, mode 0600; never Git |
+| Private runtime root | `/home/vladimir/archive-local/research-pilot/` |
+| Virtual environment | `/home/vladimir/archive-local/research-pilot/.venv/` and its package-managed descendants |
+| Authoritative isolated research files | `/home/vladimir/archive-local/research-pilot/records/` |
+| Explicitly permitted sample copies | `/home/vladimir/archive-local/research-pilot/sample/` |
+| Disposable viewing/processing cache | `/home/vladimir/archive-local/research-pilot/cache/` |
+| Explicit unadopted research exports | `/home/vladimir/archive-local/research-pilot/exports/` |
+| One SQLite database | `/home/vladimir/archive-local/research-pilot/pilot.sqlite3` |
+| Project configuration | `/home/vladimir/archive-local/research-pilot/project.toml` |
+| Machine configuration and local secret | `/home/vladimir/archive-local/research-pilot/machine.toml`, mode 0600; never Git |
 | Operator and network | Vladimir; built-in Django login; loopback `127.0.0.1:8785` only |
 
 Permit only these new project directories; environment-managed descendants are
 the dependency installation exception, not permission to add application layers.
 Do not place runtime files in the source repository or introduce a second source
-checkout. Existing local links already reach canonical source and docs; no
-workspace relocation or second plan is needed.
+checkout. The hub README links to canonical source and docs; no further
+workspace relocation or second plan is authorised here.
 
 Installed dependency pins, rechecked against official package metadata on
 15 November 2026:
@@ -193,15 +195,16 @@ Python patch level.
 Implemented and tested launch contract:
 
 ```sh
-ARCHIVE_RESEARCH_PROJECT=/home/vladimir/archive-research-pilot/project.toml \
-ARCHIVE_RESEARCH_MACHINE=/home/vladimir/archive-research-pilot/machine.toml \
-/home/vladimir/archive-research-pilot/.venv/bin/python -B \
-  /home/vladimir/archive/Archive-tools/research_web/manage.py \
+ARCHIVE_RESEARCH_PROJECT=/home/vladimir/archive-local/research-pilot/project.toml \
+ARCHIVE_RESEARCH_MACHINE=/home/vladimir/archive-local/research-pilot/machine.toml \
+PYTHONPATH=/home/vladimir/archive-local/source/src:/home/vladimir/archive-local/source/Archive-tools \
+/home/vladimir/archive-local/research-pilot/.venv/bin/python -B \
+  /home/vladimir/archive-local/source/Archive-tools/research_web/manage.py \
   runserver 127.0.0.1:8785 --noreload
 ```
 
-This command is runnable; one owned process was left running. Check that the
-port is free before starting another process.
+This is the current launch contract, not a claim that the pilot is running.
+Read the sole private handoff and check that the port is free before starting.
 Use one manually owned process, explicit allowed hosts, CSRF protection and
 authentication. Keep credentials and signing material in the private runtime
 root. No systemd unit, container, reverse proxy or startup automation is proposed.

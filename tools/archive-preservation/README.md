@@ -5,7 +5,7 @@ legacy compatibility code. It is not the archive policy source.
 
 Current authority:
 
-1. `/home/vladimir/archive/AGENTS.md` (archive rules; the home-level file only routes workspaces)
+1. `/home/vladimir/archive-local/source/AGENTS.md` (archive rules; the home-level file only routes workspaces)
 2. `../../docs/architecture/archive-preservation-architecture-adr.md`
 3. `../../docs/architecture/archive-application-structure.md`
 4. unit manifests, receipts, catalogues, and current handoff state

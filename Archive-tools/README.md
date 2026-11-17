@@ -796,9 +796,11 @@ list; full findings remain in the original research record.
 Current runner: `reference_batch.py` (v12). The older runner under
 `work-area/visual-similarity` is retained history. The versioned
 `berlin-photo-reference-sources.json` contains the 19-source website registry;
+the workstation default is now
+`/home/vladimir/archive-local/berlin-photo-reference-sources.json` (outside Git);
 use `--registry /home/vladimir/archive-local/source/Archive-tools/berlin-photo-reference-sources.json`
-explicitly to select it. The existing Downloads default is preserved, and
-existing plans still require their frozen script and registry hashes.
+explicitly to select it. Existing plans still require their frozen script and
+registry hashes; historical snapshots retain their original paths.
 
 v8 preserves an explicitly discovered `image_url` alongside its `page_url`.
 Article images retain captions, gallery context and observed resolution links;
