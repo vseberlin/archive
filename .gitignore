@@ -1,7 +1,24 @@
 # Runtime state, local configuration and credentials
 AGENTS.md
-# Local development plans, reviews and operating notes
-/docs/
+# Existing local development notes; new public reviews remain trackable
+/docs/architecture/archive-application-structure.md
+/docs/architecture/archive-continuity.md
+/docs/architecture/archive-django-consolidation-plan.md
+/docs/architecture/archive-preservation-architecture-adr.md
+/docs/architecture/archive-research-pilot-scope.md
+/docs/architecture/archive-research-record-example.md
+/docs/architecture/photo-metadata-research-prompt.md
+/docs/architecture/video-inventory.md
+/docs/reference-v12-building-benchmark-20261114-pilot.patch
+/docs/reference-v12-building-benchmark-20261114.json
+/docs/reference-v12-building-benchmark-20261114.md
+/docs/review-52ad782.md
+/docs/review-64be40c.md
+/docs/review-655bda5.md
+/docs/review-6974e72.md
+/docs/review-archive-fixes-20261117.md
+/docs/review-archive-index-20261117.md
+/docs/review-f1deef4-reference-evaluation-20261117.md
 HANDOFF.md
 handoff_CURRENT.md
 .env

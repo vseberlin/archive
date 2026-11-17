@@ -45,7 +45,8 @@ archive/
 ├── tools/
 │   ├── repo-guard.py           # guarded repository operations
 │   └── archive-preservation/   # reusable and retained archive helpers
-└── work-area/                   # source for unit-specific jobs and review UIs
+├── work-area/                   # source for unit-specific jobs and review UIs
+└── docs/                        # reserved for future public reviews
 ```
 
 The CLI and workbench use the same application modules. The active package does
