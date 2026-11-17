@@ -99,6 +99,16 @@ class SiftTests(unittest.TestCase):
         self.assertEqual(result['status'], 'unavailable')
         self.assertIn('error', result)
 
+    def test_prepared_views_preserve_geometry_and_unresolved_controls(self):
+        target = self.root / 'prepared.png'; image = self.texture(target)
+        cropped = io.BytesIO(); image.crop((65, 45, 415, 315)).save(cropped, format='PNG')
+        result = sift.compare_prepared(cropped.getvalue(), target.read_bytes())
+        self.assertEqual(result['status'], 'supported', result)
+        self.assertFalse(result['identity_confirmed'])
+        blank = io.BytesIO(); Image.new('L', (480, 360), 128).save(blank, format='PNG')
+        self.assertEqual(sift.compare_prepared(blank.getvalue(), target.read_bytes())['status'],
+                         'insufficient_features')
+
     def test_small_shared_patch_does_not_support_whole_photo(self):
         target = self.root / 'photo.tif'; a = self.texture(target)
         source = self.source / 'different.jpg'; b = self.texture(source, 97)

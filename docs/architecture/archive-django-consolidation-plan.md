@@ -437,6 +437,22 @@ explicitly established; portable software is distinct from redistributable data.
   The requested browser word highlight is user-confirmed. Elements was mounted
   read-only on explicit user instruction; its existing bound image leads are
   checked again before use. Broader independent-operator acceptance remains open.
+- [ ] **4a — Prepare web-assisted multimodal hypothesis assessment before curator review.**
+  Added to the plan on 17 November at the user's request. Retrieve local and
+  external evidence, compare actual source images, and prepare cited competing
+  hypotheses for a bounded OpenAI assessment. Follow the
+  [implementation and acceptance scope below](#web-assisted-multimodal-hypothesis-assessment).
+  Local implementation is delivered; real-material API submission still requires explicit
+  permission for the selected material. Preserve independent curator answers
+  before exposing model assessments when evaluating accuracy.
+  Profiles, source-bound regions, crop OCR, embedded/scanned figures, tentative
+  caption bands and readable multimodal packets are implemented separately.
+  A retained institutional web reference has actual-image comparison and lineage;
+  local museum-digital duplicates are not counted as independent evidence.
+  Local-only and web-enriched requests are prepared, with bounded transport,
+  exact-request submission checks, citation validation and unreviewed presentation.
+  Live API/account qualification, permitted external material, independent curator
+  evaluation and further detector accuracy remain open.
 - [ ] **5 — Expand coverage with measured limits.** Process the agreed archive
   scope resumably, report complete/partial/error coverage and reuse existing valid
   work. Keep discovery-index consumers compatible. Add layout, crop, embedding
@@ -452,6 +468,10 @@ explicitly established; portable software is distinct from redistributable data.
   [follow-up report](/mnt/volume/iss-archive-work/positioned-extraction-trial-20261116/followup-report.md)
   records coverage/quality limits and a measured 6-second snapshot-read cost;
   address repeated mount/receipt-read overhead before materially larger search.
+  The 17 November continuation reuses this bounded corpus in a 138-receipt
+  text/visual index, adds 21 visual extractions and evaluates four scanned pages.
+  It proves cross-reference flow, not collection completeness. Original run
+  summaries remain unchanged; the handoff links current selections and limits.
 - [ ] **6 — Consolidate bulky storage after qualification.** Resolve the audited
   consumers, stop writers, make consistent database copies, preserve journals/
   WAL correctly and retain verified recovery material. Switch configuration to
@@ -470,8 +490,8 @@ explicitly established; portable software is distinct from redistributable data.
   semantics. NTFS quirks must not become a permanent blocker. Consolidate the
   remaining home-resident components when compatible storage is ready.
 
-Stages 1–3 define the next implementable work, not a new obligation to stop after
-every small slice. Follow the user's end-to-end preference once implementation
+Continue through unfinished TODO items in bounded slices, without an obligation
+to stop after every small slice. Follow the user's end-to-end preference once implementation
 is requested, within the agreed scope and existing archive protections. This
 checkpoint includes the stage-3/4 bounded extraction/workbench trial and the
 user-confirmed source-word highlight. Revisit concrete
@@ -480,6 +500,249 @@ do not infer approval for reformatting, archive relocation or destructive cleanu
 
 The earlier five delivery stages below describe the original pilot programme;
 the current TODO above governs the next extraction/consolidation phase.
+
+## Web-assisted multimodal hypothesis assessment
+
+Planned on 17 November 2026 for preparation before curator review. Extend the
+existing source/page/region contracts and case/citation interface. Start with a
+few contrasting existing cases, positioned OCR and retained visual leads; agree
+the exact selection before processing. A new vector database, service or general
+agent framework is not needed for the first demonstration.
+
+### Subject profiles and implementation order
+
+On 17 November the user authorized adding these profiles and proceeding with
+implementation. Reuse the existing `Archive-tools/research_routes.py` subject
+routing as their owner; a source image may have several profiles and each region
+retains its original page/context. Profile selection is research guidance, not
+classification or a new archival object/identity.
+
+| Profile | Extract and retain | Compare against | Limits |
+| --- | --- | --- | --- |
+| Buildings | Signs, numbers, facade/roof details, neighbours; scene and detail regions | Whole scenes and detail crops, with documented place/period | Similar architecture and repetitive windows are not identity; failed geometry is inconclusive |
+| People | Person/face regions, group position, literal captions, names, event/workplace text | Explicit caption-position mappings and documentary records | Detection supplies no name; no biometric identification or face-based identity matching; unordered names remain unassigned |
+| Equipment | Whole apparatus plus plates, controls, connectors and assemblies | Manuals, catalogues, technical photos and reports | Keep maker, model, serial and inventory numbers separate; a component plate may not describe the whole machine |
+| Tubes | Literal markings, logos, base/pins, envelope and visible internals | Documented type dictionaries, datasheets and identified references | Preserve uncertain OCR and alternative code readings; type is not specimen identity; dimensions need a scale |
+
+Implement source-bound regions and explicit caption links first, then local
+profile-guided evidence packets using existing extraction receipts. Captions
+linked by proximity remain tentative; naming a depicted person requires explicit
+documentary support and curator review. Retain OCR variants separately and never
+silently normalize ambiguous tube codes. The first slice uses selected/manual
+regions; automatic person/face or layout detection is a later measured adapter.
+
+Reuse the existing OpenCLIP `ViT-B-32` / `laion2b_s34b_b79k` and SIFT + RANSAC
+implementations. Test PaddleOCR only against a representative Tesseract baseline;
+test PyMuPDF when embedded-image/position extraction is needed (a scanned page
+may still require layout segmentation). Test DINOv2-small only if the retrieval
+comparison demonstrates missed useful matches. Check CPU compatibility, memory,
+licensing and source-region mapping before adding a dependency/model. No model
+installation or bulk run follows automatically from this plan.
+
+The approved first implementation is local packet assembly, explicit region and
+caption provenance, crop OCR with source coordinates, profile-specific guidance,
+read-only pilot presentation and synthetic acceptance. Use available existing
+pilot evidence for bounded validation; unavailable protected sources remain
+unavailable. External searches/submission and automatic detectors are subsequent
+slices with the existing source-use and external-processing boundaries intact.
+
+The user subsequently paused tube OCR and selected buildings. The bounded building
+slice retains the end-to-end purpose: extract scene/detail/sign evidence, retrieve
+local photographs and document/newspaper passages, link them with explicit source
+and page/region references, then prepare a multimodal OpenAI assessment draft for
+curator review. Local units come first; published copies are not independent
+corroboration. Record search coverage, unreadable/unindexed material and conflicting
+clues. The first building demonstration uses manually selected details, existing
+OCR/PDF text and SIFT/RANSAC, with quoted textual and visual cross-references in the
+existing packet. Prompt preparation is local; external submission, automatic
+building segmentation and collection-wide retrieval remain separate work.
+
+The user then confirmed the wider objective: locally process applicable archived
+representations, maintain text/visual/identifier indexes connected by shared
+source/page/region references, and make cross-references useful independently of
+OpenAI. Multimodal assessment consumes selected retrieved evidence. Keep extractor,
+layout, retrieval and assessment implementations in separate modules; the runner
+coordinates them without becoming another large research script.
+
+The approved next bounded slice integrates existing OpenCLIP into the shared page
+runner, extracts PDF raster placements and tentative nearby captions with Poppler,
+and builds a readable local text/visual index over selected receipts. It introduces
+no database or new service. Whole-page scans remain unsegmented coverage gaps;
+automatic person/building-detail detectors and archive-wide indexing remain later
+measured work. Reuse pinned existing model/dependency choices and record actual
+runtime qualification. Candidate relationships, scores and geometry remain
+unadopted; high similarity cannot distinguish same exposure from related views.
+
+On 17 November the user authorized continuing the plan end to end until an
+intervention is necessary. The local continuation adds a separate scanned-page
+layout adapter, source-bound caption bands, reuse of selected OCR receipts,
+measured expansion of the local index, retained external-reference provenance,
+and bounded API transport/response validation. No new model, database or service
+is required for these slices. The existing selection and failed/partial readings
+remain visible; the private handoff owns exact run plans and evaluation results.
+A coarse development check found eight illustration targets and nine extra
+candidates on four scanned pages. This is a demonstrated quality limit, not
+permission for unattended collection-wide acceptance. The user subsequently
+approved the selected seven archive image views and two bounded assessments,
+and requested the existing ChatGPT Pro account route. The optional Codex adapter
+uses saved ChatGPT authentication, identical prepared images and source text,
+strict output validation and retained native CLI results. External-reference
+image 7 remains omitted; its selected text/context is included in the enriched
+comparison. This approval does not extend to other material or bulk submissions.
+API hard token caps and `store=false` are not CLI settings; the adapter records
+that distinction. No accession, deletion or storage reformatting is authorized.
+
+On 17 November the user additionally authorized general automatic text-region
+discovery and coverage reporting after a missed tube marking. Implement a separate
+detector over the whole view plus overlapping detail tiles, retain detections
+without readable OCR, and record all bounded orientation/polarity recognition
+variants. Report missing/failed passes, unreadable/conflicting regions and limits;
+no detections is not proof of no text. Use the existing OpenCV environment and
+an explicitly fingerprinted PP-OCRv3 detector model if real inference qualifies;
+this is a PaddleOCR-model detection/Tesseract-recognition comparison, not a claim
+to run the complete PaddleOCR SDK. Preserve raw images, manual regions and notes.
+Evaluate region discovery separately from identifier reading on varied synthetic
+and selected real examples, keeping development and held-out examples distinct.
+No full-archive batch or external submission is authorized by this slice.
+
+The bounded implementation now uses OpenCV DNN with a fingerprinted PP-OCRv3
+detector, separate Tesseract crop readings and packet coverage/candidate display.
+Seven selected real/synthetic scans completed; both annotated tube markings were
+located without supplied crops, but readings conflict. The held-out synthetic
+rotated marking was found with one extra fragment; the blank control had no
+detections. These are diagnostic results, not collection accuracy. Full PaddleOCR
+recognizer comparison, curator-labelled evaluation, general layout/person adapters
+and external research remain unimplemented or unqualified. The private current
+handoff links the exact trial and evaluation report.
+
+Current sequencing: record observed findings and human-confirmed transcriptions
+with their exact source crop, raw alternatives and still-tentative identifier
+meaning; do not overwrite machine receipts or retroactively change frozen scores.
+Prioritize a bounded extractor-quality pass before expanding RAG: recognition on
+varied labelled markings, duplicate/fragment handling and explicit failure coverage,
+then PDF figure/caption and identifying-detail extraction. Keep local retrieval as
+an end-to-end check using these outputs. Resume broader RAG once a small agreed
+evaluation demonstrates usable source-bound evidence and visible uncertainty;
+finishing every possible extractor is not a prerequisite. New models remain
+conditional on measured need and workstation compatibility.
+
+For tubes, the immediate domain-specific gap is historical manufacturer marking
+knowledge. Collect source-cited OSW/HF/WF type, production-date, batch and specimen
+numbering rules by tube family and documented period. Catalogue publication dates
+are evidence dates, not automatically scheme start/end dates. Retain edition
+disagreements and unknown serial-allocation rules. Prioritize complete short type
+inscriptions near logos and long number lines, including prefixes/suffixes, with
+source coordinates and independent OCR variants. Never use alphabet-only decoding
+to manufacture a desired prefix. Construct retrieval alternatives from maker/logo,
+full candidate type and separately observed number; add date constraints only
+when supported. Treat uniqueness as a hypothesis until factory allocation/reset
+rules establish its scope. The private trial now records initial manufacturer
+catalogue references and a focused short-marking OCR diagnostic; historical
+serial decoding and automatic rule-based ranking remain pending.
+
+Use the accessioned TFA photographs as the first local tube-reference corpus.
+Select a bounded, varied sample by catalogue type, maker and photograph date;
+inspect whole objects and native-resolution marking regions from their selected
+Masters. Keep catalogue identifications, visible transcriptions and OCR guesses
+separate. Photograph dates do not establish manufacture dates. Distinguish same
+photograph, same tube type and same physical specimen; repeated images count as
+one source. Use verified examples to evaluate short-type and long-number reading
+before expanding retrieval. A catalogue keyword shortlist is neither a confirmed
+tube count nor authorization for full-unit processing.
+
+The next recognition comparison must cover Cyrillic as well as Latin markings,
+whole-line context versus detected fragments, and separate logo/detail comparison.
+Keep raw recognition independent from catalogue-informed candidate ranking; show
+catalogue-supported type hypotheses even when OCR is incomplete. Human-read
+numbers and prefixes remain source-bound observations, never retroactive machine
+successes. Test contrast, border and line-mode variants before adopting them;
+compare a second compatible recognizer on fixed labelled crops if failures remain.
+Measure exact identifier accuracy and confident errors, not non-empty output.
+
+The bounded comparison now supports explicit complete-line quadrilaterals,
+fingerprinted Russian/English Tesseract models and an independent local OpenCV
+CRNN recognizer for Latin/digits. Model files and licenses stay in existing
+private work storage; no extra Python runtime is required. Manual line selection
+is labelled as such and does not establish automatic grouping coverage. CRNN
+cannot confirm Cyrillic. The private handoff records measured outcomes and
+remaining unresolved readings; implementation is not recognition acceptance.
+
+For unclear markings, compare a bounded set of reproducible image preparations:
+unaltered source crop; levels/gamma adjustment; local contrast normalization;
+and mild sharpening as a separate optional variant. Correct line orientation
+and preserve context before enhancement. Derive each variant from the same
+native-resolution source crop, avoiding successive destructive transformations.
+Keep the original alongside every variant and record parameters, source mapping
+and OCR output. Check for clipped strokes, amplified grain and sharpening halos;
+reject invented or obscured character detail. Enhancement is a reading aid, not
+new evidence. Select recipes by exact readings on varied labelled crops, not by
+visual crispness or success on one already-known identifier. Optional bounded
+enhancement recipes and retained preview/reading comparison are implemented;
+the private handoff owns trial results. Collection-wide benefit remains
+unqualified; the earlier standalone contrast retry did not resolve the numeric
+example. Original-only preparation remains the default.
+
+1. **Retrieve local evidence.** Assemble the research question, competing
+   hypotheses, original/reverse images, native text, separate OCR variants,
+   catalogue descriptions and related page/visual hits. Retain source bindings,
+   page/region coordinates, transforms, uncertainties and missing coverage.
+   Search the relevant archive-unit catalogues, selected Masters, related images,
+   reports, manuals and existing indexes first. The user identifies the WF
+   museum-digital records as publications of this local archive: resolve those
+   hits back to local records, preserving their publication links and lineage.
+   Do not re-retrieve them as independent external corroboration. Distinguish
+   material not yet indexed/searched from material established as absent.
+2. **Find external candidates.** Search distinctive inscriptions, names, product
+   numbers and visual clues, using the existing visual-reference registry where
+   applicable. Use reverse-image/visual-similarity search where available and
+   permitted; disclose unsupported search methods. Seek contradictions and
+   alternative explanations as well as apparent matches. Target specific gaps
+   remaining after bounded local retrieval, such as missing factory marking
+   rules or independently sourced technical documentation. Consult our public
+   museum-digital records only for publication discrepancies, unavailable local
+   counterparts or an explicit public-record task; replicated metadata and images
+   remain the same underlying source wherever hosted.
+3. **Inspect and compare.** Open actual candidate images and their source records;
+   compare visible details with the local image. Retain the URL, access date,
+   attribution, relevant source passage, image locator and available reuse terms.
+   Search snippets and inaccessible images remain unverified leads. Distinguish
+   same exposure, building, equipment type, physical specimen and event; assess
+   photograph date separately from event/publication dates.
+4. **Build a bounded evidence packet.** Select relevant images, legible detail
+   crops with page context, text and competing hypotheses. Preserve contrary
+   evidence, duplicates/lineage, omitted material and access failures. OCR and its
+   source image are one underlying source; copied captions and republications
+   are not independent corroboration. Label earlier AI claims as hypotheses.
+   Check exact input bindings and external-processing permission before sending.
+5. **Request a multimodal assessment.** Supply the permitted packet to an OpenAI
+   vision-capable model. Require evidence references for each claim, supporting
+   and contradicting observations, unresolved alternatives, limitations and the
+   next discriminating research question. Treat retrieved content as evidence,
+   never executable instructions. Validate returned citations against the packet;
+   unsupported citations/claims cannot be presented as supported findings.
+6. **Retain and present proposals.** Save readable input/output records, exact
+   evidence selection, model and prompt/settings versions, usage/cost, failures
+   and completion status in approved private work locations. Show the assessment
+   through existing case/citation views without overwriting reviewer wording or
+   history. Allow at most one bounded follow-up search for a specific missing
+   clue, within an agreed request/cost limit; the earlier model answer remains a
+   hypothesis and never becomes independent evidence.
+
+Acceptance must demonstrate exact source-to-citation navigation, contradictory
+and duplicate evidence handling, unavailable-image reporting, rejection of
+unsupported citations, preserved reviewer records and explicit unadopted output.
+Compare the local-only and web-enriched assessments on the same selected cases;
+record evidence coverage and resource use separately from accuracy. Accuracy
+evaluation needs independent curator answers captured before model disclosure;
+model agreement or self-reported confidence is not ground truth.
+
+The later implementation authorization above covers the stated local first slice;
+it does not authorize external submission.
+The pilot's existing real-material sharing restrictions remain in force until
+permission for selected images/text and the intended external API processing is
+explicitly established. Confirm account data controls and permitted external
+image use before a live call. No bulk upload, automatic metadata adoption, Master
+reselection, accession, publication or new service follows from this step.
 
 ## Technical references for implementation planning
 

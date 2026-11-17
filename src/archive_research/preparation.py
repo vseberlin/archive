@@ -2,8 +2,8 @@
 import re
 import subprocess
 
-from .contracts import Page, require
-from .geometry import inverse_rotation
+from .contracts import Page, Transform, require
+from .geometry import inverse_rotation, processed_region
 
 
 def pdf_info(path, index):
@@ -38,7 +38,7 @@ def inspect_page(roots, source, member, kind, index, logical_page=None, printed_
     return page
 
 
-def render(roots, page, directory, *, dpi=300, clockwise=0):
+def render(roots, page, directory, *, dpi=300, clockwise=0, region=None):
     from PIL import Image
     require(type(dpi) is int and 72 <= dpi <= 600, 'DPI outside bounded trial range')
     require(clockwise in (0, 90, 180, 270), 'Unsupported editorial rotation')
@@ -66,10 +66,24 @@ def render(roots, page, directory, *, dpi=300, clockwise=0):
             rotated = image.rotate(-clockwise, expand=True)
             image.close()
             image = rotated
-        target = directory / 'processed.png'
-        image.save(target)
         transform = inverse_rotation(page.width, page.height, *image.size,
                                      (embedded_rotation + clockwise) % 360)
+        if region is not None:
+            import math
+            shown = processed_region(region, transform, page)
+            # Avoid adding a pixel for floating-point noise at an integer edge.
+            left, top = math.floor(shown.x * image.width + 1e-9), math.floor(shown.y * image.height + 1e-9)
+            right = min(image.width, math.ceil((shown.x + shown.width) * image.width - 1e-9))
+            bottom = min(image.height, math.ceil((shown.y + shown.height) * image.height - 1e-9))
+            cropped = image.crop((left, top, right, bottom))
+            image.close()
+            image = cropped
+            a, b, c, d, e, f = transform.to_source
+            transform = Transform(*image.size, (a, b, c + a*left + b*top,
+                                                d, e, f + d*left + e*top),
+                                  transform.steps + ('explicit source-region crop; outward pixel rounding',))
+        target = directory / 'processed.png'
+        image.save(target)
     finally:
         image.close()
     roots.source(page.source)

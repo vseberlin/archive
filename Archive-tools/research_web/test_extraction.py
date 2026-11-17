@@ -49,7 +49,9 @@ class ExtractionTests(TestCase):
                  'attempts':[{'id':'synthetic-page','key':self.key,'state':'complete'}]}
         (self.output/'run-summary.json').write_text(json.dumps(summary))
         self.override=override_settings(PILOT_ROOT=self.root,ALLOWED_HOSTS=['testserver'],
-            PROJECT={**settings.PROJECT,'extraction_roots':str(config),'extraction_plan':str(self.plan)})
+            PROJECT={**settings.PROJECT,'extraction_roots':str(config),'extraction_plan':str(self.plan),
+                     'research_packet':None,'research_assessment_response':None,
+                     'research_assessment_transport':None,'visual_leads':None})
         self.override.enable();self.addCleanup(self.override.disable)
         rebuild()
         user=get_user_model().objects.create_user('extraction-operator',is_staff=True)
@@ -153,3 +155,218 @@ class ExtractionTests(TestCase):
         preview.write_bytes(b'x'*info.st_size)
         os.utime(preview, ns=(info.st_atime_ns,info.st_mtime_ns))
         self.assertEqual(self.client.get(f'/research/leads/0/candidate/?revision={revision}').status_code,409)
+
+    def packet_fixture(self):
+        from archive_research.evidence import build_packet
+        from archive_research.sources import Roots
+        from research_routes import research_profiles
+        selection = {'format':'archive-research-selection-1','metadata_adopted':False,
+                     'case_key':'photo','question':'Synthetic profile comparison',
+                     'profiles':['buildings','equipment','tubes','people'],
+                     'evidence':[{'key':self.key,'label':'Invented caption','kind':'caption',
+                                  'region':{'x':.1,'y':.2,'width':.2,'height':.1},
+                                  'lineage':'One synthetic page.','attribution':'Invented test fixture.'}],
+                     'hypotheses':[{'claim':'Unsupported identity remains unresolved',
+                                    'supports':[],'contradicts':[0]}]}
+        roots = Roots.from_toml(self.root/'roots.toml')
+        packet = build_packet(roots,'artifacts',selection,research_profiles(selection['profiles']))
+        (self.output/'packet.json').write_text(json.dumps(packet))
+        override = override_settings(PROJECT={**settings.PROJECT,'research_packet':'packet.json'})
+        override.enable();self.addCleanup(override.disable)
+
+    def test_packet_is_read_only_and_preserves_history(self):
+        self.packet_fixture()
+        for path in ['/research/packet/','/research/packet/media/0/','/research/packet/sources/0/']:
+            self.assertEqual(Client().get(path).status_code,302)
+            self.assertEqual(self.client.post(path).status_code,405)
+        with patch('archive_research.runner.extract_one',side_effect=AssertionError('No HTTP processing')):
+            page = self.client.get('/research/packet/')
+        self.assertContains(page,'Synthetic profile comparison')
+        self.assertContains(page,'left:10.000%')
+        self.assertContains(page,'Buildings')
+        self.assertContains(page,'Tubes')
+        revision = page.context['revision']
+        media = self.client.get(f'/research/packet/media/0/?revision={revision}')
+        self.assertTrue(b''.join(media.streaming_content).startswith(b'\x89PNG'))
+        source = self.client.get(f'/research/packet/sources/0/?revision={revision}')
+        self.assertTrue(b''.join(source.streaming_content).startswith(b'%PDF'))
+        self.assertEqual((self.root/'records/assertions.jsonl').read_bytes(),self.history)
+        self.assertEqual(self.client.get('/research/packet/media/0/?revision=stale').status_code,409)
+
+    def test_packet_missing_source_and_changed_receipt_fail_closed(self):
+        self.packet_fixture()
+        revision = self.client.get('/research/packet/').context['revision']
+        (self.root/'sample'/self.page.source.path).unlink()
+        self.assertContains(self.client.get('/research/packet/'),'Source unavailable')
+        self.assertEqual(self.client.get(f'/research/packet/media/0/?revision={revision}').status_code,409)
+        self.assertEqual(self.client.get(f'/research/packet/sources/0/?revision={revision}').status_code,409)
+        receipt = self.output/(self.key+'.json'); value = json.loads(receipt.read_text())
+        value['words'][0]['text']='CHANGED';receipt.write_text(json.dumps(value))
+        self.assertEqual(self.client.get('/research/packet/').status_code,409)
+
+    def test_packet_unconfigured_and_outside_work_root(self):
+        with override_settings(PROJECT={**settings.PROJECT,'research_packet':None}):
+            self.assertContains(self.client.get('/research/packet/'),'No local evidence packet')
+        with override_settings(PROJECT={**settings.PROJECT,'research_packet':'../outside.json'}):
+            self.assertEqual(self.client.get('/research/packet/').status_code,409)
+
+    def test_packet_displays_cross_reference_as_unreviewed_lead(self):
+        from archive_research.evidence import build_packet
+        from archive_research.sources import Roots
+        from research_routes import research_profiles
+        self.packet_fixture()
+        selection=json.loads((self.output/'packet.json').read_text())['selection']
+        selection['evidence'].append({**selection['evidence'][0], 'kind':'detail', 'label':'Facade detail'})
+        selection['cross_references']=[{'source':0,'target':1,'basis':'visual','quote':'',
+                                      'note':'Repeated windows alone cannot establish identity.'}]
+        packet=build_packet(Roots.from_toml(self.root/'roots.toml'),'artifacts',selection,
+                            research_profiles(selection['profiles']))
+        (self.output/'packet.json').write_text(json.dumps(packet))
+        response=self.client.get('/research/packet/')
+        self.assertContains(response,'Cross-references')
+        self.assertContains(response,'unreviewed lead')
+        self.assertContains(response,'Repeated windows alone cannot establish identity.')
+
+    def test_packet_distinguishes_visual_features_and_layout_gaps(self):
+        from dataclasses import replace
+        from archive_research import Recipe,Result
+        from archive_research.evidence import build_packet
+        from archive_research.sources import Roots
+        from research_routes import research_profiles
+        self.packet_fixture()
+        original=json.loads((self.output/(self.key+'.json')).read_text())
+        selection=json.loads((self.output/'packet.json').read_text())['selection']
+        for extractor in ('visual','pdf-layout','scan-layout'):
+            result=replace(Result.from_record(original['result']),recipe=Recipe.create(extractor,'synthetic'))
+            key=result.recipe.cache_key(result.page,result.region)
+            receipt={**original,'result':result.record(),'words':[],
+                     'feature':{'coverage':{'figures_prepared':0,'embedded_images_seen':1},
+                                'figures':[],'omitted':[{'reason':'full-page raster needs segmentation'}]}}
+            (self.output/(key+'.json')).write_text(json.dumps(receipt))
+            selection['evidence'][0]['key']=key
+            packet=build_packet(Roots.from_toml(self.root/'roots.toml'),'artifacts',selection,
+                                research_profiles(selection['profiles']))
+            (self.output/'packet.json').write_text(json.dumps(packet))
+            response=self.client.get('/research/packet/')
+            if extractor=='visual':
+                self.assertContains(response,'OCR was not requested for this view.')
+                self.assertNotContains(response,'No text extracted;')
+            else:
+                self.assertContains(response,'Figure and caption discovery')
+                self.assertContains(response,'full-page raster needs segmentation')
+
+    def test_bound_model_proposal_visible_without_changing_review_records(self):
+        from archive_research.contracts import encoded
+        self.packet_fixture();packet=json.loads((self.output/'packet.json').read_text())
+        response={'id':'synthetic-assessment','model':'synthetic-model','status':'completed','output':[
+            {'type':'message','role':'assistant','content':[{'type':'output_text','text':json.dumps({
+                'observations':[{'claim':'Synthetic proposed reading','evidence':[0],'basis':'literal-text','uncertainty':'Needs review'}],
+                'hypotheses':[],'unresolved':['Synthetic only'],'next_local_search':'Find another page'})}]}]}
+        transport={'packet_sha256':hashlib.sha256(encoded(packet).encode()).hexdigest(),
+                   'request_sha256':'0'*64,'model':'synthetic-model'}
+        (self.output/'response.json').write_text(json.dumps(response));(self.output/'transport.json').write_text(json.dumps(transport))
+        with override_settings(PROJECT={**settings.PROJECT,'research_assessment_response':'response.json',
+                                        'research_assessment_transport':'transport.json'}):
+            page=self.client.get('/research/packet/')
+            self.assertContains(page,'Model assessment · unreviewed proposal')
+            self.assertContains(page,'Synthetic proposed reading')
+            transport['packet_sha256']='1'*64;(self.output/'transport.json').write_text(json.dumps(transport))
+            self.assertEqual(self.client.get('/research/packet/').status_code,409)
+        self.assertEqual((self.root/'records/assertions.jsonl').read_bytes(),self.history)
+
+    def discovery_fixture(self):
+        from archive_research import Artifact, Recipe, Result, Transform
+        from archive_research.evidence import build_packet
+        from archive_research.sources import Roots
+        from research_routes import research_profiles
+        self.packet_fixture()
+        original=json.loads((self.output/(self.key+'.json')).read_text())
+        recipe=Recipe.create('text-regions','1'); key=recipe.cache_key(self.page)
+        artifacts=tuple(Artifact(**a) for a in original['result']['artifacts'])
+        crop=Artifact(artifacts[0].root,artifacts[0].path,'text-region-crop-0',artifacts[0].sha256)
+        result=Result(self.page,recipe,'partial',.1,artifacts+(crop,),
+                      transform=Transform(1000,834,(.6,0,0,0,500/834,0)),limitations=('Unreadable candidate retained.',))
+        region={'x':.1,'y':.2,'width':.2,'height':.1}
+        receipt={**original,'result':result.record(),'words':[],
+                 'discovery':{'coverage':{'requested_passes':2,'completed_passes':1,'scan_complete':False},
+                              'regions':[{'region':region,'status':'unreadable','readings':[],
+                                          'crop':crop.path,'variants':[],'observations':[0],'detection_score':.9}]}}
+        (self.output/(key+'.json')).write_text(json.dumps(receipt))
+        stored=json.loads((self.output/'packet.json').read_text());selection=stored['selection']
+        selection['evidence'][0].pop('region');selection['evidence'][0]['discovery_key']=key
+        packet=build_packet(Roots.from_toml(self.root/'roots.toml'),'artifacts',selection,research_profiles(selection['profiles']))
+        (self.output/'packet.json').write_text(json.dumps(packet))
+        return key
+
+    def test_unreadable_candidate_and_incomplete_coverage_visible(self):
+        self.discovery_fixture()
+        response=self.client.get('/research/packet/')
+        self.assertContains(response,'Automatic text-region coverage')
+        self.assertContains(response,'Incomplete scan')
+        self.assertContains(response,'unreadable')
+        self.assertContains(response,'No readable text returned. The detected region is retained.')
+        revision=response.context['revision']
+        crop=self.client.get(f'/research/packet/media/0/?revision={revision}&candidate=0')
+        self.assertEqual(crop.status_code,200)
+        self.assertTrue(b''.join(crop.streaming_content).startswith(b'\x89PNG'))
+        self.assertEqual(self.client.get(f'/research/packet/media/0/?revision={revision}&candidate=9').status_code,409)
+
+    def test_discovery_change_and_page_mismatch_withhold_packet(self):
+        key=self.discovery_fixture()
+        path=self.output/(key+'.json');receipt=json.loads(path.read_text())
+        receipt['discovery']['regions'][0]['status']='changed';path.write_text(json.dumps(receipt))
+        self.assertEqual(self.client.get('/research/packet/').status_code,409)
+        receipt['result']['page']['index']=13;path.write_text(json.dumps(receipt))
+        self.assertEqual(self.client.get('/research/packet/').status_code,409)
+
+    def test_enhancement_links_are_bound_and_unknown_choices_refused(self):
+        from archive_research.evidence import build_packet
+        from archive_research.sources import Roots
+        from research_routes import research_profiles
+        key=self.discovery_fixture()
+        path=self.output/(key+'.json');receipt=json.loads(path.read_text())
+        crop=next(a for a in receipt['result']['artifacts'] if a['kind']=='text-region-crop-0')
+        receipt['result']['artifacts'].append({**crop,'kind':'text-region-crop-0-levels'})
+        receipt['discovery']['regions'][0]['enhancements']=[{'recipe':'original','crop':crop['path']},
+                                                           {'recipe':'levels','crop':crop['path']}]
+        path.write_text(json.dumps(receipt))
+        selection=json.loads((self.output/'packet.json').read_text())['selection']
+        packet=build_packet(Roots.from_toml(self.root/'roots.toml'),'artifacts',selection,research_profiles(selection['profiles']))
+        (self.output/'packet.json').write_text(json.dumps(packet))
+        response=self.client.get('/research/packet/')
+        self.assertContains(response,'Compare image preparations')
+        revision=response.context['revision']
+        base=f'/research/packet/media/0/?revision={revision}'
+        self.assertContains(response,base.replace('&','&amp;')+'&amp;candidate=0&amp;enhancement=levels')
+        for name in ('original','levels'):
+            image=self.client.get(base+'&candidate=0&enhancement='+name)
+            self.assertEqual(image.status_code,200)
+            self.assertTrue(b''.join(image.streaming_content).startswith(b'\x89PNG'))
+        for suffix in ('&candidate=0&enhancement=unknown','&enhancement=levels','&candidate=0&enhancement=../levels'):
+            self.assertEqual(self.client.get(base+suffix).status_code,409)
+        receipt['result']['artifacts']=[a for a in receipt['result']['artifacts'] if a['kind']!='text-region-crop-0-levels']
+        path.write_text(json.dumps(receipt))
+        packet=build_packet(Roots.from_toml(self.root/'roots.toml'),'artifacts',selection,research_profiles(selection['profiles']))
+        (self.output/'packet.json').write_text(json.dumps(packet))
+        revision=self.client.get('/research/packet/').context['revision']
+        self.assertEqual(self.client.get(f'/research/packet/media/0/?revision={revision}&candidate=0&enhancement=levels').status_code,409)
+
+    def test_manual_lines_show_engine_and_do_not_claim_automatic_coverage(self):
+        from archive_research import Recipe
+        from archive_research.evidence import build_packet
+        from archive_research.sources import Roots
+        from research_routes import research_profiles
+        old=self.discovery_fixture();receipt=json.loads((self.output/(old+'.json')).read_text())
+        recipe=Recipe.create('line-ocr','1');key=recipe.cache_key(self.page)
+        receipt['result']['recipe']=recipe.record()
+        receipt['discovery']['coverage']={'mode':'manual_lines','scan_complete':False,'recognition_complete':True}
+        receipt['discovery']['regions'][0].update(label='Complete type line',selection='manual full-line region',
+            variants=[{'engine':'crnn-en','languages':'Latin/digits only','text':'abc123','status':'complete'}])
+        (self.output/(key+'.json')).write_text(json.dumps(receipt))
+        selection=json.loads((self.output/'packet.json').read_text())['selection'];selection['evidence'][0]['discovery_key']=key
+        packet=build_packet(Roots.from_toml(self.root/'roots.toml'),'artifacts',selection,research_profiles(selection['profiles']))
+        (self.output/'packet.json').write_text(json.dumps(packet))
+        response=self.client.get('/research/packet/')
+        self.assertContains(response,'Selected full-line comparison');self.assertContains(response,'crnn-en')
+        self.assertContains(response,'Complete type line');self.assertNotContains(response,'Automatic text-region coverage')
+        self.assertNotContains(response,'Incomplete scan.')

@@ -50,7 +50,10 @@ def snapshot():
         result = Result.from_record(receipt['result'])
         require(result.page == page_from_record(task['page']) and result.recipe.extractor == task['extractor'],
                 'Result does not belong to the requested page')
-        require(result.recipe.cache_key(result.page) == key, 'Result recipe key differs')
+        from archive_research import Region
+        expected_region = Region(**task['region']) if task.get('region') is not None else None
+        require(result.region == expected_region and
+                result.recipe.cache_key(result.page, result.region) == key, 'Result recipe key differs')
         row = {'id': task['id'], 'key': key, 'state': attempt['state'], 'result': result,
                'page': receipt['result']['page'], 'words': receipt['words'], 'receipt': receipt,
                'available': False, 'error': attempt.get('error', ''),
@@ -95,12 +98,12 @@ def search(query):
 
 def word_region(row, number):
     from archive_research import Region
-    from archive_research.geometry import displayed_region
+    from archive_research.geometry import processed_region
     require(type(number) is int and 0 <= number < len(row['words']), 'Word outside extraction result')
     word = row['words'][number]
     region = Region(**word['region'])
-    shown = displayed_region(region, row['receipt']['display_rotation'])
-    return word, dict(zip(('x', 'y', 'width', 'height'), [v*100 for v in shown]))
+    shown = processed_region(region, row['result'].transform, row['result'].page)
+    return word, {name: getattr(shown, name)*100 for name in ('x', 'y', 'width', 'height')}
 
 
 def preview_bytes(roots, row):
@@ -157,3 +160,43 @@ def lead_image(index, side, revision):
     roots.source(Source(**asset['source']))
     require(data.startswith(b'\xff\xd8'), 'Expected the existing JPEG research preview')
     return data
+
+
+def research_packet():
+    """Refresh one explicitly configured local packet; never trust stored availability."""
+    name = settings.PROJECT.get('research_packet')
+    if not name or not configured():
+        return None, None, ''
+    from archive_research.evidence import refresh_packet
+    from archive_research.sources import Roots
+    from archive_research.storage import target
+    from archive_research.contracts import encoded
+    from research_routes import research_profiles
+    config = Path(settings.PROJECT['extraction_roots'])
+    work_root(config.parent)
+    roots = Roots.from_toml(config)
+    data = target(roots.root('artifacts', 'work'), name).read_bytes()
+    stored = json.loads(data)
+    packet = refresh_packet(roots, 'artifacts', stored, research_profiles(stored['selection']['profiles']))
+    response_name=settings.PROJECT.get('research_assessment_response')
+    transport_name=settings.PROJECT.get('research_assessment_transport')
+    require(bool(response_name)==bool(transport_name),'Assessment needs response and transport bindings')
+    if response_name:
+        require(all(e['available'] for e in packet['evidence']),'Assessment evidence unavailable')
+        from archive_research.assessment_io import validate_response
+        response=json.loads(target(roots.root('artifacts','work'),response_name).read_text())
+        transport=json.loads(target(roots.root('artifacts','work'),transport_name).read_text())
+        packet['assessment']=validate_response(response,stored,transport)
+    revision = hashlib.sha256(data + config.read_bytes() + encoded(packet).encode()).hexdigest()
+    for item in packet['evidence']:
+        region = item['display_region']
+        item['display_percent'] = {k: region[k]*100 for k in ('x','y','width','height')} if region else None
+    return roots, packet, revision
+
+
+def packet_image(index, revision, candidate=None, enhancement=None):
+    from archive_research.evidence import evidence_image
+    roots, packet, current = research_packet()
+    require(packet is not None and revision and revision == current, 'Evidence packet changed; reload it')
+    require(type(index) is int and 0 <= index < len(packet['evidence']), 'Unknown packet evidence')
+    return evidence_image(roots, 'artifacts', packet['evidence'][index], candidate, enhancement)

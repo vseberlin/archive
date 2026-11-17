@@ -8,6 +8,9 @@ from . import views
 urlpatterns = [
     path('', views.index, name='index'),
     path('research/', views.page_search, name='page_search'),
+    path('research/packet/', views.research_packet, name='research_packet'),
+    path('research/packet/media/<int:index>/', views.packet_media, name='packet_media'),
+    path('research/packet/sources/<int:index>/', views.packet_source, name='packet_source'),
     path('research/leads/', views.image_leads, name='image_leads'),
     path('research/leads/<int:index>/<slug:side>/', views.image_lead_media, name='image_lead_media'),
     path('research/pages/<slug:key>/', views.extraction_citation, name='extraction_citation'),

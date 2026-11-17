@@ -21,6 +21,7 @@ def main():
     commands = parser.add_subparsers(dest='command', required=True)
     one = commands.add_parser('extract'); one.add_argument('--index', type=int, required=True)
     run = commands.add_parser('run'); run.add_argument('--limit', type=int, default=0)
+    run.add_argument('--summary', default='run-summary.json', help='Flat summary filename in the work root')
     args = parser.parse_args()
     roots = Roots.from_toml(args.roots)
     plan_digest = args.expected_plan or hashlib.sha256(args.plan.read_bytes()).hexdigest()
@@ -31,6 +32,8 @@ def main():
         return
     require(args.limit >= 0, 'Limit must be nonnegative')
     output = roots.root(args.work, 'work')
+    from .storage import target
+    target(output, args.summary)
     indices = list(range(len(plan['tasks'])))[:args.limit or None]
     summary = {'format': 'archive-research-run-1', 'metadata_adopted': False,
                'plan_sha256': plan_digest,
@@ -53,7 +56,7 @@ def main():
                 attempt = {'id': plan['tasks'][index]['id'], **json.loads(process.stdout)}
             summary['attempts'].append(attempt)
             with lock(output):
-                write_json(output, 'run-summary.json', summary)
+                write_json(output, args.summary, summary)
             print(json.dumps(attempt), flush=True)
     print(json.dumps({'attempted': len(summary['attempts']), 'requested': summary['requested']}))
 

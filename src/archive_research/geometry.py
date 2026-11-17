@@ -37,3 +37,25 @@ def displayed_region(region, clockwise):
               180: (1-x-w, 1-y-h, w, h), 270: (y, 1-x-w, h, w)}
     require(clockwise in values, 'Unsupported display rotation')
     return values[clockwise]
+
+
+def processed_region(region, transform, page):
+    """Map a source region into a prepared image, including crop offsets."""
+    require(transform is not None and transform.to_source is not None,
+            'Unknown inverse transform')
+    a, b, c, d, e, f = transform.to_source
+    determinant = a * e - b * d
+    points = []
+    for x, y in ((region.x, region.y), (region.x + region.width, region.y),
+                 (region.x, region.y + region.height),
+                 (region.x + region.width, region.y + region.height)):
+        sx, sy = x * page.width - c, y * page.height - f
+        points.append(((e * sx - b * sy) / determinant,
+                       (-d * sx + a * sy) / determinant))
+    x0, x1 = min(p[0] for p in points), max(p[0] for p in points)
+    y0, y1 = min(p[1] for p in points), max(p[1] for p in points)
+    require(x0 >= -1 and y0 >= -1 and x1 <= transform.width + 1
+            and y1 <= transform.height + 1, 'Region outside prepared image')
+    x0, x1 = max(0, x0 / transform.width), min(1, x1 / transform.width)
+    y0, y1 = max(0, y0 / transform.height), min(1, y1 / transform.height)
+    return Region(x0, y0, x1 - x0, y1 - y0)

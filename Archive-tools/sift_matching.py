@@ -58,6 +58,39 @@ def signature(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
+def compare_prepared(source_bytes, target_bytes):
+    """Compare caller-verified prepared views without creating a second cache tree.
+
+    The caller retains source/page/region and byte hashes. This bounded diagnostic
+    uses direct orientation only; a failure is not evidence of different sites.
+    """
+    from PIL import Image
+    from types import SimpleNamespace
+    cv, np = runtime()
+    cv.setNumThreads(2)
+    profile = {**DEFAULTS, 'variants': ['direct']}
+    detector = cv.SIFT_create(nfeatures=profile['max_features'])
+
+    def features(data):
+        with Image.open(io.BytesIO(data)) as image:
+            gray = image.convert('L')
+            gray.thumbnail((profile['proxy_edge'], profile['proxy_edge']))
+            pixels = np.asarray(gray)
+            keypoints, descriptors = detector.detectAndCompute(pixels, None)
+            points = np.array([k.pt for k in keypoints], dtype=np.float32).reshape(-1, 2)
+            if descriptors is None:
+                descriptors = np.empty((0, 128), dtype=np.float32)
+            return points, descriptors, np.array(pixels.shape)
+
+    result = Verifier.compare(SimpleNamespace(cv=cv, np=np, profile=profile),
+                              features(source_bytes), features(target_bytes))
+    return {**result, 'profile': profile, 'opencv': cv.__version__, 'numpy': np.__version__,
+            'source_sha256': hashlib.sha256(source_bytes).hexdigest(),
+            'target_sha256': hashlib.sha256(target_bytes).hexdigest(),
+            'identity_confirmed': False,
+            'limitation': 'Direct-orientation geometry only; drawings, alterations and viewpoints can defeat matching.'}
+
+
 class Verifier:
     def __init__(self, root, prior, profile, libraries, threads=2):
         self.cv, self.np = libraries

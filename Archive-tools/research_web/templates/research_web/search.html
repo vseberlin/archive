@@ -1,6 +1,7 @@
 {% extends 'research_web/base.html' %}{% block title %}Page search{% endblock %}{% block content %}
 <h1>Search source pages</h1>
 <p>Search the explicitly processed pages across units. Machine text remains unreviewed; source roles and page order are retained.</p>
+<p><a href="{% url 'research_packet' %}">Open prepared research packet</a></p>
 <form method="get"><label for="query">Text, name or reference</label><input id="query" name="q" value="{{ query }}" maxlength="200"><button>Search pages</button></form>
 {% if not configured %}<p class="notice">Page extraction has not been configured for this pilot.</p>{% else %}
 <p class="muted">{{ total }} attempted page/extractor results · {{ available }} available · {{ unavailable }} unavailable. This is bounded trial coverage, not a complete archive index.</p>

@@ -55,6 +55,30 @@ or changed bindings. HTTP requests never render, extract or rerun a model.
 Similarity remains a lead. Each side requires its original source to be available;
 the old preview is not silently substituted when the source is offline.
 
+`/research/packet/` presents one locally prepared, profile-guided evidence packet.
+Set `research_packet` to its flat JSON filename in the extraction `artifacts`
+root. The [package guide](../../src/archive_research/README.md#source-regions-and-local-evidence-packets)
+documents its CLI and explicit selection format. Whole-page views, detail regions,
+caption links, competing hypotheses and original OCR variants remain separate.
+The four combinable profiles belong to the existing subject routes. Manual
+person/face regions do not identify people; documentary links remain proposals.
+Packet/source/image routes require the existing operator login and are read-only.
+Changed receipts require a rebuild; missing sources withhold their images. No
+model or external submission runs here, and research history is never updated.
+Whole-page entries with an attached automatic text-discovery receipt show
+candidate outlines, retained crops and independent readings. Coverage distinguishes
+completed scanning from unreadable, conflicting or unattempted recognition. Views
+without discovery say so explicitly; empty whole-page OCR is not marking coverage.
+Candidates with retained enhancement variants offer “Compare image preparations”
+and list the enhancement beside each independent OCR attempt. Preview routes
+accept only variants bound to the selected candidate's current receipt; unknown,
+missing or changed variants are refused. Original crops remain visible.
+The scanner runs only through the explicit extraction CLI, never a page request.
+An attached `line-ocr` receipt instead shows explicitly selected full lines,
+their labels and each recognizer's output. It never presents manual regions as
+automatic whole-image coverage. Cyrillic-capable Tesseract and Latin/digit CRNN
+readings remain distinct; the page does not select or silently correct a result.
+
 The 16 November private trial report and acceptance limits are linked from the
 current handoff. Automated request tests and static coordinate figures passed;
 the user confirmed the requested browser word highlight after automation failed.

@@ -25,6 +25,59 @@ ROUTES = {
         'guidance':'Inspect the image before choosing a route. Start with its most distinctive visible clue; keep multiple subject interpretations open. Do not search a generic scene description repeatedly.'},
 }
 
+# Profiles belong to the existing subject routes. They can be combined on one
+# photograph and never assign object identity or replace reviewer routing.
+ROUTES['buildings_places']['profiles'] = {
+    'buildings': {
+        'label': 'Buildings',
+        'extract_first': ['signs and street numbers', 'facade and roof details', 'neighbouring structures'],
+        'compare_against': ['whole scenes', 'facade/detail crops', 'documented place and period'],
+        'limitations': ['Similar architecture and repetitive windows do not establish identity.',
+                        'Alterations or viewpoint changes can hide a real match; failed geometry is inconclusive.'],
+    },
+}
+ROUTES['people_activity']['profiles'] = {
+    'people': {
+        'label': 'People',
+        'extract_first': ['person/face regions and group position', 'literal captions and names', 'event/workplace text'],
+        'compare_against': ['explicit caption-position mappings', 'published captions and documentary records'],
+        'limitations': ['Detection supplies no name; no face-based identity matching.',
+                        'Unordered names and nearby text do not identify individual pictured people.'],
+    },
+}
+ROUTES['machinery_industry']['profiles'] = {
+    'equipment': {
+        'label': 'Equipment',
+        'extract_first': ['whole apparatus', 'maker/model/serial/inventory markings separately', 'plates, controls, connectors and assemblies'],
+        'compare_against': ['catalogue illustrations', 'manuals', 'technical photographs and reports'],
+        'limitations': ['Similar housings may contain different models.',
+                        'A component plate may not describe the whole apparatus; model is not specimen identity.'],
+    },
+    'tubes': {
+        'label': 'Tubes',
+        'extract_first': ['logo and complete nearby type inscription, including small letters and suffixes',
+                          'separate long numeric markings, retaining their positions relative to the logo/type',
+                          'base/pins', 'envelope and visible internal structure'],
+        'compare_against': ['manufacturer-, period- and tube-family-specific marking rules with source pages',
+                            'documented type-code dictionaries', 'datasheets', 'identified reference images'],
+        'limitations': ['Preserve uncertain OCR; 0/O and 1/I alternatives are suggestions only.',
+                        'Do not force letters into an unresolved inscription or apply a later scheme to an earlier logo.',
+                        'Type, type-series, batch/date and specimen numbers are distinct; prefix plus number is not proven unique without an allocation rule.',
+                        'Similar appearance does not establish type or specimen; dimensions require a scale.'],
+    },
+}
+
+
+def research_profiles(names):
+    """Resolve explicit combinable profiles from the sole subject-route owner."""
+    from copy import deepcopy
+    require(isinstance(names, list) and names and all(isinstance(n, str) for n in names)
+            and len(names) == len(set(names)), 'Select distinct research profiles')
+    available = {name: {'route': route, **profile}
+                 for route, data in ROUTES.items() for name, profile in data.get('profiles', {}).items()}
+    require(all(name in available for name in names), 'Unknown research profile')
+    return {name: deepcopy(available[name]) for name in names}
+
 ROUTING_SCHEMA = {'type':'object','properties':{
     'primary':{'type':'string','enum':list(ROUTES)},
     'secondary':{'type':'array','items':{'type':'string','enum':list(ROUTES)},'maxItems':3},

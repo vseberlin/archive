@@ -46,6 +46,47 @@ def page_search(request):
 
 @login_required
 @require_GET
+def research_packet(request):
+    operator(request)
+    try:
+        roots, packet, revision = extraction.research_packet()
+        return render(request, 'research_web/research_packet.html', {'packet': packet, 'revision': revision})
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def packet_media(request, index):
+    operator(request)
+    try:
+        candidate = int(request.GET['candidate']) if 'candidate' in request.GET else None
+        data = extraction.packet_image(index, request.GET.get('revision'), candidate, request.GET.get('enhancement'))
+        return FileResponse(io.BytesIO(data), content_type='image/png')
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def packet_source(request, index):
+    operator(request)
+    try:
+        from archive_research import Source
+        from archive_common import require
+        roots, packet, revision = extraction.research_packet()
+        require(packet is not None and request.GET.get('revision') == revision,
+                'Evidence packet changed; reload it')
+        require(0 <= index < len(packet['evidence']), 'Unknown packet evidence')
+        item = packet['evidence'][index]
+        require(item['available'], 'Bound evidence source unavailable')
+        return source_response(roots, Source(**item['page']['source']))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
 def image_leads(request):
     operator(request)
     try:
@@ -103,26 +144,30 @@ def extraction_source(request, key):
     operator(request)
     try:
         roots, row, revision = extraction.lookup(key, request.GET.get('revision'))
-        source = row['result'].page.source
-        path = roots.source(source)
-        content_types = {'.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
-                         '.jpeg': 'image/jpeg', '.tif': 'image/tiff', '.tiff': 'image/tiff'}
-        if path.suffix.lower() not in content_types:
-            raise ReviewError('Unsupported source format')
-        handle = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb')
-        try:
-            info = os.fstat(handle.fileno())
-            current = roots.source(source).stat()
-            if (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns) != (
-                    current.st_dev, current.st_ino, source.size_bytes, source.mtime_ns):
-                raise ReviewError('Source changed before opening')
-        except Exception:
-            handle.close()
-            raise
-        return FileResponse(handle, content_type=content_types[path.suffix.lower()],
-                            as_attachment=path.suffix.lower() in ('.tif', '.tiff'), filename=path.name)
+        return source_response(roots, row['result'].page.source)
     except (OSError, ValueError, KeyError, TypeError) as error:
         return unavailable(request, error)
+
+
+def source_response(roots, source):
+    """Serve only the checked source descriptor, shared by page and packet citations."""
+    path = roots.source(source)
+    content_types = {'.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg',
+                     '.jpeg': 'image/jpeg', '.tif': 'image/tiff', '.tiff': 'image/tiff'}
+    if path.suffix.lower() not in content_types:
+        raise ReviewError('Unsupported source format')
+    handle = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), 'rb')
+    try:
+        info = os.fstat(handle.fileno())
+        current = roots.source(source).stat()
+        if (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns) != (
+                current.st_dev, current.st_ino, source.size_bytes, source.mtime_ns):
+            raise ReviewError('Source changed before opening')
+    except Exception:
+        handle.close()
+        raise
+    return FileResponse(handle, content_type=content_types[path.suffix.lower()],
+                        as_attachment=path.suffix.lower() in ('.tif', '.tiff'), filename=path.name)
 
 
 def unavailable(request, error):

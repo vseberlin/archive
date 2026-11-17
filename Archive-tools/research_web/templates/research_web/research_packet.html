@@ -1,0 +1,68 @@
+{% extends 'research_web/base.html' %}{% block title %}Research packet{% endblock %}{% block content %}
+<a href="{% url 'page_search' %}">← Page search</a>
+<h1>Prepared research packet</h1>
+{% if not packet %}<p class="notice">No local evidence packet has been configured.</p>{% else %}
+<p class="eyebrow">{{ packet.case_key }} · Unreviewed preparation</p><h2>{{ packet.question }}</h2>
+<p>These are selected source regions and research hypotheses. No model assessment or curator decision has been made here.</p>
+<div class="grid">{% for name, profile in packet.profiles.items %}<section class="card"><h2>{{ profile.label }}</h2>
+<h3>Look for</h3><ul>{% for clue in profile.extract_first %}<li>{{ clue }}</li>{% endfor %}</ul>
+<h3>Compare with</h3><ul>{% for source in profile.compare_against %}<li>{{ source }}</li>{% endfor %}</ul>
+{% for limit in profile.limitations %}<p class="muted">{{ limit }}</p>{% endfor %}</section>{% endfor %}</div>
+<h2>Evidence</h2><p class="muted">Evidence numbers are positions within this packet. OCR variants of a page are not independent sources.</p>
+{% for item in packet.evidence %}<article class="card" id="evidence-{{ forloop.counter0 }}">
+<h3>Evidence {{ forloop.counter0 }} · {{ item.label }}</h3><p>{{ item.kind }} · {{ item.profiles|join:", " }} · {{ item.extractor.extractor }}</p>
+<p class="locator">{{ item.page.source.unit }} · member {{ item.page.member }} · {{ item.page.kind }} index {{ item.page.index }}{% if item.page.printed_label %} · printed {{ item.page.printed_label }}{% endif %}</p>
+{% if item.available %}<figure class="citation-figure"><img loading="lazy" src="{% url 'packet_media' forloop.counter0 %}?revision={{ revision }}" alt="{{ item.label }}">
+{% if item.display_percent %}<span class="citation-region" style="left:{{ item.display_percent.x|floatformat:3 }}%;top:{{ item.display_percent.y|floatformat:3 }}%;width:{{ item.display_percent.width|floatformat:3 }}%;height:{{ item.display_percent.height|floatformat:3 }}%" aria-hidden="true"></span>{% endif %}
+{% for candidate in item.discovery.regions %}<a class="detected-region" href="#candidate-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}" aria-label="Inspect text candidate {{ forloop.counter }}" style="left:{{ candidate.display_percent.x|floatformat:3 }}%;top:{{ candidate.display_percent.y|floatformat:3 }}%;width:{{ candidate.display_percent.width|floatformat:3 }}%;height:{{ candidate.display_percent.height|floatformat:3 }}%"><span>{{ forloop.counter }}</span></a>{% endfor %}</figure>
+<p><a href="{% url 'packet_source' forloop.counter0 %}?revision={{ revision }}{% if item.page.kind == 'pdf' %}#page={{ item.page.index }}{% endif %}" target="_blank" rel="noopener">Open original source{% if item.page.kind == 'pdf' %} at page {{ item.page.index }}{% endif %}</a></p>
+{% if item.text %}<details><summary>Original extracted reading · unreviewed</summary><p class="ocr-text">{{ item.text }}</p></details>{% elif item.extractor.extractor == 'visual' %}<p>Visual features prepared. OCR was not requested for this view.</p>{% else %}<p>No text extracted; this is not evidence of a blank image.</p>{% endif %}
+{% if item.web_context %}<section class="notice"><h3>External reference</h3><p><a href="{{ item.web_context.url }}" rel="noreferrer">{{ item.web_context.attribution }}</a> · accessed {{ item.web_context.accessed_at }}</p><p>{{ item.web_context.summary }}</p><p>{{ item.web_context.comparison }}</p><p>Reuse terms: {{ item.web_context.reuse_terms }}</p><p>{{ item.web_context.lineage_basis }}</p></section>{% endif %}
+{% if item.layout %}<section class="notice"><h3>Figure and caption discovery</h3>
+<p>{{ item.layout.coverage.figures_prepared }} figure candidates prepared. {% if item.layout.coverage.embedded_images_seen != None %}{{ item.layout.coverage.embedded_images_seen }} embedded image placements examined.{% endif %} Nearby captions are tentative links.</p>
+<p>Semantic layout coverage is incomplete. Detection can miss figures or include text, tables and borders.</p>
+{% for omission in item.layout.omitted %}<p>{{ omission.reason }}</p>{% endfor %}</section>{% endif %}
+{% if item.discovery %}<section class="notice">
+{% if item.discovery.coverage.mode == 'manual_lines' %}<h3>Selected full-line comparison</h3><p>These regions were selected manually. No automatic whole-image coverage is claimed. Logos remain separate from the selected text lines.</p><p>Recognition attempts complete: {{ item.discovery.coverage.recognition_complete|yesno:'yes,no' }}. CRNN reads Latin letters and digits only; Cyrillic readings use Tesseract.</p>
+{% else %}<h3>Automatic text-region coverage</h3>
+{% if item.discovery.error %}<p>{{ item.discovery.error }}</p>{% endif %}
+<p>{{ item.discovery.coverage.completed_passes|default:0 }} / {{ item.discovery.coverage.requested_passes|default:0 }} detection passes completed · {{ item.discovery.regions|length }} candidate regions.</p>
+{% if not item.discovery.coverage.scan_complete %}<p><strong>Incomplete scan.</strong> Check omitted or failed passes before interpreting coverage.</p>{% endif %}
+<p>No detections does not establish that there is no text. Candidate regions may include false positives; logos and other visual details need separate inspection.</p>
+<details><summary>Scan coverage and limits</summary><p>{{ item.discovery.coverage.omitted_tiles|default:0 }} detail tiles omitted · up to {{ item.discovery.coverage.recognition_limit|default:0 }} regions prepared for reading.</p>
+{% for pass in item.discovery.passes %}<p>{{ pass.kind }} · {{ pass.clockwise }}° · {{ pass.state }}{% if pass.error %}: {{ pass.error }}{% endif %}{% if pass.candidate_limit_reached %} · detector candidate limit reached{% endif %}</p>{% endfor %}</details>
+{% endif %}
+</section><div class="grid">{% for candidate in item.discovery.regions %}<section class="card" id="candidate-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
+<h3>Text candidate {{ forloop.counter }}{% if candidate.label %} · {{ candidate.label }}{% endif %}</h3><p class="badge">{{ candidate.status }}</p>
+{% if candidate.crop %}<a class="image-link" href="{% url 'packet_media' forloop.parentloop.counter0 %}?revision={{ revision }}&amp;candidate={{ forloop.counter0 }}" target="_blank" rel="noopener"><img loading="lazy" src="{% url 'packet_media' forloop.parentloop.counter0 %}?revision={{ revision }}&amp;candidate={{ forloop.counter0 }}" alt="Prepared text candidate {{ forloop.counter }}"></a>{% else %}<p>Crop recognition was not attempted within the processing limits.</p>{% endif %}
+{% if candidate.enhancements %}<details><summary>Compare image preparations</summary><p>Compare with the original crop above. Enhancements can alter strokes or amplify noise.</p>
+{% for enhancement in candidate.enhancements %}{% if enhancement.recipe != 'original' %}<figure><figcaption>{{ enhancement.recipe }}</figcaption><a target="_blank" rel="noopener" href="{% url 'packet_media' forloop.parentloop.parentloop.counter0 %}?revision={{ revision }}&amp;candidate={{ forloop.parentloop.counter0 }}&amp;enhancement={{ enhancement.recipe }}"><img loading="lazy" src="{% url 'packet_media' forloop.parentloop.parentloop.counter0 %}?revision={{ revision }}&amp;candidate={{ forloop.parentloop.counter0 }}&amp;enhancement={{ enhancement.recipe }}" alt="{{ enhancement.recipe }} preparation"></a></figure>{% endif %}{% endfor %}</details>{% endif %}
+{% for reading in candidate.readings %}<p class="ocr-text">{{ reading }}</p>{% empty %}<p>No readable text returned. The detected region is retained.</p>{% endfor %}
+<details><summary>Detection and reading attempts</summary>{% if candidate.selection %}<p>{{ candidate.selection }}</p>{% else %}<p>Detector score: {{ candidate.detection_score|floatformat:3 }} · {{ candidate.observations|length }} detection observations. Scores are not reading accuracy.</p>{% endif %}
+{% for variant in candidate.variants %}<p>{{ variant.engine|default:'tesseract' }} · {{ variant.languages }} · {{ variant.enhancement|default:'original' }} · {{ variant.clockwise }}° · {{ variant.polarity }}{% if variant.psm %} · mode {{ variant.psm }}{% endif %} · {{ variant.status }}: {{ variant.text }}{% if variant.error %} · {{ variant.error }}{% endif %}</p>{% endfor %}</details>
+</section>{% endfor %}</div>
+{% elif item.extractor.extractor != 'visual' and item.extractor.extractor != 'pdf-layout' and item.extractor.extractor != 'scan-layout' %}<p class="notice">No automatic text-region discovery result is attached to this view. Whole-page OCR alone does not establish marking coverage.</p>{% endif %}
+{% else %}<p class="notice">Source unavailable: {{ item.error }}</p>{% endif %}
+<p>{{ item.attribution }}</p><p class="muted">{{ item.lineage }}</p>
+<details><summary>Source and coverage</summary><p>{{ item.page.source.path }}</p>{% for limit in item.limitations %}<p>{{ limit }}</p>{% endfor %}</details>
+</article>{% endfor %}
+{% if packet.caption_links %}<h2>Caption relationships</h2>{% for link in packet.caption_links %}<article class="card">
+<p><a href="#evidence-{{ link.caption }}">Caption {{ link.caption }}</a> → <a href="#evidence-{{ link.subject }}">subject {{ link.subject }}</a> · {{ link.status }}</p>
+{% if link.quote %}<blockquote>{{ link.quote }}</blockquote>{% endif %}{% if link.position %}<p>Recorded position: {{ link.position }}</p>{% endif %}<p>{{ link.note }}</p><p class="muted">Identity remains unconfirmed.</p>
+</article>{% endfor %}{% endif %}
+{% if packet.cross_references %}<h2>Cross-references</h2>{% for link in packet.cross_references %}<article class="card">
+<p><a href="#evidence-{{ link.source }}">Evidence {{ link.source }}</a> → <a href="#evidence-{{ link.target }}">evidence {{ link.target }}</a> · {{ link.basis }} · {{ link.status }}</p>
+{% if link.quote %}<blockquote>{{ link.quote }}</blockquote>{% endif %}<p>{{ link.note }}</p><p class="muted">A research lead; identity remains unconfirmed.</p>
+</article>{% endfor %}{% endif %}
+{% if packet.hypotheses %}<h2>Competing hypotheses</h2>{% for hypothesis in packet.hypotheses %}<article class="card"><h3>{{ hypothesis.claim }}</h3>
+<p>Proposed support: {% for index in hypothesis.supports %}<a href="#evidence-{{ index }}">evidence {{ index }}</a> {% empty %}None recorded{% endfor %}</p>
+<p>Proposed contradiction: {% for index in hypothesis.contradicts %}<a href="#evidence-{{ index }}">evidence {{ index }}</a> {% empty %}None recorded; this does not establish agreement{% endfor %}</p></article>{% endfor %}{% endif %}
+{% for reading in packet.code_readings %}<section class="card"><h2>Type-code alternatives</h2><p>Literal reading: <strong>{{ reading.literal_reading }}</strong> · <a href="#evidence-{{ reading.evidence }}">source {{ reading.evidence }}</a></p>
+{% for candidate in reading.candidates %}<p>{{ candidate.value }} · <a href="#evidence-{{ candidate.evidence }}">dictionary evidence {{ candidate.evidence }}</a> · {{ candidate.status }}</p>{% empty %}<p>No candidate within the selected dictionary and supported character ambiguities.</p>{% endfor %}</section>{% endfor %}
+{% if packet.assessment %}<section class="notice"><h2>Model assessment · unreviewed proposal</h2><p>Model: {{ packet.assessment.model }}{% if packet.assessment.provider == "codex-chatgpt" %} · Via your ChatGPT account{% endif %}. Citations were checked for valid references; this does not verify the claims.</p>
+{% for item in packet.assessment.assessment.observations %}<article class="card"><p>{{ item.claim }}</p><p>{{ item.basis }} · {{ item.uncertainty }}</p><p>{% for index in item.evidence %}<a href="#evidence-{{ index }}">Evidence {{ index }}</a> {% endfor %}</p></article>{% endfor %}
+{% for item in packet.assessment.assessment.hypotheses %}<article class="card"><p>{{ item.claim }}</p><p>{{ item.uncertainty }}</p><p>Support: {% for index in item.supports %}<a href="#evidence-{{ index }}">Evidence {{ index }}</a> {% empty %}None{% endfor %}</p><p>Contradictions: {% for index in item.contradicts %}<a href="#evidence-{{ index }}">Evidence {{ index }}</a> {% empty %}None recorded{% endfor %}</p></article>{% endfor %}
+<p>Next local search: {{ packet.assessment.assessment.next_local_search }}</p>{% for item in packet.assessment.assessment.unresolved %}<p>{{ item }}</p>{% endfor %}</section>{% endif %}
+{% if packet.omissions %}<h2>Missing or omitted evidence</h2><ul>{% for note in packet.omissions %}<li>{{ note }}</li>{% endfor %}</ul>{% endif %}
+{% for note in packet.limitations %}<p class="muted">{{ note }}</p>{% endfor %}
+{% endif %}{% endblock %}

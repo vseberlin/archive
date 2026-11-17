@@ -2,6 +2,7 @@
 <a href="{% url 'page_search' %}">← Page search</a><h1>{{ row.id }}</h1>
 <p>{{ row.page.source.unit }} · {{ row.page.source.role }}{% if row.page.source.role == 'synthetic' %} · Synthetic fixture{% endif %}</p>
 <p class="locator">Member {{ row.page.member }} · {{ row.page.kind }} index {{ row.page.index }}{% if row.page.logical_page %} · logical page {{ row.page.logical_page }}{% endif %}{% if row.page.printed_label %} · printed {{ row.page.printed_label }}{% endif %}</p>
+{% if row.result.region %}<p class="notice">Selected detail crop. Open the original source below for full-page context.</p>{% endif %}
 {% if word %}<p>Machine-text hit: <strong>{{ word.text }}</strong>{% if word.confidence != None %} · machine score {{ word.confidence|floatformat:2 }}{% endif %}. Check against the source image.</p>{% endif %}
 <figure class="citation-figure"><img src="{% url 'extraction_media' row.key %}?revision={{ revision }}" alt="Bound processed source page {{ row.id }}">
 {% if region %}<span class="citation-region" style="left:{{ region.x|floatformat:3 }}%;top:{{ region.y|floatformat:3 }}%;width:{{ region.width|floatformat:3 }}%;height:{{ region.height|floatformat:3 }}%" aria-hidden="true"></span>{% endif %}

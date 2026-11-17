@@ -12,7 +12,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'src'), str(ROOT/'Archive-tools')]
 from archive_research import Page, Root, Roots, Source, Region, Transform
-from archive_research.geometry import inverse_rotation, source_region, displayed_region
+from archive_research.geometry import inverse_rotation, source_region, displayed_region, processed_region
 from archive_research.preparation import inspect_page, render
 from archive_research.pdf_text import extract as pdf_text
 from archive_research.ocr import extract as ocr
@@ -127,6 +127,54 @@ class PositionedTests(unittest.TestCase):
         path=self.output/'plan.json';path.write_text('{}')
         with self.assertRaisesRegex(ValueError,'plan changed'):
             load_plan(path, '0'*64)
+
+    def test_explicit_adaptive_threshold_has_own_cache_recipe(self):
+        page=self.pdf();task={'id':'adaptive','page':asdict(page),'extractor':'ocr',
+                             'settings':{'languages':'eng','psm':6,'dpi':150}}
+        base=extract_one(self.roots,'artifacts',task)
+        task['settings']['thresholding_method']=2
+        adaptive=extract_one(self.roots,'artifacts',task)
+        self.assertEqual(adaptive['state'],'complete',adaptive)
+        self.assertNotEqual(base['key'],adaptive['key'])
+        self.assertTrue(extract_one(self.roots,'artifacts',task)['reused'])
+        row=json.loads((self.output/(adaptive['key']+'.json')).read_text())
+        self.assertIn('ALPHA',[w['text'] for w in row['words']])
+
+    def test_crop_transform_roundtrips_for_each_rotation(self):
+        from PIL import Image
+        path = self.input/'regions.png'
+        Image.new('RGB', (400, 200), 'white').save(path)
+        page = inspect_page(self.roots, self.bind(path), 1, 'image', 0)
+        region = Region(.2, .1, .4, .6)
+        for angle in (0, 90, 180, 270):
+            image, transform, _ = render(self.roots, page, self.output, clockwise=angle, region=region)
+            restored = source_region((0, 0, transform.width, transform.height), transform, page)
+            for field in ('x', 'y', 'width', 'height'):
+                self.assertAlmostEqual(getattr(restored, field), getattr(region, field), places=2)
+            shown = processed_region(region, transform, page)
+            self.assertAlmostEqual(shown.width, 1, places=2)
+            self.assertAlmostEqual(shown.height, 1, places=2)
+
+    def test_crop_ocr_preserves_source_coordinates_and_cache(self):
+        from PIL import Image, ImageDraw, ImageFont
+        path = self.input/'detail.png'
+        im = Image.new('RGB', (1000, 500), 'white')
+        ImageDraw.Draw(im).text((300, 210), 'TUBE 18 LK 15', fill='black',
+                              font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 40))
+        im.save(path); im.close()
+        page = inspect_page(self.roots, self.bind(path), 1, 'image', 0)
+        task = {'id': 'detail', 'page': asdict(page), 'extractor': 'ocr',
+                'region': asdict(Region(.25, .35, .6, .25)), 'settings': {'languages': 'eng', 'psm': 6}}
+        first = extract_one(self.roots, 'artifacts', task)
+        self.assertEqual(first['state'], 'complete')
+        receipt = json.loads((self.output/(first['key']+'.json')).read_text())
+        self.assertEqual(receipt['result']['region'], task['region'])
+        word = next(w for w in receipt['words'] if w['text'] == 'TUBE')
+        self.assertTrue(.29 < word['region']['x'] < .32)
+        self.assertTrue(.4 < word['region']['y'] < .5)
+        self.assertTrue(extract_one(self.roots, 'artifacts', task)['reused'])
+        changed = {**task, 'region': asdict(Region(.2, .3, .7, .4))}
+        self.assertNotEqual(extract_one(self.roots, 'artifacts', changed)['key'], first['key'])
 
 
 if __name__=='__main__':
