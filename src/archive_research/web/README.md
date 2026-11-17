@@ -7,7 +7,11 @@ There are 52 source views: 51 prepared images and one explicitly unreadable TIFF
 Bounded assertion review/correction, readable history and recovery share the
 existing authority files. Citation links open a region viewer and bound source.
 Generic research administration remains read-only.
-All real observations start unreviewed. See the [approved scope](../../../docs/architecture/archive-research-pilot-scope.md).
+All real observations start unreviewed. Review and export remain proposals;
+neither adopts catalogue metadata nor authorizes changes to archive holdings.
+See the application's [design contracts](../README.md#design-contracts) for
+identity, evidence and storage boundaries. Private operating approvals and case
+records are not distributed with the application.
 
 ## Run with explicit configuration
 

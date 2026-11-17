@@ -1,5 +1,7 @@
 # Runtime state, local configuration and credentials
 AGENTS.md
+# Local development plans, reviews and operating notes
+/docs/
 HANDOFF.md
 handoff_CURRENT.md
 .env
@@ -71,9 +73,6 @@ tools/archive-preservation/copyhash
 *.orig
 *.swp
 *~
-
-# Explicitly approved public benchmark measurements (no raw archive data)
-!/docs/reference-v12-building-benchmark-20261114.json
 
 # Invented, versioned fixture data required by the installed application.
 !/src/archive_research/web/fixture.json

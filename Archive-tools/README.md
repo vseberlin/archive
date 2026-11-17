@@ -800,6 +800,33 @@ unchanged unless the reviewer chooses “Use latest research proposal” and sav
 Supported and contradicted candidates are omitted from the unconfirmed hypotheses
 list; full findings remain in the original research record.
 
+## Historical building pilot
+
+A paired V11/V12 pilot on 14 November 2026 used six fixed photographs, the same
+model and settings, two discovery rounds and a 500,000-token per-item allowance.
+Expected identities were withheld from prompts. Only three photographs had
+independently checked identities; the other three remained unscored.
+
+| Measure | V11 | V12 |
+| --- | ---: | ---: |
+| Correct supported identities on the checked subset | 2 / 3 | 2 / 3 |
+| Supported input metadata fields | 3 | 3 |
+| Reference images supplied to completed comparisons | 34 | 52 |
+
+More retrieved evidence did not improve supported identification in this pilot.
+There was one stochastic trial per version/photo, later searches diverged, and
+usage limits interrupted several cases. These results are not a population
+accuracy estimate or proof of a general efficiency gain. Neither version
+established a photograph date or event.
+
+The V11 source is commit `52ad782`; the V12 release is `e55c04f`, which includes
+two post-pilot fixes not rerun through the live experiment. Exact frozen-source
+hashes, reconstruction patch, measurements and run receipts are retained locally.
+Reproduction requires the same private photographs, authorized reference access
+and model setup; a public clone does not contain those inputs. The current
+runner's `benchmark` command evaluates explicitly prepared cases; its results
+still require independent judgement of identity and supporting evidence.
+
 ## Bounded reference research
 
 Current runner: `reference_batch.py` (v12). The older runner under

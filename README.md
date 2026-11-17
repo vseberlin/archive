@@ -6,7 +6,7 @@ and object records through positioned text, visual comparisons and cited evidenc
 Selected evidence can be prepared for multimodal OpenAI assessment, then reviewed
 in a local Django workbench. Machine findings remain proposals until reviewed.
 
-This repository contains the application source, tests, workflow documentation,
+This repository contains the application source, tests, usage guides,
 and retained reconciliation/accession tools. Archive holdings, private research
 results, accounts and runtime databases live outside the repository.
 
@@ -16,12 +16,10 @@ results, accounts and runtime databases live outside the repository.
   extractor contracts, retrieval, evidence packets and assessment commands.
 - [Workbench guide](src/archive_research/web/README.md): local review, citations,
   configuration and launch instructions.
-- [Implementation plan](docs/architecture/archive-django-consolidation-plan.md):
-  agreed direction, delivered work and remaining limitations.
-- [Tool map](docs/architecture/archive-application-structure.md): active, retained
-  and unit-specific code.
-- [Archive contract](docs/architecture/archive-preservation-architecture-adr.md):
-  source protection, authority and permitted operations.
+- [Design contracts](src/archive_research/README.md#design-contracts): identity,
+  evidence, storage and portability requirements.
+- [Retained tools](tools/archive-preservation/README.md): tool roles,
+  archive invariants and execution boundaries.
 
 ## Repository layout
 
@@ -47,8 +45,7 @@ archive/
 ├── tools/
 │   ├── repo-guard.py           # guarded repository operations
 │   └── archive-preservation/   # reusable and retained archive helpers
-├── work-area/                   # source for unit-specific jobs and review UIs
-└── docs/                        # architecture, workflow and published benchmarks
+└── work-area/                   # source for unit-specific jobs and review UIs
 ```
 
 The CLI and workbench use the same application modules. The active package does
@@ -163,15 +160,12 @@ archive-research web --project /path/to/project.toml \
   --machine /path/to/machine.toml test
 ```
 
-The 17 November 2026 consolidation passed 384 tests: 119 application, 67 Django,
-186 retained route/reference/workbench and 12 SIFT tests. The installed workflow
-also ran outside the checkout and reproduced the prior index, evidence packet and
-prepared model request. Existing readable records and database table counts stayed
-unchanged. These checks establish local behavior, not collection-wide accuracy.
+Tests check application behavior and data boundaries. Passing them does not
+establish collection-wide extraction or identification accuracy.
 
 Legacy suites have their own dependencies and instructions. Some unit tests need
 private evidence absent from Git; accession or drain executors are not test runners.
-The [six-photo V11/V12 benchmark](docs/reference-v12-building-benchmark-20261114.md)
+The [historical building pilot](Archive-tools/README.md#historical-building-pilot)
 documents the retained photograph-reference runner and its evaluation limits.
 
 ## Retained tools and data boundaries
@@ -180,12 +174,12 @@ documents the retained photograph-reference runner and its evaluation limits.
 workbenches and the retained [photograph-reference batch runner](Archive-tools/reference_batch.py).
 Its [public reference registry](Archive-tools/berlin-photo-reference-sources.json)
 is search configuration, not research results. Older copies under `work-area/`
-are historical; consult the tool map before choosing an entry point.
+are historical; consult the retained-tools guide before choosing an entry point.
 `work-area/` mirrors unit-job source paths, not live holdings or review state.
 
 Archive images, catalogues, decisions, credentials, databases, model weights and
 raw research outputs are excluded from Git. The invented installed web fixture,
-public search configuration and explicitly published benchmark measurements are
+public search configuration and evaluation summaries are
 intentional source/documentation assets. One resolved archival object has one
 selected Master; derivatives belong to authorized accession. Marking another
 copy redundant does not authorize deletion.
@@ -193,9 +187,9 @@ copy redundant does not authorize deletion.
 Machine paths, mount identities, private runtime locations and current operating
 state belong in local configuration and an untracked handoff. Public documentation
 uses repository-relative source paths and illustrative `/path/to/...` inputs.
-`AGENTS.md` is local operator guidance and is intentionally excluded from Git.
-A source publication does not deploy services or change archive data. See
-[continuity](docs/architecture/archive-continuity.md).
+Local operator instructions, development plans, dated reviews and handoffs are
+excluded from Git. Public documentation lives in these maintained READMEs.
+A source publication does not deploy services or change archive data.
 
 ## Guarded Git workflow
 

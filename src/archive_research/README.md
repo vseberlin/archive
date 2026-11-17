@@ -1,9 +1,9 @@
 # Archive research application
 
 One installed Python application owns local extraction, cross-unit retrieval,
-evidence packets, assessment and the Django workbench. The
-[consolidation plan](../../docs/architecture/archive-django-consolidation-plan.md)
-owns scope; private project/machine configuration selects existing data and roots.
+evidence packets, assessment and the Django workbench. Private project/machine
+configuration selects existing data and roots. This guide describes the public
+interfaces and contracts; development plans and operating records remain local.
 
 ```text
 src/archive_research/
@@ -37,6 +37,38 @@ receipts and never launches extraction or submits model requests. Old package
 imports and `Archive-tools/research_{packet,retrieve,assessment}.py` remain thin
 forwarders; reconciliation/accession and completed unit jobs retain their own
 legacy entry points. New research implementation belongs here.
+
+## Design contracts
+
+- **Identity and evidence:** preserve existing unit, object and representation
+  identifiers. Paths, timestamps and device/inode numbers locate or check files;
+  they do not define archival identity. Identical bytes do not establish that two
+  records describe the same object. Bind findings to their source, member,
+  page/frame and region, keeping observations, hypotheses and adopted metadata
+  distinct.
+- **Processing:** extractors return versioned, source-bound receipts and explicit
+  coverage. Recipes bind relevant settings, dependencies and model hashes. Local
+  model files are explicit inputs; installing the application does not download
+  weights. HTTP requests read prepared results and never start processing or
+  model submissions.
+- **Authority:** human-readable source bindings, research and review records are
+  authoritative. SQLite and search/vector indexes are rebuildable projections.
+  Research suggestions do not select Masters, adopt catalogue metadata or
+  authorize accession, publication or deletion. The retained-tools guide records
+  the [archive invariants](../../tools/archive-preservation/README.md#current-rules).
+- **Safe writes:** validate temporary output on the destination filesystem before
+  replacement. Never fall back to copying over a live file when atomic replacement
+  fails. Report uncertain durability if synchronization fails after replacement;
+  do not blindly repeat an already applied write. Atomicity, durability and writer
+  exclusion require separate checks.
+- **Portable deployment:** make roots and environments explicit. Detect case,
+  Unicode, reserved-name and path-length collisions without silently renaming or
+  merging sources. Preserve encodings, timestamp meanings, coordinate units and
+  representation order. Verify effective native filesystem access separately from
+  application login/roles; do not translate Unix permission bits into assumptions
+  about another platform. Qualify locking, replacement and database recovery on
+  the actual storage. Current Unix-specific dependencies still need isolation and
+  qualification before another platform is supported.
 
 ## One bounded workflow
 

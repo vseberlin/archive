@@ -3,12 +3,10 @@
 This directory contains reusable archive helpers, completed-unit scripts, and
 legacy compatibility code. It is not the archive policy source.
 
-Current authority:
-
-1. Local, untracked `AGENTS.md` (operator instructions for the approved deployment)
-2. `../../docs/architecture/archive-preservation-architecture-adr.md`
-3. `../../docs/architecture/archive-application-structure.md`
-4. unit manifests, receipts, catalogues, and current handoff state
+The rules below summarize the public archive contract. Deployment authorization,
+unit manifests, receipts, catalogues and current operating state remain private.
+The active research package has its own
+[design contracts](../../src/archive_research/README.md#design-contracts).
 
 Do not read old ADRs, historical handoffs, local memory, or completed run
 artifacts as policy.
@@ -107,8 +105,8 @@ Every active workbench must be direct and bounded:
 ## Before Running Anything
 
 1. Read the private handoff if current archive state matters.
-2. Identify the unit and bucket from
-   `../../docs/architecture/archive-application-structure.md`.
+2. Identify the unit and its [harness bucket](#harness-buckets), then check the
+   unit's current receipts and private operating instructions.
 3. Verify the protected source when in scope:
 
    ```bash
