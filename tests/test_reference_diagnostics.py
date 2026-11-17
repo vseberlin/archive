@@ -81,9 +81,23 @@ class ReferenceDiagnosticsTests(unittest.TestCase):
         self.assertEqual(set(main["strata"]), {"Technisches Fotoarchiv", "Kurt Schwarz", "other"})
         self.assertEqual(len(report["holdout_sweep"]), 4)
         self.assertEqual(len(report["sample_ids"]), 60)
+        rare = main["visual_excluding_common_labels"]["tags"]
+        self.assertGreater(rare["proposed"], 0)
+        self.assertGreater(rare["queries"], 0)
+        dates = main["date"]["all"]
+        self.assertLessEqual(dates["paired_scored"], min(dates["visual_scored"], dates["true_collection_median_scored"]))
+        self.assertIsNotNone(dates["visual_paired_mae"])
         self.assertEqual(rd.main(["diagnose", "--work-root", str(self.root), "--sample", "60", "--run", "t1"]), 2)
 
+    def test_missing_index_is_refused_without_creating_one(self):
+        with tempfile.TemporaryDirectory() as empty:
+            root = Path(empty).resolve()
+            self.assertEqual(rd.main(["diagnose", "--work-root", str(root), "--run", "x"]), 2)
+            self.assertFalse((root / "index.sqlite").exists())
+
     def test_preview_gap_reasons(self):
+        self.assertEqual(rd.preview_gap({"object_images": [{"type": "text", "preview": "doc.jpg"}]}),
+                         "non_image_type_with_image_preview:text")
         self.assertEqual(rd.preview_gap({}), "no_object_images")
         self.assertEqual(rd.preview_gap({"object_images": [{"type": "audio"}]}), "only_non_image_types:audio")
         self.assertEqual(rd.preview_gap({"object_images": [{"type": "image", "filename_loc": "a.jpg"}]}),
@@ -108,6 +122,22 @@ class ReferenceDiagnosticsTests(unittest.TestCase):
             writer.writeheader()
             writer.writerows(rows)
         self.assertEqual(rd.main(["review-score", "--review", str(judged)]), 0)
+        partial = [dict(r, judgement=r["judgement"] if i == 0 else "") for i, r in enumerate(rows)]
+        with judged.open("w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(partial)
+        self.assertEqual(rd.main(["review-score", "--review", str(judged)]), 2)
+        from io import StringIO
+        from contextlib import redirect_stdout
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            self.assertEqual(rd.main(["review-score", "--review", str(judged), "--allow-partial"]), 0)
+        scored = json.loads(buffer.getvalue())
+        self.assertEqual((scored["complete_queries_at_1"], scored["complete_queries_at_3"]), (1, 0))
+        self.assertIn("partial_lenient_precision_at_1", scored)
+        self.assertNotIn("lenient_precision_at_5", scored)
+        self.assertIsNone(scored["partial_lenient_precision_at_5"])
         rows[0]["judgement"] = "maybe"
         with judged.open("w", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=list(rows[0]))

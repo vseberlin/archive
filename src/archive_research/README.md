@@ -126,8 +126,11 @@ holdout sweep over inventory windows with and without a session proxy (identical
 date text within identical collections). `preview-gaps` classifies records without a
 selected preview URL. `review-export` writes top-k neighbours with an empty
 `judgement` column (`same_photograph`, `same_place_or_object`, `same_type`,
-`unrelated`, `unclear`); `review-score` reports hit@k and precision@k. Receipts are
-never overwritten. These remain diagnostics, not acceptance evidence.
+`unrelated`, `unclear`); `review-score` reports hit@k and precision@k and refuses
+queries with unjudged top-k rows unless `--allow-partial` (metrics then prefixed
+`partial_`). Date baselines are also reported paired on identical queries. The
+index is opened read-only and receipts are never overwritten. These remain
+diagnostics, not acceptance evidence.
 
 For new archive imagery, `reference ... index-new --selection KEYS.json` imports
 verified shared visual receipts in the matching model space; it never scans

@@ -51,7 +51,10 @@ Tests run here: `test_image_depth` (4), `test_face_regions` (3),
 | F5 | Dark 16-bit scans stay dark | Probe: a scan using 0–4000 maps to 0–15 | Record actual min/max/percentiles in the transform step; offer a percentile stretch as a separate render-policy recipe, never silently |
 | F6 | 16-bit MinIsWhite TIFFs render as negatives | Probe: value 60000 shown as 233 (Pillow inverts 8-bit MinIsWhite, not 16-bit) | Read tag 262; invert when 0; add a regression test |
 | F7 | Greyscale sources stored as RGB PNG | `display_rgb` returns RGB for L and uint16 grey | Store `L` for greyscale prepared views (about a third of the bytes); convert to RGB only in the consumer |
-| F8 | EXIF orientation lost for 16-bit references | `reference.open_image` converts before `exif_transpose`; the new image has no EXIF | Transpose first, or carry the orientation tag across |
+| F8 | ~~EXIF orientation lost for 16-bit references~~ **Withdrawn.** | Inferred from code order in `reference.open_image`, not probed; the operator's test did not reproduce it under the pinned Pillow 11.1 | None |
+
+Operator follow-up (17 November): F3 (face budget on large masters) and F6
+(16-bit MinIsWhite polarity) were reproduced on the workstation.
 
 ## 2. The reference evaluation
 
@@ -96,6 +99,28 @@ interpretation below is what the report's own numbers support and what they do n
 Items 1–6 and 8 are implemented in this commit (section 3); item 7 needs masters
 and the shared receipts, and remains to do.
 
+### Results on the real index (operator run, 17 November)
+
+The diagnostics were run against an isolated copy of the completed index; the
+visual totals reproduced the original evaluation exactly. Under `series_hidden`:
+
+| Measure | Visual method | Matched prevalence baseline |
+|---|---:|---:|
+| Tags | 65.15 % | 51.64 % |
+| Places | 77.88 % | 76.21 % |
+| High-support places | 95.32 % | 94.49 % |
+
+Tags carry a real visual signal (+13.5 points). **Place suggestions gain little
+over label frequency** (+1.7, high tier +0.8): they should not be presented as
+visual evidence of location.
+
+The coverage gap is a mapper choice, not missing images: all 3,582 records without
+a selected preview are document/PDF records whose image entries have a text media
+type but JPEG preview fields. `md_preview_url` filters them by type. They can be
+indexed as page previews if wanted, but should be a separate stratum (documents,
+not photographs) so they do not dilute or inflate photograph results.
+`preview-gaps` now reports them as `non_image_type_with_image_preview:<type>`.
+
 ### Decision
 
 Keep OpenCLIP ViT-B-32 with letterbox framing as the baseline and use the index
@@ -132,14 +157,20 @@ Interpretation notes:
 - The session proxy (identical date text within identical collections) can be far
   too broad where catalogues use date ranges; check `excluded_other_records` in each
   sweep row before reading its precision.
+- Corrections after operator review (same day): `review-score` refuses queries
+whose exported top-k rows are not all judged (`--allow-partial` scores only fully
+judged queries and prefixes metric names with `partial_`); date baselines report
+paired MAE on identical queries beside the unpaired figures; the rare-label
+query count is incremented; the index is opened read-only (`mode=ro`) and a
+missing index is refused without creating a file.
 - On a synthetic 4,530-record index the full diagnosis took 1.4 s; the real run
   should take seconds to a minute.
 
 ## 4. Suggested order
 
-1. Run `diagnose` and `preview-gaps` on the completed work root; record results
-   beside the evaluation report.
-2. Fix the preview mapper if `preview-gaps` shows recoverable images.
+1. Done: `diagnose` and `preview-gaps` on the completed work root (section 2).
+2. Decide whether to index the 3,582 document previews as a separate stratum;
+   stop presenting place suggestions as visual evidence.
 3. Curator review via `review-export` (about two hours).
 4. Domain-gap test (item 7) once 50–100 master renders exist as shared receipts.
 5. Only then: encoder comparison on the same harness.

@@ -23,13 +23,21 @@ from typing import Any
 import numpy as np
 
 from .contracts import require
-from .reference import connect, load_matrix
+from .reference import load_matrix
 from .reference_catalogue import (FIELDS_MULTI, aggregate, atomic_write, clean, neighbours_for,
                                   series_key, utc_now)
 
 CATEGORICAL = ("object_type", "tags", "places", "collections")
 JUDGEMENTS = ("same_photograph", "same_place_or_object", "same_type", "unrelated", "unclear")
 DEFAULT_STRATA = ("Technisches Fotoarchiv", "Kurt Schwarz")
+
+
+def connect_ro(work_root: Path):
+    """Open the existing projection read-only; never create or migrate it."""
+    import sqlite3
+    path = work_root / "index.sqlite"
+    require(path.is_file() and not path.is_symlink(), f"no reference index at {path}")
+    return sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
 
 
 def values(meta: dict[str, Any], field: str) -> list[str]:
@@ -160,10 +168,10 @@ def evaluate_mode(matrix, ids, meta, sample, holdouts, pool, args, *, window, ne
                     tally["proposed"] += len(guess)
                     tally["correct"] += sum(label in truth for label in guess)
                     tally["queries"] += int(bool(guess))
-                for p in mine:
-                    if p["value"].casefold() not in rare[field]:
-                        rare_visual[field]["proposed"] += 1
-                        rare_visual[field]["correct"] += int(p["value"].casefold() in truth)
+                uncommon = [p for p in mine if p["value"].casefold() not in rare[field]]
+                rare_visual[field]["proposed"] += len(uncommon)
+                rare_visual[field]["correct"] += sum(p["value"].casefold() in truth for p in uncommon)
+                rare_visual[field]["queries"] += int(bool(uncommon))
                 s = strata[group][field]
                 s["proposed"] += len(mine)
                 s["correct"] += sum(p["value"].casefold() in truth for p in mine)
@@ -215,6 +223,10 @@ def date_summary(rows: list[dict[str, Any]], detailed: bool) -> dict[str, Any]:
             errors = [r[name] for r in chosen if r.get(name) is not None]
             part[f"{name}_mae"] = round(float(np.mean(errors)), 2) if errors else None
             part[f"{name}_scored"] = len(errors)
+        paired = [r for r in chosen if all(r.get(name) is not None for name in names)]
+        part["paired_scored"] = len(paired)
+        for name in names:
+            part[f"{name}_paired_mae"] = round(float(np.mean([r[name] for r in paired])), 2) if paired else None
         out[subset] = part
     return out
 
@@ -224,7 +236,7 @@ def common_labels(pool: Pool, fields, n: int) -> dict[str, list[str]]:
 
 
 def cmd_diagnose(args) -> int:
-    connection = connect(args.work_root)
+    connection = connect_ro(args.work_root)
     model = select_model(connection, args.model)
     ids, matrix, meta = load_matrix(connection, "ref", model)
     connection.close()
@@ -298,8 +310,11 @@ def print_report(report: dict[str, Any]) -> None:
     date = main["date"]
     if date.get("scored"):
         a = date["all"]
-        print(f"\ndate MAE (years, {a['scored']} scored): visual {a['visual_mae']}  pool median {a['pool_median_mae']}  "
-              f"true-collection median {a['true_collection_median_mae']}  predicted-collection median {a['predicted_collection_median_mae']}")
+        print(f"\ndate MAE, paired on {a['paired_scored']} identical queries (years): visual {a['visual_paired_mae']}  "
+              f"pool median {a['pool_median_paired_mae']}  true-collection median {a['true_collection_median_paired_mae']}  "
+              f"predicted-collection median {a['predicted_collection_median_paired_mae']}")
+        print(f"  unpaired scored: visual {a['visual_scored']}, pool {a['pool_median_scored']}, "
+              f"true-collection {a['true_collection_median_scored']}, predicted-collection {a['predicted_collection_median_scored']}")
     print("\nstrata (visual precision/proposals):")
     for group, s in main["strata"].items():
         cells = "  ".join(f"{f} {fmt(s[f]).strip()}" for f in main["visual"])
@@ -340,8 +355,9 @@ def preview_gap(item: dict[str, Any]) -> str:
     typed = [r for r in images if isinstance(r, dict)]
     usable = [r for r in typed if str(r.get("type") or "image").casefold() == "image"]
     if not usable:
-        kinds = sorted({str(r.get("type")).casefold() for r in typed})
-        return "only_non_image_types:" + ",".join(kinds[:3])
+        kinds = ",".join(sorted({str(r.get("type")).casefold() for r in typed})[:3])
+        previews = [r for r in typed if re.search(r"\.(jpe?g|png|webp|gif|tiff?)$", clean(r.get("preview")), re.I)]
+        return (f"non_image_type_with_image_preview:{kinds}" if previews else f"only_non_image_types:{kinds}")
     first = sorted(usable, key=lambda r: (str(r.get("is_main")) != "j", int(r.get("order") or 999)))[0]
     if not clean(first.get("folder")).strip("/"):
         return "selected_image_without_folder"
@@ -354,7 +370,7 @@ def preview_gap(item: dict[str, Any]) -> str:
 # ----------------------------------------------------------- curator review
 
 def cmd_review_export(args) -> int:
-    connection = connect(args.work_root)
+    connection = connect_ro(args.work_root)
     model = select_model(connection, args.model)
     ids, matrix, meta = load_matrix(connection, "ref", model)
     connection.close()
@@ -390,22 +406,33 @@ def cmd_review_export(args) -> int:
 def cmd_review_score(args) -> int:
     with args.review.open(encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    judged = [r for r in rows if clean(r.get("judgement"))]
+    for r in rows:
+        r["judgement"] = clean(r.get("judgement"))
+    judged = [r for r in rows if r["judgement"]]
     unknown = {r["judgement"] for r in judged} - set(JUDGEMENTS)
     require(not unknown, f"unknown judgements: {sorted(unknown)}; use {JUDGEMENTS}")
     by_query: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for r in judged:
+    for r in rows:
         by_query[r["query_id"]].append(r)
     relevant = {"strict": {"same_photograph", "same_place_or_object"},
                 "lenient": {"same_photograph", "same_place_or_object", "same_type"}}
     out: dict[str, Any] = {"rows": len(rows), "judged": len(judged), "queries": len(by_query),
-                           "judgements": dict(Counter(r["judgement"] for r in judged)), "created_at": utc_now()}
-    for name, accepted in relevant.items():
-        for k in (1, 3, 5):
-            hits = [any(r["judgement"] in accepted for r in rs if int(r["rank"]) <= k) for rs in by_query.values()]
-            precision = [r["judgement"] in accepted for rs in by_query.values() for r in rs if int(r["rank"]) <= k]
-            out[f"{name}_hit_at_{k}"] = ratio(sum(hits), len(hits))
-            out[f"{name}_precision_at_{k}"] = ratio(sum(precision), len(precision))
+                           "judgements": dict(Counter(r["judgement"] for r in judged)), "created_at": utc_now(),
+                           "scored_over": "queries whose exported top-k rows are all judged"}
+    for k in (1, 3, 5):
+        complete = {q: [r for r in rs if int(r["rank"]) <= k] for q, rs in by_query.items()}
+        complete = {q: rs for q, rs in complete.items() if rs and all(r["judgement"] for r in rs)}
+        incomplete = len(by_query) - len(complete)
+        out[f"complete_queries_at_{k}"] = len(complete)
+        out[f"incomplete_queries_at_{k}"] = incomplete
+        require(args.allow_partial or not incomplete,
+                f"{incomplete} queries have unjudged rows within top-{k}; judge them or pass --allow-partial")
+        prefix = "partial_" if incomplete else ""
+        for name, accepted in relevant.items():
+            hits = [any(r["judgement"] in accepted for r in rs) for rs in complete.values()]
+            precision = [r["judgement"] in accepted for rs in complete.values() for r in rs]
+            out[f"{prefix}{name}_hit_at_{k}"] = ratio(sum(hits), len(hits))
+            out[f"{prefix}{name}_precision_at_{k}"] = ratio(sum(precision), len(precision))
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
 
@@ -454,6 +481,8 @@ def main(argv: list[str] | None = None) -> int:
 
     p = commands.add_parser("review-score")
     p.add_argument("--review", type=Path, required=True)
+    p.add_argument("--allow-partial", action="store_true",
+                   help="score only fully judged queries; metric names are prefixed partial_")
     p.set_defaults(func=cmd_review_score)
 
     args = parser.parse_args(argv)
