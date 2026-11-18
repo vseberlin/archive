@@ -68,11 +68,16 @@ class ScanLayoutTests(unittest.TestCase):
         derived=visual_tasks(self.roots,'artifacts',attempt['key'],{})
         self.assertEqual(derived[0]['settings']['region_origin']['key'],attempt['key'])
 
-    def test_changed_ocr_receipt_rejected_before_cache_reuse(self):
+    def test_pinned_ocr_version_survives_current_receipt_change(self):
         task,_,_=self.pipeline();path=self.out/(task['settings']['ocr_origin']['key']+'.json')
         row=json.loads(path.read_text());row['words'].append({'text':'injected'});path.write_text(json.dumps(row))
         attempt=extract_one(self.roots,'artifacts',task)
-        self.assertEqual(attempt['state'],'error');self.assertIn('OCR origin changed',attempt['error'])
+        self.assertTrue(attempt['reused'], attempt)
+        # The explicitly pinned old evidence is retained. A direct read of the
+        # edited current result still fails; it cannot replace that old evidence.
+        from archive_research.receipts import read_current
+        with self.assertRaisesRegex(ValueError, 'Immutable result changed'):
+            read_current(self.roots, 'artifacts', task['settings']['ocr_origin']['key'])
 
     def test_rotation_maps_back_to_original_source_region(self):
         _,_,row=self.pipeline(clockwise=90)

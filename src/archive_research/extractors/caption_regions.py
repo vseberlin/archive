@@ -3,7 +3,8 @@ from dataclasses import asdict
 
 from ..contracts import Region,require
 from ..geometry import processed_region,source_region
-from ..receipts import read_current
+from ..receipts import read_current, read_origin
+from ..result_records import origin as dependency_origin
 
 
 def band(page,transform,figure,side):
@@ -34,17 +35,16 @@ def caption_tasks(roots,work,key,*,figures=None,sides=('below','above')):
             tasks.append({'id':f'{key}-figure-{i}-caption-{side}','extractor':'ocr','page':asdict(result.page),
                           'region':asdict(region),'settings':{'clockwise':result.recipe.record()['parameters']['settings']['clockwise'],
                           'psm':6,'thresholding_method':0,'caption_origin':{
-                              'key':key,'figure':i,'side':side,'receipt_sha256':digest}}})
+                              **dependency_origin(roots,work,key,digest),'figure':i,'side':side}}})
     return tasks
 
 
 def validate_inputs(roots,work,task,recipe):
     from ..runner import page_from_record
     origin=recipe.record()['parameters']['settings']['caption_origin']
-    require(set(origin)=={'key','figure','side','receipt_sha256'},'Invalid caption origin')
-    row,result,digest=read_current(roots,work,origin['key'])
-    require(result.recipe.extractor in ('pdf-layout','scan-layout') and digest==origin['receipt_sha256'] and
-            result.page==page_from_record(task['page']),'Caption origin changed')
+    require(set(origin) in ({'key','figure','side','receipt_sha256'}, {'key','figure','side','receipt_sha256','evidence_sha256'}),'Invalid caption origin')
+    row,result,digest=read_origin(roots,work,origin,page_from_record(task['page']))
+    require(result.recipe.extractor in ('pdf-layout','scan-layout') and digest==origin['receipt_sha256'],'Caption origin changed')
     index=origin['figure'];figures=row['feature']['figures']
     require(type(index) is int and 0<=index<len(figures),'Unknown caption figure')
     require(task.get('region') and Region(**task['region'])==band(result.page,result.transform,figures[index],origin['side']),

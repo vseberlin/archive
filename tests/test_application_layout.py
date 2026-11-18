@@ -40,10 +40,22 @@ class ApplicationTests(unittest.TestCase):
     def test_changed_index_is_rejected_without_overwriting_output(self):
         f = self.fixture
         pipeline.index(self.config, self.selection, 'index.json')
-        (f.output / (f.key + '.txt')).write_text('Changed source artifact')
+        path = f.output / 'index.json'
+        value = json.loads(path.read_text()); value['entries'][0]['fields']['text'] = 'Changed projection'
+        path.write_text(json.dumps(value))
         with self.assertRaisesRegex(ValueError, 'changed'):
             pipeline.search(self.config, self.selection, 'index.json', 'search.json')
         self.assertFalse((f.output / 'search.json').exists())
+
+    def test_query_uses_snapshot_but_selected_evidence_still_verifies_artifacts(self):
+        f = self.fixture
+        pipeline.index(self.config, self.selection, 'index.json')
+        (f.output / (f.key + '.txt')).write_text('Changed source artifact')
+        result = pipeline.search(self.config, self.selection, 'index.json', 'search.json')
+        self.assertTrue(result['text'][0]['hits'])
+        from archive_research.receipts import read_current
+        with self.assertRaisesRegex(ValueError, 'Artifact'):
+            read_current(f.roots, 'artifacts', f.key)
 
     def test_installed_worker_extracts_from_an_unrelated_working_directory(self):
         from archive_research import Source

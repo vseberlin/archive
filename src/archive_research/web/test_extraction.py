@@ -50,7 +50,7 @@ class ExtractionTests(TestCase):
         (self.output/'run-summary.json').write_text(json.dumps(summary))
         self.override=override_settings(PILOT_ROOT=self.root,ALLOWED_HOSTS=['testserver'],
             PROJECT={**settings.PROJECT,'extraction_roots':str(config),'extraction_plan':str(self.plan),
-                     'research_packet':None,'research_assessment_response':None,
+                     'research_index':None, 'research_packet':None,'research_assessment_response':None,
                      'research_assessment_transport':None,'visual_leads':None})
         self.override.enable();self.addCleanup(self.override.disable)
         rebuild()
@@ -81,12 +81,53 @@ class ExtractionTests(TestCase):
         self.assertEqual((self.root/'records/assertions.jsonl').read_bytes(),self.history)
         self.assertEqual(self.client.get('/research/?q=ABSENT').context['hits'],[])
 
+    def test_aggregate_search_uses_projection_then_verifies_only_selected_evidence(self):
+        from archive_research.sources import Roots
+        from archive_research.search_projection import build_projection
+        roots = Roots.from_toml(self.root/'roots.toml')
+        value = build_projection(roots, 'artifacts', {'keys': [self.key]})
+        (self.output/'search-index.json').write_text(json.dumps(value))
+        with override_settings(PROJECT={**settings.PROJECT, 'research_index': 'search-index.json'}):
+            with patch('archive_research.receipts.read_current', side_effect=AssertionError('query reopens corpus')):
+                response = self.client.get('/research/?q=ALPHA')
+            self.assertContains(response, 'ALPHA')
+            revision = response.context['revision']
+            self.assertEqual(self.client.get(f'/research/pages/{self.key}/?revision={revision}').status_code, 200)
+            path = self.output/(self.key+'.json')
+            row = json.loads(path.read_text());row['words'][0]['text'] = 'changed'
+            path.write_text(json.dumps(row))
+            self.assertContains(self.client.get('/research/?q=ALPHA'), 'ALPHA')
+            self.assertEqual(self.client.get(f'/research/pages/{self.key}/?revision={revision}').status_code, 409)
+        self.assertEqual((self.root/'records/assertions.jsonl').read_bytes(), self.history)
+
     def test_stale_result_link_and_invalid_word_refused(self):
         revision=self.current()
         self.assertEqual(self.client.get(f'/research/pages/{self.key}/?revision={revision}&word=999').status_code,409)
         self.assertEqual(self.client.get(f'/research/media/{self.key}/?revision=old').status_code,409)
         path=self.output/(self.key+'.json');value=json.loads(path.read_text());value['words'][0]['text']='BETA';path.write_text(json.dumps(value))
         self.assertEqual(self.client.get(f'/research/pages/{self.key}/?revision={revision}&word=0').status_code,409)
+
+    def test_retained_citation_is_exact_offline_read_only_and_authenticated(self):
+        from archive_research.sources import Roots
+        from archive_research.result_records import retain
+        roots = Roots.from_toml(self.root/'roots.toml')
+        data = (self.output/(self.key+'.json')).read_bytes()
+        digest = retain(roots, 'artifacts', json.loads(data), original_bytes=data)
+        path = f'/research/evidence/{digest}/'
+        (self.root/'sample'/self.page.source.path).unlink()
+        for url in (path, path+'image/'):
+            self.assertEqual(Client().get(url).status_code, 302)
+            self.assertEqual(self.client.post(url).status_code, 405)
+        self.assertContains(self.client.get(path), 'ALPHA')
+        image = self.client.get(path+'image/')
+        self.assertEqual(image.status_code, 200)
+        self.assertTrue(b''.join(image.streaming_content).startswith(b'\x89PNG'))
+        receipt = json.loads(data)
+        image_hash = receipt['result']['artifacts'][0]['sha256']
+        (self.output/('artifact-'+image_hash)).write_bytes(b'tampered')
+        self.assertEqual(self.client.get(path).status_code, 409)
+        self.assertEqual(self.client.get(path+'image/').status_code, 409)
+        self.assertEqual((self.root/'records/assertions.jsonl').read_bytes(), self.history)
 
     def test_changed_source_withholds_preview_and_original(self):
         revision=self.current()

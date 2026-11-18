@@ -10,6 +10,10 @@ import tempfile
 from .contracts import encoded, relative_path, require
 
 
+class UncertainDurability(OSError):
+    """Replacement happened; a later directory sync failed."""
+
+
 def target(root, name):
     relative_path(name)
     path = root / name
@@ -30,11 +34,14 @@ def write(root, name, data):
             os.fsync(handle.fileno())
         target(root, name)
         os.replace(temporary, path)
-        descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
         try:
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+            descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+        except OSError as error:
+            raise UncertainDurability('Replacement applied; durability uncertain: ' + str(error)) from error
     finally:
         Path(temporary).unlink(missing_ok=True)
     return path

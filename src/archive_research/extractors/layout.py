@@ -155,9 +155,10 @@ def extract(image_path, page, transform, roots, settings, temporary, key):
 def visual_tasks(roots, work, key, model):
     """Explicitly derive bounded visual crop tasks, bound to the layout receipt."""
     from ..receipts import read_current
+    from ..result_records import origin as dependency_origin
     row,result,digest=read_current(roots,work,key)
     require(result.recipe.extractor in ('pdf-layout','scan-layout'),'Expected a layout receipt')
     return [{'id':key+f'-figure-{i}','extractor':'visual','page':asdict(result.page),
              'region':figure['region'],'settings':{'model':model,'region_origin':{
-                 'key':key,'figure':i,'receipt_sha256':digest}}}
+                 **dependency_origin(roots,work,key,digest),'figure':i}}}
             for i,figure in enumerate(row['feature']['figures'])]

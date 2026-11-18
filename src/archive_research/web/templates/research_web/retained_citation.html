@@ -1,0 +1,7 @@
+{% extends 'research_web/base.html' %}{% block title %}Retained citation{% endblock %}{% block content %}
+<h1>Retained evidence</h1>
+<p class="notice">This is the exact retained result and prepared image. The original source has not been verified for this view and may be offline. Current catalogue wording or page order may differ.</p>
+<p>{{ page.source.object_id }} · {{ page.source.unit }} · {{ page.kind }} index {{ page.index }}{% if page.printed_label %} · printed {{ page.printed_label }}{% endif %}</p>
+<img style="max-width:100%;height:auto" src="{% url 'retained_image' digest %}" alt="Prepared image retained with this cited result">
+<p>{{ text }}</p><details><summary>Evidence details</summary><p>Receipt {{ digest }}</p><p>Result {{ identity }}</p><p>Captured source: {{ page.source.path }}</p></details>
+{% endblock %}

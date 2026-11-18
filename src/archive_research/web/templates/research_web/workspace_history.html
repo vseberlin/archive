@@ -1,0 +1,9 @@
+<details class="card history"><summary>{% if case.payload.synthetic %}Synthetic history{% else %}Research history{% endif %} · {{ case.payload.history|length }} revisions</summary>
+{% for item in case.payload.history %}<article>
+<h3>{{ item.key }} · revision {{ item.revision }} · {{ item.review }}</h3>
+{% if item.change_kind == 'physical_object' %}<p><strong>Physical-object reference changed</strong> · {{ item.recorded_by }} · {{ item.recorded_at }}</p><p>{{ item.physical_object_reason }}</p>{% endif %}
+{% if 'physical_object' in item %}<details><summary>Physical-object reference at this revision</summary>{% include 'research_web/physical_object_details.html' with physical=item.physical_object %}</details>{% endif %}
+<p>{{ item.value }}<br>{{ item.reason }}</p>
+<details><summary>Revision evidence and scope</summary><p>{{ item.scope }}</p><p>{{ item.uncertainty }}</p><p class="muted">Citations open the current bound evidence.</p><ul>{% for view in views %}{% if view.key in item.citation_keys %}<li><a href="{% url 'citation' case.key view.key %}?revision={{ case.revision }}">{{ view.label }}</a></li>{% endif %}{% endfor %}</ul></details>
+<p class="muted">{{ item.reviewer|default:"Prepared observation" }}{% if item.reviewed_at %} · {{ item.reviewed_at }}{% endif %} · supersedes {{ item.supersedes_revision|default_if_none:"none" }}</p>
+</article>{% endfor %}</details>

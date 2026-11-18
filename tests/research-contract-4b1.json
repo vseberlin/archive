@@ -1,0 +1,812 @@
+{
+  "format": "archive-research-record-contract-draft-1",
+  "synthetic": true,
+  "identity_snapshot": {
+    "revision": 1,
+    "entities": [
+      {
+        "uid": "ISS-2026-K7M3-J",
+        "kind": "object",
+        "state": "active",
+        "allocation_request": {
+          "scope": "synthetic-project",
+          "key": "existing-object"
+        },
+        "canonical_owner": {
+          "record": "synthetic-object",
+          "namespace": "synthetic-project"
+        }
+      },
+      {
+        "uid": "ISS-2026-0002-M",
+        "kind": "representation",
+        "state": "active",
+        "allocation_request": {
+          "scope": "synthetic-project",
+          "key": "existing-representation"
+        },
+        "canonical_owner": {
+          "record": "synthetic-representation",
+          "namespace": "synthetic-project"
+        }
+      },
+      {
+        "uid": "ISS-2026-0003-6",
+        "kind": "page",
+        "state": "active",
+        "allocation_request": {
+          "scope": "synthetic-project",
+          "key": "existing-page"
+        },
+        "canonical_owner": {
+          "record": "synthetic-page",
+          "namespace": "synthetic-project"
+        }
+      },
+      {
+        "uid": "ISS-2026-0004-1",
+        "kind": "transfer",
+        "state": "active",
+        "allocation_request": {
+          "scope": "synthetic-project",
+          "key": "existing-transfer"
+        },
+        "canonical_owner": {
+          "record": "synthetic-transfer",
+          "namespace": "synthetic-project"
+        }
+      },
+      {
+        "uid": "ISS-2026-0005-N",
+        "kind": "file",
+        "state": "active",
+        "allocation_request": {
+          "scope": "synthetic-project",
+          "key": "existing-file"
+        },
+        "canonical_owner": {
+          "record": "synthetic-file",
+          "namespace": "synthetic-project"
+        }
+      },
+      {
+        "uid": "ISS-2026-0006-A",
+        "kind": "region",
+        "state": "retired",
+        "allocation_request": {
+          "scope": "synthetic-project",
+          "key": "existing-retired"
+        },
+        "canonical_owner": {
+          "record": "synthetic-retired",
+          "namespace": "synthetic-project"
+        }
+      },
+      {
+        "uid": "ISS-2026-0007-M",
+        "kind": "region",
+        "state": "reserved",
+        "allocation_request": {
+          "scope": "synthetic-project",
+          "key": "existing-reserved"
+        },
+        "canonical_owner": null
+      }
+    ]
+  },
+  "input_samples": [
+    {
+      "encoding": "utf-8",
+      "text": "INVENTED SCAN BYTES, NOT AN IMAGE\n",
+      "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5"
+    }
+  ],
+  "bindings": [
+    {
+      "key": "existing-page",
+      "revision": 0,
+      "object_uid": "ISS-2026-K7M3-J",
+      "representation_uid": "ISS-2026-0002-M",
+      "page_uid": "ISS-2026-0003-6",
+      "file_uid": null,
+      "transfer_uid": null,
+      "unit": "synthetic-unit-A",
+      "member_order": 1,
+      "logical_page_order": 1,
+      "printed_label": "12",
+      "source": {
+        "root": "sample",
+        "path": "scan.tif",
+        "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+        "size_bytes": 34,
+        "mtime_ns": 1,
+        "original_name": "scan.tif"
+      },
+      "technical_view": {
+        "kind": "image",
+        "index": 0,
+        "width": 4,
+        "height": 4,
+        "units": "pixels",
+        "origin": "top-left"
+      }
+    },
+    {
+      "key": "incoming-file",
+      "revision": 0,
+      "object_uid": null,
+      "representation_uid": null,
+      "page_uid": null,
+      "file_uid": "ISS-2026-0005-N",
+      "transfer_uid": "ISS-2026-0004-1",
+      "unit": null,
+      "member_order": null,
+      "logical_page_order": null,
+      "printed_label": null,
+      "source": {
+        "root": "incoming",
+        "path": "delivery/scan.tif",
+        "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+        "size_bytes": 34,
+        "mtime_ns": 2,
+        "original_name": "scan.tif"
+      },
+      "technical_view": {
+        "kind": "image",
+        "index": 0,
+        "width": 4,
+        "height": 4,
+        "units": "pixels",
+        "origin": "top-left"
+      }
+    }
+  ],
+  "computations": [
+    {
+      "label": "old-ocr",
+      "sha256": "43261b92ddac06b2ed85753adbb2c0da07be99365210fa0b5aa5411bf8044fa0",
+      "payload": {
+        "format": "computation-draft-1",
+        "input": {
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "technical_view": {
+            "kind": "image",
+            "index": 0,
+            "width": 4,
+            "height": 4,
+            "units": "pixels",
+            "origin": "top-left"
+          }
+        },
+        "region": null,
+        "preparation": {
+          "decoder": "synthetic-1",
+          "rotation_cw": 0,
+          "colour_policy": "synthetic",
+          "crop": null
+        },
+        "recipe": {
+          "extractor": "synthetic-ocr",
+          "version": "1",
+          "settings": {
+            "language": "deu",
+            "coverage": "whole-view"
+          },
+          "models": {
+            "synthetic": "8771c022620c22623df8965442df40c088d0074441ed5353f297664a08b90317"
+          },
+          "dependencies": {
+            "synthetic-engine": "1"
+          }
+        },
+        "dependencies": []
+      }
+    },
+    {
+      "label": "new-ocr",
+      "sha256": "d53ee3438f726c32b238d4d0bd9829bdfdc84901da66d62f61035f9160eae831",
+      "payload": {
+        "format": "computation-draft-1",
+        "input": {
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "technical_view": {
+            "kind": "image",
+            "index": 0,
+            "width": 4,
+            "height": 4,
+            "units": "pixels",
+            "origin": "top-left"
+          }
+        },
+        "region": null,
+        "preparation": {
+          "decoder": "synthetic-1",
+          "rotation_cw": 0,
+          "colour_policy": "synthetic",
+          "crop": null
+        },
+        "recipe": {
+          "extractor": "synthetic-ocr",
+          "version": "2",
+          "settings": {
+            "language": "deu",
+            "coverage": "whole-view"
+          },
+          "models": {
+            "synthetic": "8771c022620c22623df8965442df40c088d0074441ed5353f297664a08b90317"
+          },
+          "dependencies": {
+            "synthetic-engine": "1"
+          }
+        },
+        "dependencies": []
+      }
+    },
+    {
+      "label": "dependent-caption",
+      "sha256": "5a8b702ed2fafd73f43285ccbf0b5ef66ed0ed9787450d01fbfea6e3497b8388",
+      "payload": {
+        "format": "computation-draft-1",
+        "input": {
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "technical_view": {
+            "kind": "image",
+            "index": 0,
+            "width": 4,
+            "height": 4,
+            "units": "pixels",
+            "origin": "top-left"
+          }
+        },
+        "region": null,
+        "preparation": {
+          "decoder": "synthetic-1",
+          "rotation_cw": 0,
+          "colour_policy": "synthetic",
+          "crop": null
+        },
+        "recipe": {
+          "extractor": "synthetic-caption-use",
+          "version": "1",
+          "settings": {
+            "language": "deu",
+            "coverage": "whole-view"
+          },
+          "models": {
+            "synthetic": "8771c022620c22623df8965442df40c088d0074441ed5353f297664a08b90317"
+          },
+          "dependencies": {
+            "synthetic-engine": "1"
+          }
+        },
+        "dependencies": [
+          {
+            "result_sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad",
+            "output_sha256": "9917b879e2d2b50e88a4b5ba184125dd21acd2389944a3a044ab3e82f1ca620f",
+            "region_xywh": [
+              0.0,
+              0.0,
+              1.0,
+              1.0
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "results": [
+    {
+      "label": "old-ocr",
+      "sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad",
+      "payload": {
+        "format": "immutable-result-draft-1",
+        "computation_sha256": "43261b92ddac06b2ed85753adbb2c0da07be99365210fa0b5aa5411bf8044fa0",
+        "outputs": [
+          {
+            "sha256": "9917b879e2d2b50e88a4b5ba184125dd21acd2389944a3a044ab3e82f1ca620f",
+            "payload": {
+              "kind": "literal-text",
+              "text": "Type B",
+              "language": "deu",
+              "region_xywh": [
+                0.0,
+                0.0,
+                1.0,
+                1.0
+              ]
+            }
+          }
+        ],
+        "transform": {
+          "to_source": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          "units": "pixels"
+        },
+        "completion": {
+          "status": "complete",
+          "retryable": false,
+          "coverage": "whole-view",
+          "reason": "synthetic example"
+        },
+        "limitations": [
+          "Invented text; no OCR engine ran."
+        ]
+      }
+    },
+    {
+      "label": "new-ocr",
+      "sha256": "812653342fa00f37981c39d3fa3df661a31a2917f27fa8ed1a494805020bcf11",
+      "payload": {
+        "format": "immutable-result-draft-1",
+        "computation_sha256": "d53ee3438f726c32b238d4d0bd9829bdfdc84901da66d62f61035f9160eae831",
+        "outputs": [
+          {
+            "sha256": "e9b702faeec04a9c90637f51fe1275be345ebab3ed4de0a690de812a27dbc2a3",
+            "payload": {
+              "kind": "literal-text",
+              "text": "B family",
+              "language": "deu",
+              "region_xywh": [
+                0.0,
+                0.0,
+                1.0,
+                1.0
+              ]
+            }
+          }
+        ],
+        "transform": {
+          "to_source": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          "units": "pixels"
+        },
+        "completion": {
+          "status": "complete",
+          "retryable": false,
+          "coverage": "whole-view",
+          "reason": "synthetic example"
+        },
+        "limitations": [
+          "Invented text; no OCR engine ran."
+        ]
+      }
+    },
+    {
+      "label": "dependent-caption",
+      "sha256": "1f0db3cca0ebcd333e199de0295ba238d51af541d2e25ef379ea11e93016bcb4",
+      "payload": {
+        "format": "immutable-result-draft-1",
+        "computation_sha256": "5a8b702ed2fafd73f43285ccbf0b5ef66ed0ed9787450d01fbfea6e3497b8388",
+        "outputs": [
+          {
+            "sha256": "96d82f428434116aa4ec328570fb7f0348bc84d2e90dfd0d2e5c500ab4053fd7",
+            "payload": {
+              "kind": "literal-text",
+              "text": "Type B, cited from original reading",
+              "language": "deu",
+              "region_xywh": [
+                0.0,
+                0.0,
+                1.0,
+                1.0
+              ]
+            }
+          }
+        ],
+        "transform": {
+          "to_source": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          "units": "pixels"
+        },
+        "completion": {
+          "status": "complete",
+          "retryable": false,
+          "coverage": "whole-view",
+          "reason": "synthetic example"
+        },
+        "limitations": [
+          "Invented text; no OCR engine ran."
+        ]
+      }
+    }
+  ],
+  "attempts": [
+    {
+      "key": "attempt-1",
+      "computation_sha256": "43261b92ddac06b2ed85753adbb2c0da07be99365210fa0b5aa5411bf8044fa0",
+      "result_sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad",
+      "outcome": "complete",
+      "started_at": "2026-11-18T09:00:00Z",
+      "elapsed_seconds": 1.0
+    },
+    {
+      "key": "attempt-2",
+      "computation_sha256": "d53ee3438f726c32b238d4d0bd9829bdfdc84901da66d62f61035f9160eae831",
+      "result_sha256": "812653342fa00f37981c39d3fa3df661a31a2917f27fa8ed1a494805020bcf11",
+      "outcome": "complete",
+      "started_at": "2026-11-18T09:00:00Z",
+      "elapsed_seconds": 1.0
+    },
+    {
+      "key": "attempt-3",
+      "computation_sha256": "5a8b702ed2fafd73f43285ccbf0b5ef66ed0ed9787450d01fbfea6e3497b8388",
+      "result_sha256": "1f0db3cca0ebcd333e199de0295ba238d51af541d2e25ef379ea11e93016bcb4",
+      "outcome": "complete",
+      "started_at": "2026-11-18T09:00:00Z",
+      "elapsed_seconds": 1.0
+    }
+  ],
+  "citations": [
+    {
+      "key": "report-reading-v1",
+      "result_sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad",
+      "output_sha256": "9917b879e2d2b50e88a4b5ba184125dd21acd2389944a3a044ab3e82f1ca620f",
+      "object_uid": "ISS-2026-K7M3-J",
+      "representation_uid": "ISS-2026-0002-M",
+      "page_uid": "ISS-2026-0003-6",
+      "source_sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+      "technical_view": {
+        "kind": "image",
+        "index": 0,
+        "width": 4,
+        "height": 4,
+        "units": "pixels",
+        "origin": "top-left"
+      },
+      "region_xywh": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ],
+      "printed_label": "12",
+      "literal_reading": "Type B",
+      "method": "synthetic machine transcription",
+      "lineage": "synthetic-original-scan",
+      "sha256": "b423fb3433e1efc103e98c7014253270dc922cdc15d27920ad09bf81c47c932d"
+    }
+  ],
+  "findings": [
+    {
+      "key": "type-finding",
+      "case_key": "synthetic-case",
+      "revision": 0,
+      "supersedes_revision": null,
+      "subject_uid": "ISS-2026-K7M3-J",
+      "relation": "depicts",
+      "value": "Type B",
+      "language": "en",
+      "scope": "product type, not individual specimen",
+      "citation_keys": [
+        "report-reading-v1"
+      ],
+      "review": "unreviewed",
+      "uncertainty": "tentative",
+      "reviewer": null,
+      "reviewed_at": null,
+      "reason": "Synthetic comparison proposal",
+      "metadata_adopted": false,
+      "citation_digests": {
+        "report-reading-v1": "b423fb3433e1efc103e98c7014253270dc922cdc15d27920ad09bf81c47c932d"
+      }
+    },
+    {
+      "key": "type-finding",
+      "case_key": "synthetic-case",
+      "revision": 1,
+      "supersedes_revision": 0,
+      "subject_uid": "ISS-2026-K7M3-J",
+      "relation": "depicts",
+      "value": "Type B",
+      "language": "en",
+      "scope": "product type, not individual specimen",
+      "citation_keys": [
+        "report-reading-v1"
+      ],
+      "review": "accepted",
+      "uncertainty": "tentative",
+      "reviewer": "Synthetic reviewer",
+      "reviewed_at": "2026-11-18T10:00:00Z",
+      "reason": "Control arrangement supports the type; no specimen identity",
+      "metadata_adopted": false,
+      "citation_digests": {
+        "report-reading-v1": "b423fb3433e1efc103e98c7014253270dc922cdc15d27920ad09bf81c47c932d"
+      }
+    },
+    {
+      "key": "type-finding",
+      "case_key": "synthetic-case",
+      "revision": 2,
+      "supersedes_revision": 1,
+      "subject_uid": "ISS-2026-K7M3-J",
+      "relation": "depicts",
+      "value": "B family; variant unresolved",
+      "language": "en",
+      "scope": "product family, not exact variant or individual specimen",
+      "citation_keys": [
+        "report-reading-v1"
+      ],
+      "review": "accepted",
+      "uncertainty": "variant and specimen unresolved",
+      "reviewer": "Synthetic reviewer",
+      "reviewed_at": "2026-11-18T10:05:00Z",
+      "reason": "Original reading supports the family only; preserve the earlier wording",
+      "metadata_adopted": false,
+      "citation_digests": {
+        "report-reading-v1": "b423fb3433e1efc103e98c7014253270dc922cdc15d27920ad09bf81c47c932d"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "name": "move",
+      "before": {
+        "key": "existing-page",
+        "revision": 0,
+        "object_uid": "ISS-2026-K7M3-J",
+        "representation_uid": "ISS-2026-0002-M",
+        "page_uid": "ISS-2026-0003-6",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-A",
+        "member_order": 1,
+        "logical_page_order": 1,
+        "printed_label": "12",
+        "source": {
+          "root": "sample",
+          "path": "scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 1,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "after": {
+        "key": "existing-page",
+        "revision": 1,
+        "object_uid": "ISS-2026-K7M3-J",
+        "representation_uid": "ISS-2026-0002-M",
+        "page_uid": "ISS-2026-0003-6",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-A",
+        "member_order": 1,
+        "logical_page_order": 1,
+        "printed_label": "12",
+        "source": {
+          "root": "relocated",
+          "path": "another/scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 3,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "expected_computation_sha256": "43261b92ddac06b2ed85753adbb2c0da07be99365210fa0b5aa5411bf8044fa0",
+      "retained_result_sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad"
+    },
+    {
+      "name": "collection-reassignment",
+      "before": {
+        "key": "existing-page",
+        "revision": 0,
+        "object_uid": "ISS-2026-K7M3-J",
+        "representation_uid": "ISS-2026-0002-M",
+        "page_uid": "ISS-2026-0003-6",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-A",
+        "member_order": 1,
+        "logical_page_order": 1,
+        "printed_label": "12",
+        "source": {
+          "root": "sample",
+          "path": "scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 1,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "after": {
+        "key": "existing-page",
+        "revision": 1,
+        "object_uid": "ISS-2026-K7M3-J",
+        "representation_uid": "ISS-2026-0002-M",
+        "page_uid": "ISS-2026-0003-6",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-B",
+        "member_order": 1,
+        "logical_page_order": 1,
+        "printed_label": "12",
+        "source": {
+          "root": "sample",
+          "path": "scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 1,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "expected_computation_sha256": "43261b92ddac06b2ed85753adbb2c0da07be99365210fa0b5aa5411bf8044fa0",
+      "retained_result_sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad"
+    },
+    {
+      "name": "reorder",
+      "before": {
+        "key": "existing-page",
+        "revision": 0,
+        "object_uid": "ISS-2026-K7M3-J",
+        "representation_uid": "ISS-2026-0002-M",
+        "page_uid": "ISS-2026-0003-6",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-A",
+        "member_order": 1,
+        "logical_page_order": 1,
+        "printed_label": "12",
+        "source": {
+          "root": "sample",
+          "path": "scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 1,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "after": {
+        "key": "existing-page",
+        "revision": 1,
+        "object_uid": "ISS-2026-K7M3-J",
+        "representation_uid": "ISS-2026-0002-M",
+        "page_uid": "ISS-2026-0003-6",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-A",
+        "member_order": 3,
+        "logical_page_order": 7,
+        "printed_label": "XII",
+        "source": {
+          "root": "sample",
+          "path": "scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 1,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "expected_computation_sha256": "43261b92ddac06b2ed85753adbb2c0da07be99365210fa0b5aa5411bf8044fa0",
+      "retained_result_sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad"
+    },
+    {
+      "name": "uid-mapping",
+      "before": {
+        "key": "existing-page",
+        "revision": 0,
+        "object_uid": "old:photo",
+        "representation_uid": "old:representation",
+        "page_uid": "old:page",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-A",
+        "member_order": 1,
+        "logical_page_order": 1,
+        "printed_label": "12",
+        "source": {
+          "root": "sample",
+          "path": "scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 1,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "after": {
+        "key": "existing-page",
+        "revision": 1,
+        "object_uid": "ISS-2026-K7M3-J",
+        "representation_uid": "ISS-2026-0002-M",
+        "page_uid": "ISS-2026-0003-6",
+        "file_uid": null,
+        "transfer_uid": null,
+        "unit": "synthetic-unit-A",
+        "member_order": 1,
+        "logical_page_order": 1,
+        "printed_label": "12",
+        "source": {
+          "root": "sample",
+          "path": "scan.tif",
+          "sha256": "985eed1be1a89cf46d0769ccf6dd26452cb50c80b41f51fcff8567ca61efbae5",
+          "size_bytes": 34,
+          "mtime_ns": 1,
+          "original_name": "scan.tif"
+        },
+        "technical_view": {
+          "kind": "image",
+          "index": 0,
+          "width": 4,
+          "height": 4,
+          "units": "pixels",
+          "origin": "top-left"
+        }
+      },
+      "expected_computation_sha256": "43261b92ddac06b2ed85753adbb2c0da07be99365210fa0b5aa5411bf8044fa0",
+      "retained_result_sha256": "b71d30c3a78a5f0d3280509ede85929ba2592efe1e43ab31ea93e73c6f430aad"
+    }
+  ]
+}

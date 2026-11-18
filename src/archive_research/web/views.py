@@ -15,6 +15,7 @@ from .records import assertion_case, bound_bytes, case_synthetic, check_binding,
 from .processing import ocr_status
 from .records import physical_assessment, save_physical_object
 from . import extraction
+from . import workspace
 
 
 class PrivateResponseMiddleware:
@@ -35,6 +36,15 @@ def page_search(request):
     operator(request)
     try:
         query = request.GET.get('q', '')[:200]
+        from django.conf import settings
+        if settings.PROJECT.get('research_index'):
+            from archive_research.search_projection import query as search_query
+            _, projection = extraction.search_projection()
+            offset = int(request.GET.get('offset', 0))
+            results = search_query(projection, query, offset=offset, fuzzy=request.GET.get('fuzzy') == '1') if query.strip() else None
+            return render(request, 'research_web/aggregate_search.html', {
+                'query': query, 'results': results, 'projection': projection,
+                'revision': projection['projection_sha256'], 'fuzzy': request.GET.get('fuzzy') == '1'})
         hits, rows, revision = extraction.search(query)
         available = sum(row['available'] for row in rows)
         return render(request, 'research_web/search.html', {
@@ -149,6 +159,44 @@ def extraction_source(request, key):
         return unavailable(request, error)
 
 
+def retained_view(digest):
+    from django.conf import settings
+    from archive_research import Roots
+    from archive_research.result_records import retained
+    roots = Roots.from_toml(settings.PROJECT['extraction_roots'])
+    row, result, identity = retained(roots, 'artifacts', digest)
+    return roots, row, result, identity
+
+
+@login_required
+@require_GET
+def retained_citation(request, digest):
+    operator(request)
+    try:
+        _, row, result, identity = retained_view(digest)
+        return render(request, 'research_web/retained_citation.html', {
+            'digest': digest, 'identity': identity, 'row': row, 'page': result.page,
+            'text': ' '.join(w['text'] for w in row['words'])})
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return unavailable(request, error)
+
+
+@login_required
+@require_GET
+def retained_image(request, digest):
+    operator(request)
+    try:
+        roots, _, result, _ = retained_view(digest)
+        artifact = next(a for a in result.artifacts if a.kind == 'processed-page')
+        import hashlib
+        from archive_research.contracts import require
+        data = roots.artifact(artifact).read_bytes()
+        require(hashlib.sha256(data).hexdigest() == artifact.sha256, 'Retained image changed before serving')
+        return FileResponse(io.BytesIO(data), content_type='image/png')
+    except (OSError, ValueError, KeyError, TypeError, StopIteration) as error:
+        return unavailable(request, error)
+
+
 def source_response(roots, source):
     """Serve only the checked source descriptor, shared by page and packet citations."""
     path = roots.source(source)
@@ -199,20 +247,7 @@ def index(request):
 def case(request, key):
     operator(request)
     try:
-        record = next((c for c in checked_cases(request.GET.get('revision')) if c.key == key), None)
-        if record is None:
-            raise Http404
-        views = []
-        for view in record.payload['views']:
-            try:
-                if view.get('unavailable_reason'):
-                    raise ReviewError(view['unavailable_reason'])
-                check_binding(view['source'])
-                check_binding(view['preview'])
-                views.append({**view, 'available': True})
-            except (ReviewError, OSError) as error:
-                views.append({**view, 'available': False, 'error': str(error)})
-        return render(request, 'research_web/case.html', {'case': record, 'views': views})
+        return render(request, 'research_web/case.html', workspace.context(request, key))
     except (ReviewError, OSError, ValueError, KeyError, TypeError) as error:
         return unavailable(request, error)
 
@@ -305,20 +340,35 @@ def review(request, key, assertion_key):
         context = {'form': form, 'assertion': assertion, 'case_key': key,
                    'citation_views': selected['views'], 'is_synthetic': case_synthetic(selected, evidence),
                    'citation_revision': request.POST.get('revision', '') if request.method == 'POST' else revision}
+        in_workspace = request.method == 'POST' and request.POST.get('workspace') == '1'
+
+        def response(status, error=''):
+            if in_workspace:
+                try:
+                    return render(request, 'research_web/case.html', workspace.context(
+                        request, key, assertion_key=assertion_key, form=form, save_error=error), status=status)
+                except (ReviewError, OSError, ValueError, KeyError, TypeError, DatabaseError):
+                    # Preserve the submitted draft even if the browsing projection is stale.
+                    pass
+            return render(request, 'research_web/review.html', {**context, 'save_error': error}, status=status)
+
         if request.method == 'POST':
             if not form.is_valid():
-                return render(request, 'research_web/review.html', context, status=400)
+                return response(400)
             try:
+                navigation = workspace.context(request, key, assertion_key=assertion_key) if in_workspace else None
                 result = save_review(assertion_key, form.cleaned_data, request.user.get_username(), case_key=key)
             except (ReviewError, OSError, ValueError, KeyError, TypeError, DatabaseError) as error:
-                context['save_error'] = str(error)
-                return render(request, 'research_web/review.html', context, status=409)
+                return response(409, str(error))
             if not result['indexed']:
                 return render(request, 'research_web/unavailable.html', {
                     'saved': True, 'rebuild_revision': result['revision'],
                     'message': 'Your review is in the readable history. Do not submit it again. '
                                'Rebuild browsing to display the saved record.'}, status=503)
             messages.success(request, ('Synthetic' if case_synthetic(selected, evidence) else 'Research') + ' review saved. Earlier revisions are retained.')
+            if navigation:
+                target = navigation['next_url'] if request.POST.get('advance') == '1' else ''
+                return redirect(target or navigation['return_url'])
             return redirect('case', key=key)
         return render(request, 'research_web/review.html', context)
     except (ReviewError, OSError, ValueError, KeyError, TypeError, DatabaseError) as error:

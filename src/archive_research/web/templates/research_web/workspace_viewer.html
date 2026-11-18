@@ -1,0 +1,8 @@
+<div class="viewer-panel" data-pane="{{ side }}" data-view="{{ forloop.counter0 }}"{% if not initial %} hidden{% endif %}>
+  <div class="viewer-scroll">
+    {% if view.available %}<figure class="workspace-figure"><img src="{% url 'media' case.key view.key %}?revision={{ case.revision }}" alt="{{ view.alt }}" loading="lazy"><span class="citation-region" style="left:{{ view.region.x|floatformat:3 }}%;top:{{ view.region.y|floatformat:3 }}%;width:{{ view.region.width|floatformat:3 }}%;height:{{ view.region.height|floatformat:3 }}%" aria-hidden="true"></span></figure>{% else %}<p class="source-error">Source unavailable: {{ view.error }}</p>{% endif %}
+  </div>
+  <div class="viewer-caption"><span>Page {{ view.page_sequence }}{% if view.page_count > 1 %} of {{ view.page_count }}{% endif %}{% if view.printed_page_label %} · printed {{ view.printed_page_label }}{% endif %}{% if view.figure %} · figure {{ view.figure }}{% endif %}{% if view.passage_label %} · {{ view.passage_label }}{% endif %}</span>
+  {% if view.available %}<div class="viewer-controls"><label>Zoom <input type="range" min="100" max="300" step="25" value="100" data-zoom aria-label="Zoom {{ side }} {{ view.label }}"></label><button type="button" class="quiet" data-reset-zoom>Fit</button><a href="{% url 'source' case.key view.key %}?revision={{ case.revision }}{% if view.is_pdf %}#page={{ view.page_sequence }}{% endif %}" target="_blank" rel="noopener">{% if view.is_pdf %}Open PDF{% elif view.is_tiff %}Download TIFF{% else %}Open source{% endif %} ↗</a><a href="{% url 'citation' case.key view.key %}?revision={{ case.revision }}" target="_blank" rel="noopener" aria-label="Inspect citation {{ view.label }}">Inspect ↗</a></div>{% endif %}
+  </div>
+</div>

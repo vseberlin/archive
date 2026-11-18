@@ -1,0 +1,116 @@
+<script>
+(() => {
+  const root = document.getElementById('review-workspace');
+  if (!root) return;
+  const all = selector => Array.from(root.querySelectorAll(selector));
+  const anchor = root.querySelector('[data-picker="anchor"]');
+  const evidence = root.querySelector('[data-picker="evidence"]');
+  let mode = 'compare';
+  function fit(panel) {
+    const image = panel.querySelector('img');
+    const scroll = panel.querySelector('.viewer-scroll');
+    if (!image || !image.naturalWidth || !scroll.clientWidth || !scroll.clientHeight) return;
+    const width = Math.min(scroll.clientWidth, scroll.clientHeight * image.naturalWidth / image.naturalHeight);
+    panel.querySelector('.workspace-figure').style.width = width * Number(panel.querySelector('[data-zoom]').value) / 100 + 'px';
+  }
+  const updateReading = () => {
+    const selected = mode === 'single' ? anchor.value : evidence.value;
+    all('[data-reading]').forEach(panel => { panel.hidden = panel.dataset.reading !== selected; });
+  };
+  function selectView(side, value) {
+    const picker = side === 'anchor' ? anchor : evidence;
+    picker.value = value;
+    all('[data-pane]').filter(panel => panel.dataset.pane === side).forEach(panel => {
+      panel.hidden = panel.dataset.view !== value;
+      if (!panel.hidden) fit(panel);
+    });
+    if (side === 'evidence') all('[data-evidence]').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.evidence === value));
+    });
+    updateReading();
+  }
+  [anchor, evidence].forEach(picker => picker.addEventListener('change', () => selectView(picker.dataset.picker, picker.value)));
+  all('[data-evidence]').forEach(button => button.addEventListener('click', () => {
+    setMode('compare'); selectView('evidence', button.dataset.evidence);
+  }));
+  function setMode(value) {
+    mode = value;
+    root.querySelector('.workspace-viewers').classList.toggle('single', mode === 'single');
+    all('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
+    updateReading();
+  }
+  all('[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
+  all('[data-zoom]').forEach(input => {
+    const panel = input.closest('.viewer-panel');
+    input.addEventListener('input', () => fit(panel));
+    panel.querySelector('img').addEventListener('load', () => fit(panel));
+    new ResizeObserver(() => fit(panel)).observe(panel.querySelector('.viewer-scroll'));
+    panel.querySelector('[data-reset-zoom]').addEventListener('click', () => {
+      input.value = '100'; fit(panel);
+      panel.querySelector('.viewer-scroll').scrollTo(0, 0);
+    });
+  });
+  const enlarge = root.querySelector('[data-enlarge]');
+  const focusWorkspace = enabled => {
+    root.classList.toggle('workspace-focus', enabled);
+    enlarge.setAttribute('aria-pressed', String(enabled));
+    enlarge.textContent = enabled ? 'Restore review panels' : 'Enlarge workspace';
+  };
+  enlarge.addEventListener('click', () => focusWorkspace(!root.classList.contains('workspace-focus')));
+  root.addEventListener('keydown', event => { if (event.key === 'Escape') focusWorkspace(false); });
+  const queueButton = root.querySelector('[data-toggle-queue]');
+  queueButton.addEventListener('click', () => {
+    const open = root.classList.toggle('queue-open'); queueButton.setAttribute('aria-expanded', String(open));
+  });
+  const tabs = all('[data-tab]');
+  function selectTab(tab) {
+    tabs.forEach(button => {
+      const selected = button === tab;
+      button.setAttribute('aria-selected', String(selected)); button.tabIndex = selected ? 0 : -1;
+      root.querySelector('#' + button.getAttribute('aria-controls')).hidden = !selected;
+    });
+    if (tab.dataset.tab === 'history') {
+      const history = root.querySelector('#panel-history > details'); if (history) history.open = true;
+    }
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => selectTab(tab));
+    tab.addEventListener('keydown', event => {
+      const positions = {ArrowRight: (index + 1) % tabs.length, ArrowLeft: (index + tabs.length - 1) % tabs.length, Home: 0, End: tabs.length - 1};
+      if (!(event.key in positions)) return;
+      event.preventDefault(); const next = tabs[positions[event.key]]; selectTab(next); next.focus();
+    });
+  });
+  const form = root.querySelector('#workspace-review');
+  if (form) {
+    const fields = ['value', 'reason', 'scope', 'uncertainty', 'citation_keys'];
+    const values = () => { const data = new FormData(form); return JSON.stringify(fields.map(name => data.getAll(name))); };
+    const original = values();
+    const status = root.querySelector('[data-draft]');
+    const returnedDraft = status.textContent.includes('not saved');
+    let dirty = returnedDraft, submitting = false;
+    form.addEventListener('input', () => {
+      dirty = returnedDraft || values() !== original;
+      status.textContent = dirty ? 'Unsaved draft · kept while you inspect evidence' : 'No unsaved changes';
+    });
+    form.addEventListener('keydown', event => {
+      // Editing a short field must not accidentally select the first decision.
+      if (event.key === 'Enter' && event.target.matches('input:not([type=checkbox])')) event.preventDefault();
+    });
+    form.addEventListener('submit', event => {
+      if (submitting || !event.submitter || event.submitter.name !== 'review') { event.preventDefault(); return; }
+      submitting = true;
+      status.textContent = 'Saving your decision…';
+      event.submitter.textContent = 'Saving…';
+    });
+    window.addEventListener('beforeunload', event => {
+      if (!dirty || submitting) return;
+      event.preventDefault(); event.returnValue = '';
+    });
+  }
+  selectView('anchor', anchor.value); selectView('evidence', evidence.value);
+  const activeCase = root.querySelector('.workspace-queue a[aria-current="page"]');
+  const queue = root.querySelector('.workspace-queue');
+  if (activeCase) queue.scrollTop = Math.max(0, activeCase.offsetTop - queue.offsetTop - 120);
+})();
+</script>

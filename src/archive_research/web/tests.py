@@ -28,7 +28,8 @@ class PilotTests(TestCase):
         create_fixture(cls.root)
         cls.original_evidence = (cls.root / 'records/evidence.json').read_bytes()
         cls.original_assertions = (cls.root / 'records/assertions.jsonl').read_bytes()
-        cls.override = override_settings(PILOT_ROOT=cls.root, ALLOWED_HOSTS=['testserver', '127.0.0.1'])
+        cls.override = override_settings(PILOT_ROOT=cls.root, ALLOWED_HOSTS=['testserver', '127.0.0.1'],
+                                         PROJECT={'mode': 'synthetic'})
         cls.override.enable()
 
     @classmethod
@@ -221,11 +222,112 @@ class PilotTests(TestCase):
 
     def test_invalid_review_data_cannot_write(self):
         data = self.review_data()
-        for changes in [{'reason': ' '}, {'value': 'x'*501}, {'citation_keys': ['unknown']},
+        for changes in [{'reason': 'x'*3001}, {'value': 'x'*501}, {'citation_keys': ['unknown']},
                         {'citation_keys': []}, {'review': 'adopted'}]:
             response = self.client.post('/cases/photo/review/photo-type/', {**data, **changes})
             self.assertEqual(response.status_code, 400)
         self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), self.original_assertions)
+
+    def test_optional_reviewer_note_preserves_prior_history_without_invented_reason(self):
+        for note in ('', '   '):
+            data = self.review_data()
+            data.update(reason=note, workspace='1')
+            response = self.client.post('/cases/photo/review/photo-type/', data)
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(snapshot()[1][-1]['reason'], '')
+            self.assertTrue((self.root / 'records/assertions.jsonl').read_bytes().startswith(self.original_assertions))
+        data = self.review_data()
+        data.pop('reason')
+        save_review('photo-type', data, 'operator')
+        self.assertEqual(snapshot()[1][-1]['reason'], '')
+        self.assertEqual(checked_cases()[0].payload['history'], snapshot()[1])
+        self.assertEqual(self.client.get('/export/').status_code, 200)
+
+    def test_workspace_has_inline_form_and_bound_text_without_record_writes(self):
+        from .processing import binding
+        view = snapshot()[0]['cases'][0]['views'][1]
+        path = self.root / 'cache' / (view['key'] + '-ocr.json')
+        atomic_write(path, json.dumps({'binding': binding(view), 'status': 'ready',
+                                      'text': 'OCR evidence <unsafe>', 'note': 'Unreviewed test text'}).encode())
+        self.addCleanup(path.unlink, missing_ok=True)
+        response = self.client.get('/cases/photo/')
+        self.assertContains(response, 'id="workspace-review"')
+        self.assertContains(response, 'OCR evidence &lt;unsafe&gt;')
+        self.assertContains(response, 'Reviewer note')
+        self.assertFalse(response.context['form'].fields['reason'].required)
+        self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), self.original_assertions)
+        cached = json.loads(path.read_text())
+        cached['binding']['page_sequence'] += 1
+        atomic_write(path, json.dumps(cached).encode())
+        response = self.client.get('/cases/photo/')
+        self.assertNotContains(response, 'OCR evidence')
+        self.assertContains(response, 'Text preparation is incomplete')
+
+    def test_workspace_invalid_and_stale_submissions_keep_draft_in_comparison(self):
+        url = '/cases/photo/review/photo-type/'
+        data = {**self.review_data(), 'workspace': '1', 'reason': '', 'q': 'apparatus', 'state': 'all'}
+        response = self.client.post(url, {**data, 'citation_keys': []})
+        self.assertContains(response, 'id="workspace-review"', status_code=400)
+        self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), self.original_assertions)
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        saved = (self.root / 'records/assertions.jsonl').read_bytes()
+        response = self.client.post(url, {**data, 'value': 'Keep this unsaved workspace finding'})
+        self.assertContains(response, 'Records changed', status_code=409)
+        self.assertContains(response, 'Keep this unsaved workspace finding', status_code=409)
+        self.assertContains(response, 'id="workspace-review"', status_code=409)
+        self.assertEqual(response.context['queue_query'], 'apparatus')
+        self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), saved)
+
+    @override_settings(PROJECT={'mode': 'local_review'})
+    def test_workspace_next_stays_in_filtered_real_queue_and_never_accepts_redirect_target(self):
+        self.add_local_case()
+        evidence, history, current, token = snapshot()
+        second = {**evidence['cases'][-1], 'key': 'P02', 'title': 'Local second review'}
+        evidence['cases'].append(second)
+        record = {**current[-1], 'case_key': 'P02', 'key': 'P02-assessment'}
+        atomic_write(self.root / 'records/evidence.json', json.dumps(evidence).encode())
+        path = self.root / 'records/assertions.jsonl'
+        atomic_write(path, path.read_bytes() + json.dumps(record).encode() + b'\n')
+        rebuild()
+        response = self.client.get('/cases/P01/?q=local&state=open')
+        self.assertEqual([c['key'] for c in response.context['queue']], ['P01', 'P02'])
+        original = next(r for r in snapshot()[2] if r.get('case_key') == 'P01')
+        data = {**{k: original[k] for k in ('value', 'scope', 'uncertainty', 'citation_keys')},
+                'revision': snapshot()[3], 'review': 'accepted', 'reason': '',
+                'workspace': '1', 'advance': '1', 'q': 'local', 'state': 'open', 'next': 'https://invalid.example/'}
+        response = self.client.post('/cases/P01/review/P01-assessment/', data)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, '/cases/P02/?q=local&state=open')
+        self.assertEqual(snapshot()[1][-1]['review'], 'accepted')
+        response = self.client.get('/cases/P01/?q=does-not-match&state=open')
+        self.assertEqual([c['key'] for c in response.context['queue']], ['P01'])
+        self.assertTrue(response.context['queue'][0]['outside_filter'])
+
+    def test_workspace_projection_failure_reports_saved_without_advancing(self):
+        with patch('archive_research.web.records._project', side_effect=RuntimeError('test projection failure')):
+            with self.assertLogs('archive_research.web.records', level='ERROR'):
+                response = self.client.post('/cases/photo/review/photo-type/', {
+                    **self.review_data(), 'workspace': '1', 'advance': '1', 'reason': ''})
+        self.assertContains(response, 'Review saved; browsing needs rebuilding', status_code=503)
+        self.assertEqual(len(snapshot()[1]), 8)
+        self.assertEqual(snapshot()[1][-1]['reason'], '')
+
+    def test_workspace_indexed_text_requires_exact_page_source_binding(self):
+        from .workspace import prepared_text
+        view = snapshot()[0]['cases'][0]['views'][1]
+        source = {**view['source'], 'root': 'sample'}
+        entry = {'kind': 'extraction', 'extractor': 'pdf-text', 'key': 'a'*64, 'availability': 'available',
+                 'evidence': {'page': {'kind': 'pdf', 'index': view['page_sequence'], 'source': source}, 'region': None},
+                 'fields': {'text': 'Bound native text', 'positioned_lines': 'Bound native text'}}
+        projection = {'entries': [entry], 'projection_sha256': 'b'*64}
+        with patch('archive_research.web.workspace.ocr_status', return_value={'status': 'not_generated'}):
+            self.assertEqual(prepared_text(view, projection)['text'], 'Bound native text')
+            self.assertEqual(prepared_text(view, projection)['label'], 'Extracted PDF text')
+            entry['evidence']['page']['index'] += 1
+            self.assertEqual(prepared_text(view, projection)['status'], 'not_generated')
+            entry['evidence']['page']['index'] -= 1
+            entry['evidence']['page']['source']['mtime_ns'] += 1
+            self.assertEqual(prepared_text(view, projection)['status'], 'not_generated')
 
     def test_write_permissions_methods_and_csrf(self):
         data = self.review_data()

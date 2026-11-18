@@ -30,14 +30,15 @@ class PhysicalObjectForm(forms.Form):
 
 class ReviewForm(forms.Form):
     revision = forms.CharField(widget=forms.HiddenInput, max_length=64)
-    value = forms.CharField(label='Assertion', max_length=TEXT_LIMITS['value'])
+    value = forms.CharField(label='Assertion', max_length=TEXT_LIMITS['value'],
+                            widget=forms.Textarea(attrs={'rows': 3}))
     scope = forms.CharField(max_length=TEXT_LIMITS['scope'], widget=forms.Textarea(attrs={'rows': 2}))
     uncertainty = forms.CharField(max_length=TEXT_LIMITS['uncertainty'], widget=forms.Textarea(attrs={'rows': 2}))
     review = forms.ChoiceField(label='Review outcome', choices=[('', 'Choose an outcome')] + [(s, s.title()) for s in REVIEW_STATES])
     citation_keys = forms.MultipleChoiceField(label='Supporting citations', widget=forms.CheckboxSelectMultiple)
-    reason = forms.CharField(label='Reason for this review or correction', max_length=TEXT_LIMITS['reason'],
+    reason = forms.CharField(label='Reviewer note (optional)', required=False, max_length=TEXT_LIMITS['reason'],
                              widget=forms.Textarea(attrs={'rows': 3}),
-                             help_text='Explain what the evidence supports and why you are recording this revision.')
+                             help_text='Add context only when it helps. Your decision is recorded without a note.')
 
     def __init__(self, *args, views, **kwargs):
         super().__init__(*args, **kwargs)

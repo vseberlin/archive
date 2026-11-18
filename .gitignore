@@ -7,6 +7,7 @@ AGENTS.md
 /docs/architecture/archive-preservation-architecture-adr.md
 /docs/architecture/archive-research-pilot-scope.md
 /docs/architecture/archive-research-record-example.md
+/docs/architecture/archive-research-record-contract.md
 /docs/architecture/photo-metadata-research-prompt.md
 /docs/architecture/video-inventory.md
 /docs/reference-v12-building-benchmark-20261114-pilot.patch
@@ -93,3 +94,5 @@ tools/archive-preservation/copyhash
 
 # Invented, versioned fixture data required by the installed application.
 !/src/archive_research/web/fixture.json
+# Invented record-contract examples; never live identity or research data.
+!/tests/research-contract-4b1.json

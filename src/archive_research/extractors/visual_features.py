@@ -25,16 +25,18 @@ def recipe_for(task):
 
 
 def validate_inputs(roots, work, task, recipe):
-    from ..receipts import read_current
+    from ..receipts import read_origin
     from ..runner import page_from_record
     from ..contracts import Region
     settings=recipe.record()['parameters']['settings']; model_path(roots,settings)
     origin=settings['region_origin']
     if origin is not None:
-        require(set(origin)=={'key','figure','receipt_sha256'},'Invalid region origin')
-        row,result,digest=read_current(roots,work,origin['key'])
-        require(result.recipe.extractor in ('pdf-layout','scan-layout') and digest==origin['receipt_sha256'] and
-                result.page==page_from_record(task['page']),'Layout origin changed or belongs to another page')
+        require(set(origin) in ({'key','figure','receipt_sha256'}, {'key','figure','receipt_sha256','evidence_sha256'}),'Invalid region origin')
+        try:
+            row,result,digest=read_origin(roots,work,origin,page_from_record(task['page']))
+        except ValueError as error:
+            raise ValueError('Layout origin: ' + str(error)) from error
+        require(result.recipe.extractor in ('pdf-layout','scan-layout') and digest==origin['receipt_sha256'],'Layout origin changed or belongs to another page')
         figures=row['feature']['figures'];index=origin['figure']
         require(type(index) is int and 0<=index<len(figures),'Unknown layout figure')
         require(task.get('region') and Region(**task['region'])==Region(**figures[index]['region']),
@@ -96,9 +98,10 @@ def space_id(recipe):
     return hashlib.sha256(encoded(space).encode()).hexdigest()
 
 
-def extract(image_path, roots, recipe):
+def extract(image_path, roots, recipe, encoder=None):
     from PIL import Image
-    encoder = Encoder(roots, recipe)
+    encoder = encoder or Encoder(roots, recipe)
+    require(space_id(encoder.recipe) == space_id(recipe), 'Shared encoder belongs to another vector space')
     config = encoder.config; settings = encoder.settings
     with Image.open(image_path) as image:
         values = encoder.encode_images([image])[0].tolist()

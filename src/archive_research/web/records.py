@@ -180,7 +180,7 @@ def _snapshot():
                 and len(set(record['citation_keys'])) == len(record['citation_keys'])
                 and set(record['citation_keys']) <= view_keys, 'Unknown or duplicate citation')
         for field, limit in TEXT_LIMITS.items():
-            require(isinstance(record[field], str) and record[field].strip()
+            require(isinstance(record[field], str) and (field == 'reason' or record[field].strip())
                     and len(record[field]) <= limit, f'Invalid assertion {field}')
         require(record['review'] in {'unreviewed', 'accepted', 'rejected', 'unresolved'}, 'Invalid review')
         identity = (owner, record['key'])
@@ -276,8 +276,9 @@ def save_review(key, submitted, actor, case_key='photo'):
         require(isinstance(actor, str) and actor.strip(), 'Authenticated reviewer required')
         fields = {}
         for field, limit in TEXT_LIMITS.items():
-            value = submitted.get(field)
-            require(isinstance(value, str) and value.strip() and len(value) <= limit,
+            value = submitted.get(field, '') if field == 'reason' else submitted.get(field)
+            require(isinstance(value, str) and (field == 'reason' or value.strip()) and len(value) <= limit,
+                    f'Reviewer note must be text of at most {limit} characters' if field == 'reason' else
                     f'{field.capitalize()} is required and must be at most {limit} characters')
             fields[field] = value.strip()
         require(submitted.get('review') in REVIEW_STATES, 'Choose accepted, rejected or unresolved')

@@ -7,6 +7,7 @@ import json
 from . import storage
 from .contracts import Transform, encoded, page_binding, require
 from .imaging import RENDER_POLICY
+from .result_records import content_page
 from .preparation import render
 
 
@@ -14,7 +15,7 @@ def prepared_view(roots, page, directory, root, *, dpi, clockwise, region=None):
     from .runner import tool_version
     require(type(dpi) is int and 72 <= dpi <= 600, 'DPI outside bounded trial range')
     require(clockwise in (0,90,180,270), 'Unsupported editorial rotation')
-    binding = {'page':page_binding(page), 'key_version':2, 'region':asdict(region) if region else None,
+    binding = {'page':content_page(page), 'key_version':3, 'region':asdict(region) if region else None,
                'dpi':dpi if page.kind == 'pdf' else None,
                'clockwise':clockwise, 'policy':RENDER_POLICY,
                'Pillow':importlib.metadata.version('Pillow')}
@@ -24,6 +25,13 @@ def prepared_view(roots, page, directory, root, *, dpi, clockwise, region=None):
     name = 'prepared-'+key
     image = storage.target(root, name+'.png')
     receipt = storage.target(root, name+'.json')
+    if not receipt.exists():
+        legacy_binding = {**binding, 'page': page_binding(page), 'key_version': 2}
+        legacy_name = 'prepared-' + hashlib.sha256(encoded(legacy_binding).encode()).hexdigest()
+        legacy = storage.target(root, legacy_name + '.json')
+        if legacy.exists():
+            # Read a selected compatible v2 preparation without rewriting it.
+            receipt, image, binding = legacy, storage.target(root, legacy_name + '.png'), legacy_binding
     source = asdict(page.source)
     roots.source(page.source)
     if receipt.exists():

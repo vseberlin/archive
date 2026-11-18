@@ -75,11 +75,36 @@ def snapshot():
 
 
 def lookup(key, revision):
+    if settings.PROJECT.get('research_index'):
+        from dataclasses import asdict
+        from archive_research.receipts import read_current
+        roots, projection = search_projection()
+        require(revision == projection['projection_sha256'], 'Search projection changed; reload')
+        entry = next((e for e in projection['entries'] if e['key'] == key and e['kind'] == 'extraction'), None)
+        require(entry is not None, 'Receipt outside selected projection')
+        receipt, result, digest = read_current(roots, 'artifacts', key)
+        require(digest == entry['evidence']['receipt_sha256'] and
+                asdict(result.page) == entry['evidence']['page'], 'Selected evidence changed; refresh explicitly')
+        roots.source(result.page.source, verify_hash=bool(result.page.source.sha256))
+        return roots, {'id': key, 'key': key, 'result': result, 'page': asdict(result.page),
+                       'receipt': receipt, 'words': receipt['words'], 'available': True,
+                       'state': result.status, 'error': '', 'text': entry['fields']['text']}, revision
     roots, rows, current = snapshot()
     require(revision and revision == current, 'Extraction results changed; reload the search')
     row = next((r for r in rows if r['key'] == key), None)
     require(row is not None and row['available'], 'Bound extraction source or result unavailable')
     return roots, row, current
+
+
+def search_projection():
+    from archive_research import Roots
+    from archive_research.storage import target
+    from archive_research.search_projection import validate
+    config = Path(settings.PROJECT['extraction_roots'])
+    work_root(config.parent)
+    roots = Roots.from_toml(config)
+    path = target(roots.root('artifacts', 'work'), settings.PROJECT['research_index'])
+    return roots, validate(json.loads(path.read_text()))
 
 
 def search(query):

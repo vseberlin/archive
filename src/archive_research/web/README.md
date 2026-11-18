@@ -39,6 +39,31 @@ the configured runtime's `operator-login.txt` (mode 0600 on Linux).
 it is not part of the normal launch of this existing pilot. This is a local
 development process; there is no service or startup automation.
 
+## Unified review workspace
+
+The case URL keeps a filtered case list, two evidence panes, page text and the
+finding form on one screen. The anchor and comparison selectors use only the
+case's existing bound views. Image/Compare and Enlarge workspace change the
+presentation without changing the draft. Zoom fits each prepared image before
+magnifying it; the original PDF/image remains available through its source link.
+Text/OCR, recorded context, source details and history share an inline drawer.
+Existing valid OCR or exact-page text in the selected search projection is reused;
+missing, stale or unusable text remains explicit. No extraction runs in HTTP.
+
+Confirm, Reject and Leave unresolved save through the existing review operation.
+A reviewer note is optional. Scope, uncertainty and supporting citations remain
+editable under an expandable section. Next after decision preserves queue filters
+and advances only after a successful save, prioritizing another unreviewed finding
+in the same case. Save errors retain the draft; saved-but-stale recovery never
+advances or repeats the write. Leaving an edited page warns about unsaved changes.
+Drafts live in the current page only; no separate draft store was introduced.
+
+This slice does not implement candidate clustering, overlays, new relationships,
+automatic metadata adoption or the full document-preparation gate. Full-page OCR
+coverage and quality qualification remain preparation responsibilities. The
+workspace reports missing text and does not label these views ready for review.
+The standalone review and citation URLs remain available for existing links.
+
 ## Prepared page search and image leads
 
 The project may explicitly select `extraction_roots`, `extraction_plan` and
@@ -131,8 +156,9 @@ Generated citation, image and source links carry the displayed record revision.
 A later change withholds the old link instead of silently displaying a new
 snapshot; reload the comparison to get current links. Canonical URLs without a
 revision open the current snapshot. History links explicitly resolve current
-bound evidence; the pilot does not store past source-file versions. Review forms
-open citation evidence in another tab to retain unsaved text. Citation browsing
+bound evidence; the pilot does not store past source-file versions. The unified workspace
+switches bound evidence and text in place, retaining the draft. Full-source and
+standalone citation links open another tab. Citation browsing
 does not alter evidence, history or exports.
 
 Optional OCR is displayed separately from manual observations and assertions.
@@ -167,9 +193,10 @@ filesystem options enforced by the deployment guard. Keep those values in privat
 operator configuration; generic examples do not override the guard.
 SQLite never becomes the authority for research assertions.
 
-Each comparison links to review forms for its own existing assertions. They
-allow assertion wording, scope, uncertainty, outcome, supporting citations and
-a mandatory reason. Subject/relation keys remain fixed; reviewer and UTC time
+Each comparison includes the review form for its existing assertion, beside the
+source and selected evidence. It allows finding wording, scope, uncertainty,
+outcome, supporting citations and an optional reviewer note. Blank notes remain
+empty in the readable history; the application does not invent a reason. Subject/relation keys remain fixed; reviewer and UTC time
 come from the server. CSRF-protected saves require the displayed revision and
 unchanged source/preview bindings. Earlier JSONL bytes are retained; a new record
 names its superseded revision. A stale form is refused with entered text intact.

@@ -1,0 +1,24 @@
+{% extends 'research_web/base.html' %}{% block title %}Archive research search{% endblock %}{% block content %}
+<h1>Search archive evidence</h1>
+<p>Find catalogue descriptions, source passages and reviewed research findings.</p>
+<form method="get"><label for="query">Name, identifier or research question</label>
+<input id="query" name="q" value="{{ query }}" maxlength="200">
+<label><input type="checkbox" name="fuzzy" value="1" {% if fuzzy %}checked{% endif %}> Include spelling alternatives</label>
+<button>Search</button></form>
+<p class="muted">Prepared {{ projection.refreshed_at }}. Availability was checked then; opening evidence checks it again.</p>
+<p>{{ projection.coverage.indexed_receipts }} extraction results · {{ projection.coverage.available_receipts }} with sources available at refresh · {{ projection.coverage.failed_inputs }} inputs could not be indexed · {{ projection.coverage.unmapped_entries }} entries awaiting canonical identity mapping.</p>
+<p>This selection does not cover the whole archive. New extraction or corrections require an explicit search refresh.</p>
+{% if results %}<p>{{ results.total_matches }} matches</p>
+{% for hit in results.hits %}<article class="card">
+<span class="badge">{{ hit.kind }}</span> <span class="badge">{{ hit.availability }}</span>{% if hit.review %} <span class="badge">{{ hit.review }}</span>{% endif %}
+<h2>{% if hit.object_uid %}{{ hit.object_uid }}{% else %}Identity unresolved{% endif %}</h2>
+<p>{{ hit.snippet }}</p><p class="muted">{{ hit.match_reasons|join:", " }} · {{ hit.matched_fields|join:", " }}</p>
+{% if hit.kind == 'extraction' %}<p><a href="{% url 'extraction_citation' hit.target %}?revision={{ revision }}">Inspect source evidence</a></p>
+{% elif hit.kind == 'finding' %}<p>{{ hit.evidence.reviewer }} · revision {{ hit.evidence.revision }} · research finding, not catalogue adoption.</p>
+<p><a href="{% url 'case' hit.evidence.case_key %}">Inspect finding and citations</a></p>
+{% else %}<details><summary>Catalogue attribution</summary><p>{{ hit.evidence.catalogue.unit }} · {{ hit.evidence.catalogue.path }} · row {{ hit.evidence.row_number }}</p></details>{% endif %}
+</article>{% empty %}<p>No match in this selection. Unsearched or unavailable material may contain relevant evidence.</p>{% endfor %}
+{% if results.next_offset != None %}<a href="?q={{ query|urlencode }}&amp;offset={{ results.next_offset }}{% if fuzzy %}&amp;fuzzy=1{% endif %}">Next results</a>{% endif %}
+{% endif %}
+<details><summary>Coverage and limits</summary><pre>{{ projection.coverage }}</pre>{% for item in projection.unavailable %}<p>{{ item.key }}: {{ item.reason }}</p>{% endfor %}</details>
+{% endblock %}

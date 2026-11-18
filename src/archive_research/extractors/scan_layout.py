@@ -13,7 +13,7 @@ from ..imaging import RENDER_POLICY
 from ..contracts import Recipe, Region, encoded, require
 from ..geometry import source_region, processed_region
 from .layout import caption_candidates, union
-from ..receipts import read_current
+from ..receipts import read_current, read_origin
 
 
 def recipe_for(task):
@@ -28,7 +28,7 @@ def recipe_for(task):
     require(0 < settings['min_area'] < settings['max_area'] <= .85 and
             0 < settings['caption_gap'] <= .25, 'Invalid scan layout bounds')
     require(type(settings['max_figures']) is int and 1 <= settings['max_figures'] <= 64, 'Invalid figure limit')
-    require(set(settings['ocr_origin']) == {'key','receipt_sha256'}, 'Invalid OCR origin')
+    require(set(settings['ocr_origin']) in ({'key','receipt_sha256'}, {'key','receipt_sha256','evidence_sha256'}), 'Invalid OCR origin')
     return Recipe.create('scan-layout', '2', settings=settings, preparation=RENDER_POLICY,
                          dependencies={**{n:importlib.metadata.version(n) for n in
                                        ('opencv-python-headless','numpy','Pillow')},
@@ -39,8 +39,8 @@ def recipe_for(task):
 def validate_inputs(roots, work, task, recipe):
     from ..runner import page_from_record
     origin=recipe.record()['parameters']['settings']['ocr_origin']
-    row,result,digest=read_current(roots,work,origin['key'])
-    require(digest==origin['receipt_sha256'] and result.page==page_from_record(task['page']) and
+    row,result,digest=read_origin(roots,work,origin,page_from_record(task['page']))
+    require(digest==origin['receipt_sha256'] and
             result.recipe.extractor=='ocr' and result.region is None, 'OCR origin changed or belongs to another page')
     return row,result
 
@@ -115,7 +115,7 @@ def detect(image, text_boxes, illustration_boxes, settings):
 
 def extract(image_path,page,transform,roots,settings,temporary,key,work):
     from PIL import Image
-    row,result,_=read_current(roots,work,settings['ocr_origin']['key'])
+    row,result,_=read_origin(roots,work,settings['ocr_origin'],page)
     raw=next(a for a in result.artifacts if a.kind=='machine-ocr-alto')
     blocks,illustrations,ocr_omitted=ocr_layout(roots.artifact(raw).read_bytes(),result)
     def display(r):

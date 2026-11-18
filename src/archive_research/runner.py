@@ -16,6 +16,7 @@ from .contracts import Artifact, Page, Recipe, Region, Result, Source, page_bind
 from .prepared_views import prepared_view as render
 from .sources import Roots
 from . import storage
+from . import result_records
 
 # Explicit adapters keep feature implementations out of the page runner.
 FEATURE_ADAPTERS = {'visual': 'extractors.visual_features', 'pdf-layout': 'extractors.layout', 'scan-layout': 'extractors.scan_layout', 'faces': 'extractors.faces'}
@@ -121,6 +122,7 @@ def cached(roots, work, key, page, recipe, region=None):
     if not path.is_file():
         return None
     value = json.loads(path.read_text())
+    result_records.identity(value)
     result = Result.from_record(value['result'])
     require(page_binding(result.page) == page_binding(page) and result.recipe == recipe and result.region == region,
             'Cached result binding differs')
@@ -131,12 +133,13 @@ def cached(roots, work, key, page, recipe, region=None):
     for artifact in result.artifacts:
         file = roots.artifact(artifact)
         require(storage.stamp(file) == value['artifact_stamps'][artifact.path], 'Cached artifact changed')
+        require(hashlib.sha256(file.read_bytes()).hexdigest() == artifact.sha256, 'Cached artifact content changed')
     require(len(result.artifacts) >= 2 if recipe.extractor in ('text-regions', 'line-ocr', *FEATURE_ADAPTERS) else len(result.artifacts) == 2,
             'Incomplete cached artifacts')
     return value
 
 
-def extract_one(roots, work, task):
+def extract_one(roots, work, task, *, encoders=None):
     page = page_from_record(task['page'])
     region = Region(**task['region']) if task.get('region') is not None else None
     recipe = recipe_for(task)
@@ -163,24 +166,51 @@ def extract_one(roots, work, task):
             if prior is None:
                 prior_key = recipe.cache_key(page, region, version=1)
                 prior = cached(roots, work, prior_key, page, recipe, region)
+            if prior is None:
+                prior = result_records.reuse(roots, work, page, recipe, region)
+                if prior is not None:
+                    value, evidence = result_records.publish(roots, work, key, prior)
+                    return {'key': key, 'state': value['result']['status'], 'reused': True,
+                            'rebound': True, 'word_count': len(value['words']),
+                            'result_sha256': value['result_sha256'], 'evidence_sha256': evidence,
+                            **({'warning': value['projection_warning']} if value.get('projection_warning') else {})}
             if prior is not None:
                 stored = Result.from_record(prior['result'])
                 rebound = prior_key != key or stored.page != page
+                old_data = storage.target(root, prior_key + '.json').read_bytes()
+                result_records.retain(roots, work, prior, original_bytes=old_data)
                 if rebound:
                     # No re-extraction: refile under the current key with the current locator.
                     value = {**prior, 'result': replace(stored, page=page).record(),
                              'rebound_from': {'key': prior_key, 'page': asdict(stored.page)}}
-                    storage.write_json(root, key + '.json', value)
+                else:
+                    value = prior
+                value, evidence = result_records.publish(roots, work, key, value)
                 return {'key': key, 'state': prior['result']['status'], 'reused': True,
-                        'rebound': rebound, 'word_count': len(prior['words'])}
+                        'rebound': rebound, 'word_count': len(prior['words']),
+                        'result_sha256': value['result_sha256'], 'evidence_sha256': evidence,
+                            **({'warning': value['projection_warning']} if value.get('projection_warning') else {})}
+            # A selective retry may replace artifact filenames. Preserve earlier
+            # readable results and bytes first, including unfinished observations.
+            previous_path = storage.target(root, key + '.json')
+            if previous_path.exists():
+                previous_bytes = previous_path.read_bytes()
+                result_records.retain(roots, work, json.loads(previous_bytes), original_bytes=previous_bytes)
             settings = recipe.record()['parameters']['settings']
             discovery, extra_artifacts, feature = None, [], None
             with tempfile.TemporaryDirectory(prefix='.page-', dir=root) as temporary:
                 image, transform, rotation = render(roots, page, Path(temporary), root, dpi=settings['dpi'],
                                                      clockwise=settings['clockwise'], region=region)
                 if task['extractor'] == 'visual':
-                    from .extractors.visual_features import extract
-                    raw, feature = extract(image, roots, recipe)
+                    from .extractors.visual_features import extract, Encoder, space_id
+                    encoder = None
+                    if encoders is not None:
+                        space = space_id(recipe)
+                        if space not in encoders:
+                            encoders.clear()  # One model at a time in a bounded worker.
+                            encoders[space] = Encoder(roots, recipe)
+                        encoder = encoders[space]
+                    raw, feature = extract(image, roots, recipe, **({'encoder': encoder} if encoder else {}))
                     words = []; suffix, kind = '.visual.json', 'normalized-visual-embedding'
                     note = 'Local visual features for retrieval; no identification or OCR claim.'
                 elif task['extractor'] == 'faces':
@@ -259,8 +289,10 @@ def extract_one(roots, work, task):
                 value['discovery'] = discovery
             if feature is not None:
                 value['feature'] = feature
-            storage.write_json(root, key + '.json', value)
-            return {'key': key, 'state': result.status, 'reused': False, 'word_count': len(words)}
+            value, evidence = result_records.publish(roots, work, key, value)
+            return {'key': key, 'state': result.status, 'reused': False, 'word_count': len(words),
+                    'result_sha256': value['result_sha256'], 'evidence_sha256': evidence,
+                            **({'warning': value['projection_warning']} if value.get('projection_warning') else {})}
         except (OSError, ValueError, KeyError, ParseError, subprocess.SubprocessError) as error:
             status = 'changed_source' if str(error).startswith('Source changed') else 'error'
             result = Result(page, recipe, status, time.monotonic()-start, region=region,

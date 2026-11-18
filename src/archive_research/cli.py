@@ -50,6 +50,11 @@ def main(argv=None):
     e.add_argument('--plan', type=Path, required=True); e.add_argument('--work', default='artifacts')
     e.add_argument('--summary', default='run-summary.json'); e.add_argument('--limit', type=int, default=0)
     e.add_argument('--index', type=int, help='One task position'); e.add_argument('--expected-plan', help=argparse.SUPPRESS)
+    e.add_argument('--chunk-size', type=int, default=1, help='1–16 items per isolated worker; reuse one model within a chunk')
+    e.add_argument('--worker-timeout', type=int, default=900, help='Whole-worker deadline in seconds')
+    e.add_argument('--worker-start', type=int, help=argparse.SUPPRESS)
+    e.add_argument('--worker-count', type=int, help=argparse.SUPPRESS)
+    e.add_argument('--progress', help=argparse.SUPPRESS)
     i = processing('index', 'Build an index over selected existing receipts')
     i.add_argument('--selection', type=Path, required=True); i.add_argument('--output', required=True)
     for name in ('search', 'retrieve'):
@@ -60,6 +65,9 @@ def main(argv=None):
     packet = processing('packet', 'Assemble selected source-bound evidence')
     packet.add_argument('--selection', type=Path, required=True); packet.add_argument('--output', required=True)
     packet.add_argument('--work', default='artifacts'); packet.add_argument('--prompt-output')
+    evidence = processing('evidence', 'Inspect a retained immutable receipt and artifacts without inference')
+    evidence.add_argument('--snapshot', required=True, help='Exact evidence SHA-256 from a run receipt')
+    evidence.add_argument('--work', default='artifacts')
     r = processing('run', 'Run extraction, index, search and packet preparation together; never submit externally')
     r.add_argument('--plan', type=Path, help='Omit to reuse existing extraction receipts')
     r.add_argument('--retrieval-selection', type=Path, required=True)
@@ -78,7 +86,9 @@ def main(argv=None):
         a.roots = Path(config.project['extraction_roots'])
     if a.command == 'extract':
         result = pipeline.extract(a.roots, a.plan, work=a.work, summary=a.summary,
-                                  limit=a.limit, index=a.index, expected_plan=a.expected_plan)
+                                  limit=a.limit, index=a.index, expected_plan=a.expected_plan,
+                                  chunk_size=a.chunk_size, worker_timeout=a.worker_timeout,
+                                  worker_start=a.worker_start, worker_count=a.worker_count, progress=a.progress)
     elif a.command == 'index':
         result = pipeline.index(a.roots, pipeline.read_json(a.selection), a.output)
         result = {'indexed': len(result['entries']), 'unavailable': len(result['unavailable']), 'output': a.output}
@@ -90,6 +100,12 @@ def main(argv=None):
             pipeline.index(a.roots, selection, a.index_output)
         result = pipeline.search(a.roots, selection, a.index if a.command == 'search' else a.index_output, a.output, sift=a.sift)
         result = {'visual_queries': len(result['visual']), 'text_queries': len(result['text']), 'output': a.output}
+    elif a.command == 'evidence':
+        from .result_records import retained
+        from .config import extraction_roots
+        row, _, digest = retained(extraction_roots(a.roots), a.work, a.snapshot)
+        result = {'evidence_sha256': a.snapshot, 'result_sha256': digest, 'receipt': row,
+                  'current_source_verified': False, 'status': 'retained evidence; original source may be offline'}
     elif a.command == 'packet':
         result = pipeline.packet(a.roots, pipeline.read_json(a.selection), a.output, prompt_output=a.prompt_output, work=a.work)
         result = {'evidence': len(result['evidence']), 'available': sum(e['available'] for e in result['evidence']),

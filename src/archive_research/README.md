@@ -95,6 +95,43 @@ See the [workbench guide](web/README.md) for installed launch and review command
 
 ## Shared image preparation and reference experiment
 
+### Immutable results and prepared search (0.4)
+
+New successful extraction retains exact receipt and artifact bytes before updating
+the current source binding. `result-<digest>.json` describes computation independently
+of collection membership, canonical UID mapping or logical order. Exact historical
+receipt snapshots keep those original bindings. `computation-<digest>.json` is only
+a disposable reuse lookup: repeating the selected task repairs a missing lookup
+without rerunning valid extraction. A lookup write failure reports saved evidence
+with a warning. No legacy corpus is converted automatically and no UID is allocated.
+
+`archive-research evidence --roots ROOTS --snapshot SHA` reads one retained snapshot.
+It verifies retained bytes; it does not claim today's source file is available.
+Normal selected evidence access still verifies its current source. Neither content
+reuse nor byte equality merges archival objects.
+
+`index` explicitly refreshes a flat search projection from selected receipt keys,
+catalogue CSV snapshots/field mappings and existing finding history. It preserves
+literal wording, provenance, unresolved identities and available/offline coverage.
+Queries read this projection without reopening the corpus or running extraction.
+Text search supports paging, ranked fields, match reasons, German normalization
+and optional spelling leads; visual search keeps same-document candidates and
+reports incompatible model spaces. Corrections require an explicit refresh.
+Existing neutral UIDs can be mapped explicitly; there is no production allocator.
+
+`extract --chunk-size 2 --worker-timeout 900` processes a bounded chunk with one
+cached visual encoder per model space and saves per-item progress. Worker timeout
+or interruption preserves the completed prefix; retry reuses verified results.
+Limits are 1–16 items per chunk and 1–7,200 seconds per worker. Chunk size defaults
+to one. Model files remain explicit local inputs; no download or HTTP processing
+is introduced. Synthetic checks establish behavior, not recognition accuracy.
+
+The optional project `research_index` names the prepared search JSON in the existing
+artifact root. Research search then combines catalogue text, extraction and findings.
+The ordinary case view presents findings and citations first; `?inspect=1` expands
+the same evidence details. `/research/evidence/SHA/` opens an authenticated retained
+snapshot with an explicit historical-source qualification.
+
 Unsigned 16-bit grayscale TIFFs use a recorded linear 0..65535 → 0..255 display
 conversion; 16-bit MinIsWhite files are inverted (Pillow does this only for 8-bit)
 and the observed value range is recorded in the transform step. Greyscale sources

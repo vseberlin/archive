@@ -7,6 +7,7 @@ import re
 from .contracts import Region, Result, encoded, require, text
 from .geometry import processed_region
 from .storage import target, stamp
+from .result_records import identity
 
 
 def references(values, count):
@@ -74,7 +75,7 @@ def read_evidence(roots, work, item):
         require(found_result.page == result.page and found_result.recipe.extractor in ('text-regions', 'line-ocr')
                 and found_result.recipe.key_matches(found_result.page, None, item['discovery_key']),
                 'Discovery belongs to another page or recipe')
-        discovery_sha = hashlib.sha256(discovery_data).hexdigest()
+        discovery_sha = identity(found, discovery_data)
         discovery = found.get('discovery')
         if discovery is None:
             discovery = {'coverage': {'status': 'processing_failed', 'scan_complete': False},
@@ -90,7 +91,7 @@ def read_evidence(roots, work, item):
             candidate['display_percent'] = {k: getattr(shown_candidate,k)*100 for k in ('x','y','width','height')}
     return {**item, 'page': page, 'region': asdict(region) if region else None,
             'display_region': asdict(shown) if shown else None,
-            'receipt_sha256': hashlib.sha256(data).hexdigest(),
+            'receipt_sha256': identity(receipt, data),
             'extractor': result.recipe.record(), 'state': result.status,
             'available': available, 'error': error, 'text': ' '.join(w['text'] for w in words),
             'words': words, 'limitations': list(result.limitations), 'source_group': source_group,

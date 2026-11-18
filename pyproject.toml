@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "iss-archive-research"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local archive extraction, cross-references, evidence assessment and review"
 readme = "src/archive_research/README.md"
 requires-python = ">=3.11"
