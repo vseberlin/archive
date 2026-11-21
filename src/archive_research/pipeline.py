@@ -28,6 +28,29 @@ def current_packet(roots, work, stored):
     return refresh_packet(roots, work, stored, research_profiles(stored['selection']['profiles']))
 
 
+def document_parts(roots_file, key, profile, output, *, work='artifacts', visual_model=None, languages='deu+eng', handwriting=None):
+    """Write a new bounded downstream plan; never replace a prior selection."""
+    from .extractors.document_layout import downstream_plan
+    roots=extraction_roots(roots_file);root=roots.root(work,'work')
+    with lock(root):
+        require(not target(root,output).exists(),'Downstream plan already exists; select another output')
+        value=downstream_plan(roots,work,key,profile=profile,visual_model=visual_model,languages=languages,handwriting=handwriting)
+        write_json(root,output,value)
+    return value
+
+
+def document_tables(roots_file, layout_key, reading_key, output, *, work='artifacts'):
+    """Prepare one explicit table refinement; use the ordinary runner to execute."""
+    from .extractors.document_layout import table_refinement_task
+    roots=extraction_roots(roots_file);root=roots.root(work,'work')
+    with lock(root):
+        require(not target(root,output).exists(),'Table plan already exists; select another output')
+        value={'format':'archive-research-plan-1','metadata_adopted':False,
+               'tasks':[table_refinement_task(roots,work,layout_key,reading_key)]}
+        write_json(root,output,value)
+    return value
+
+
 def extract(roots_file, plan_file, *, work='artifacts', summary='run-summary.json', limit=0,
             index=None, expected_plan=None, chunk_size=1, worker_timeout=900,
             worker_start=None, worker_count=None, progress=None):

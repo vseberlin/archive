@@ -24,9 +24,27 @@ def ocr_status(view):
             return {'status': 'stale', 'note': 'OCR belongs to an older source or preview and is withheld.'}
         require(result.get('status') in ('ready', 'unavailable'), 'Invalid OCR status')
         require(isinstance(result.get('text', ''), str) and isinstance(result.get('note', ''), str), 'Invalid OCR text')
+        if 'tables' in result:
+            validate_tables(result['tables'])
         return result
     except (ValueError, OSError, TypeError):
         return {'status': 'unavailable', 'note': 'OCR receipt is unreadable. The image and manual citation remain usable.'}
+
+
+def validate_tables(tables):
+    """Bounded prepared readings, rendered as escaped text, never imported HTML."""
+    require(isinstance(tables, list) and len(tables) <= 8, 'Invalid prepared tables')
+    for table in tables:
+        require(isinstance(table, dict) and set(table) == {'header', 'rows', 'unassigned'},
+                'Invalid table reading')
+        require(all(isinstance(table[k], str) and len(table[k]) <= 20000
+                    for k in ('header', 'unassigned')), 'Invalid table text')
+        rows = table['rows']
+        require(isinstance(rows, list) and 1 <= len(rows) <= 500, 'Invalid table rows')
+        width = len(rows[0]) if isinstance(rows[0], list) else 0
+        require(1 <= width <= 40 and all(isinstance(row, list) and len(row) == width and
+                all(isinstance(cell, str) and len(cell) <= 5000 for cell in row) for row in rows),
+                'Invalid table cells')
 
 
 def generate_ocr(view_key, case_key='photo'):

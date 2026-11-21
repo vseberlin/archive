@@ -24,6 +24,14 @@ def legacy_extract(argv):
 
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == 'ocr-profiles':
+        from .profiles import OCR_PROFILES, ocr_profile
+        parser = argparse.ArgumentParser(prog='archive-research ocr-profiles')
+        parser.add_argument('name', nargs='?', choices=list(OCR_PROFILES))
+        selected = parser.parse_args(argv[1:])
+        print(json.dumps([ocr_profile(name) for name in ([selected.name] if selected.name else OCR_PROFILES)],
+                         ensure_ascii=False, indent=2))
+        return
     if argv and argv[0] in ('--roots', '--plan', '--work'):
         return legacy_extract(argv)
     if argv and argv[0] == 'reference':
@@ -68,6 +76,17 @@ def main(argv=None):
     evidence = processing('evidence', 'Inspect a retained immutable receipt and artifacts without inference')
     evidence.add_argument('--snapshot', required=True, help='Exact evidence SHA-256 from a run receipt')
     evidence.add_argument('--work', default='artifacts')
+    parts = processing('document-parts', 'Route retained page regions to separate text and visual tasks; no inference')
+    from .profiles import OCR_PROFILES
+    parts.add_argument('--layout-key', required=True)
+    parts.add_argument('--profile', required=True, choices=list(OCR_PROFILES))
+    parts.add_argument('--visual-model', type=Path, help='JSON Source record for an existing fingerprinted local model')
+    parts.add_argument('--handwriting', type=Path, help='JSON backend and bound local handwriting model manifest')
+    parts.add_argument('--languages', default='deu+eng')
+    parts.add_argument('--work', default='artifacts'); parts.add_argument('--output', required=True)
+    tables = processing('document-tables', 'Prepare bordered-table refinement from retained layout and positioned text')
+    tables.add_argument('--layout-key', required=True);tables.add_argument('--reading-key', required=True)
+    tables.add_argument('--work', default='artifacts');tables.add_argument('--output', required=True)
     r = processing('run', 'Run extraction, index, search and packet preparation together; never submit externally')
     r.add_argument('--plan', type=Path, help='Omit to reuse existing extraction receipts')
     r.add_argument('--retrieval-selection', type=Path, required=True)
@@ -78,6 +97,7 @@ def main(argv=None):
     sub.add_parser('reference-diagnostics', help='Baselines, strata, holdout sweep and curator review for a reference index; no model or images')
     sub.add_parser('assess', help='Prepare, validate or explicitly submit an assessment')
     sub.add_parser('web', help='Configure, check, test or serve the local Django application')
+    sub.add_parser('ocr-profiles', help='List versioned OCR material presets and their limits')
     a = p.parse_args(argv)
     from .config import Configuration
     from . import pipeline
@@ -89,6 +109,15 @@ def main(argv=None):
                                   limit=a.limit, index=a.index, expected_plan=a.expected_plan,
                                   chunk_size=a.chunk_size, worker_timeout=a.worker_timeout,
                                   worker_start=a.worker_start, worker_count=a.worker_count, progress=a.progress)
+    elif a.command == 'document-tables':
+        result = pipeline.document_tables(a.roots, a.layout_key, a.reading_key, a.output, work=a.work)
+        result = {'tasks':len(result['tasks']), 'output':a.output, 'inference_ran':False}
+    elif a.command == 'document-parts':
+        result = pipeline.document_parts(a.roots, a.layout_key, a.profile, a.output, work=a.work,
+                                        visual_model=pipeline.read_json(a.visual_model) if a.visual_model else None,
+                                        languages=a.languages,handwriting=pipeline.read_json(a.handwriting) if a.handwriting else None)
+        result = {'parts':len(result['parts']), 'tasks':len(result['tasks']),
+                  'coverage':result['coverage'], 'output':a.output}
     elif a.command == 'index':
         result = pipeline.index(a.roots, pipeline.read_json(a.selection), a.output)
         result = {'indexed': len(result['entries']), 'unavailable': len(result['unavailable']), 'output': a.output}

@@ -1,0 +1,28 @@
+<p class="field-label">{{ side_label }}</p><h2>{{ view.label }}</h2>
+{% if view.text_quality_note %}<p class="text-gap">{{ view.text_quality_note }}</p>{% endif %}
+{% if view.available %}
+  {% if view.ocr.status == 'ready' %}
+    <p class="muted">Unreviewed text. Words, numbers and formulas may be wrong; some page text may be missing. Check the scan.</p>
+    {% for table in view.ocr.tables %}
+      <section class="prepared-table">
+        <h3>Table reading — check against the scan</h3>
+        <p class="text-gap">Row and cell grouping is unreviewed. Wrapped lines may share a cell; check the scan, including headings and units. “No words recovered” does not mean the original cell is empty.</p>
+        {% if table.header %}<pre class="ocr-text">{{ table.header }}</pre>{% endif %}
+        <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">
+          <caption>Unreviewed cell readings</caption>
+          <tbody>{% for row in table.rows %}<tr>{% for cell in row %}<td style="border:1px solid var(--line);padding:8px;vertical-align:top;white-space:pre-wrap">{% if cell %}{{ cell }}{% else %}<span class="muted">No words recovered</span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table></div>
+        {% if table.unassigned %}<details open><summary>Text not assigned to a cell</summary><pre class="ocr-text">{{ table.unassigned }}</pre></details>{% endif %}
+      </section>
+    {% endfor %}
+    {% if view.ocr.blocks %}
+      {% for block in view.ocr.blocks %}<article class="reading-block">
+        <button type="button" class="quiet" data-show-text-region data-reading-target="{{ side }}" data-reading-view="{{ forloop.parentloop.counter0 }}" data-x="{{ block.display_region.x }}" data-y="{{ block.display_region.y }}" data-width="{{ block.display_region.width }}" data-height="{{ block.display_region.height }}" aria-pressed="false">Show passage {{ forloop.counter }} on page</button>
+        <pre class="ocr-text">{{ block.text }}</pre>
+        {% if block.alternative_text %}<details><summary>Alternative reading — check the scan</summary><pre class="ocr-text">{{ block.alternative_text }}</pre></details>{% endif %}
+      </article>{% endfor %}
+    {% elif view.ocr.text %}<pre class="ocr-text">{{ view.ocr.text }}</pre>
+    {% elif not view.ocr.tables %}<p class="text-gap">No words were recovered in this selected region. Read the scan; this does not mean the original is blank.</p>{% endif %}
+  {% else %}<p class="text-gap">No usable text is available for this view. Read the scan; missing text is not evidence of absence.</p>{% endif %}
+  {% if view.observation %}<details><summary>Source observation / assisted reading</summary><pre class="ocr-text">{{ view.observation }}</pre></details>{% endif %}
+{% else %}<p class="text-gap">Source unavailable: {{ view.error }}</p>{% endif %}

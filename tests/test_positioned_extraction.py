@@ -90,6 +90,20 @@ class PositionedTests(unittest.TestCase):
         self.assertNotEqual(first['key'],third['key'])
         self.assertTrue((self.output/(first['key']+'.json')).exists())
 
+    def test_character_ocr_retains_both_formats_and_reuses_cached_three_artifacts(self):
+        page=self.pdf()
+        task={'id':'character-ocr','page':asdict(page),'extractor':'ocr',
+              'settings':{'dpi':150,'languages':'eng','psm':6,'character_boxes':True}}
+        first=extract_one(self.roots,'artifacts',task)
+        self.assertEqual(first['state'],'complete')
+        row=json.loads((self.output/(first['key']+'.json')).read_text())
+        self.assertEqual(len(row['result']['artifacts']),3)
+        self.assertEqual(''.join(w['text'] for w in row['words']),
+                         ''.join(w['text'] for w in row['feature']['character_reading']['words']))
+        with patch('archive_research.extractors.ocr.extract_characters',side_effect=AssertionError('must reuse')):
+            second=extract_one(self.roots,'artifacts',task)
+        self.assertTrue(second['reused'])
+
     def test_shared_render_survives_extractor_change_without_decoding_source(self):
         page=self.pdf()
         first=extract_one(self.roots,'artifacts',{'page':asdict(page),'extractor':'pdf-text','settings':{'dpi':100}})
@@ -240,6 +254,23 @@ class PositionedTests(unittest.TestCase):
         self.assertTrue(extract_one(self.roots,'artifacts',task)['reused'])
         row=json.loads((self.output/(adaptive['key']+'.json')).read_text())
         self.assertIn('ALPHA',[w['text'] for w in row['words']])
+
+    def test_upscaled_ocr_recipe_and_source_coordinates(self):
+        page=self.pdf();task={'id':'upscale','page':asdict(page),'extractor':'ocr',
+                             'settings':{'languages':'eng','psm':6,'dpi':150}}
+        base=extract_one(self.roots,'artifacts',task)
+        task['settings']['image_preparation']='gray-up2-v1'
+        enlarged=extract_one(self.roots,'artifacts',task)
+        self.assertEqual(enlarged['state'],'complete',enlarged)
+        self.assertNotEqual(base['key'],enlarged['key'])
+        a=json.loads((self.output/(base['key']+'.json')).read_text())
+        b=json.loads((self.output/(enlarged['key']+'.json')).read_text())
+        self.assertEqual(b['result']['transform']['width'],2*a['result']['transform']['width'])
+        for key in ['x','y','width','height']:
+            before=next(w['region'][key] for w in a['words'] if w['text']=='ALPHA')
+            after=next(w['region'][key] for w in b['words'] if w['text']=='ALPHA')
+            self.assertAlmostEqual(before,after,delta=.01)
+        self.assertTrue(extract_one(self.roots,'artifacts',task)['reused'])
 
     def test_crop_transform_roundtrips_for_each_rotation(self):
         from PIL import Image

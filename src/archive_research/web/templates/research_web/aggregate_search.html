@@ -1,22 +1,26 @@
 {% extends 'research_web/base.html' %}{% block title %}Archive research search{% endblock %}{% block content %}
 <h1>Search archive evidence</h1>
 <p>Find catalogue descriptions, source passages and reviewed research findings.</p>
+{% if projection.coverage.catalogue_records %}<p>{{ projection.coverage.catalogue_records }} descriptive records from {{ projection.coverage.selected_catalogues }} selected catalogues. Existing descriptions are evidence to check, not confirmed research findings.</p>{% endif %}
 <form method="get"><label for="query">Name, identifier or research question</label>
 <input id="query" name="q" value="{{ query }}" maxlength="200">
-<label><input type="checkbox" name="fuzzy" value="1" {% if fuzzy %}checked{% endif %}> Include spelling alternatives</label>
+<label><input type="checkbox" name="fuzzy" value="1" {% if fuzzy %}checked{% endif %}> Include OCR and spelling alternatives</label>
 <button>Search</button></form>
 <p class="muted">Prepared {{ projection.refreshed_at }}. Availability was checked then; opening evidence checks it again.</p>
 <p>{{ projection.coverage.indexed_receipts }} extraction results · {{ projection.coverage.available_receipts }} with sources available at refresh · {{ projection.coverage.failed_inputs }} inputs could not be indexed · {{ projection.coverage.unmapped_entries }} entries awaiting canonical identity mapping.</p>
-<p>This selection does not cover the whole archive. New extraction or corrections require an explicit search refresh.</p>
+<p>This selection does not cover the whole archive. New source material needs an explicit refresh. Saved review findings update automatically; rejected findings are omitted while their source records remain searchable.</p>
+{% if projection.findings_refreshed_at %}<p class="muted">Review findings updated {{ projection.findings_refreshed_at }}.</p>{% endif %}
 {% if results %}<p>{{ results.total_matches }} matches</p>
 {% for hit in results.hits %}<article class="card">
 <span class="badge">{{ hit.kind }}</span> <span class="badge">{{ hit.availability }}</span>{% if hit.review %} <span class="badge">{{ hit.review }}</span>{% endif %}
-<h2>{% if hit.object_uid %}{{ hit.object_uid }}{% else %}Identity unresolved{% endif %}</h2>
-<p>{{ hit.snippet }}</p><p class="muted">{{ hit.match_reasons|join:", " }} · {{ hit.matched_fields|join:", " }}</p>
+<h2>{% if hit.title %}{{ hit.title }}{% elif hit.inventory %}{{ hit.inventory }}{% elif hit.object_uid %}{{ hit.object_uid }}{% else %}Source passage or finding{% endif %}</h2>
+{% if hit.kind == 'catalogue' %}<p>{{ hit.evidence.catalogue_label }}{% if hit.inventory %} · {{ hit.inventory }}{% endif %}{% if hit.catalogue_fields.date_text %} · {{ hit.catalogue_fields.date_text }}{% endif %}{% if hit.catalogue_fields.creator %} · {{ hit.catalogue_fields.creator }}{% endif %}</p>{% endif %}
+<p>{% for part in hit.snippet_parts %}{% if part.matched %}<mark>{{ part.text }}</mark>{% else %}{{ part.text }}{% endif %}{% endfor %}</p><p class="muted">{{ hit.match_reasons|join:", " }} · {{ hit.matched_fields|join:", " }}</p>
+{% if hit.missing_terms %}<p>Missing query terms: {{ hit.missing_terms|join:", " }}.</p>{% endif %}
 {% if hit.kind == 'extraction' %}<p><a href="{% url 'extraction_citation' hit.target %}?revision={{ revision }}">Inspect source evidence</a></p>
 {% elif hit.kind == 'finding' %}<p>{{ hit.evidence.reviewer }} · revision {{ hit.evidence.revision }} · research finding, not catalogue adoption.</p>
-<p><a href="{% url 'case' hit.evidence.case_key %}">Inspect finding and citations</a></p>
-{% else %}<details><summary>Catalogue attribution</summary><p>{{ hit.evidence.catalogue.unit }} · {{ hit.evidence.catalogue.path }} · row {{ hit.evidence.row_number }}</p></details>{% endif %}
+<p><a href="{% url 'case' hit.evidence.case_key %}?assertion={{ hit.evidence.key }}">Inspect finding and citations</a></p>
+{% else %}<details><summary>Existing catalogue description</summary><p>{{ hit.catalogue_fields.description|linebreaksbr }}</p>{% if hit.catalogue_fields.places %}<p>Places: {{ hit.catalogue_fields.places }}</p>{% endif %}{% if hit.catalogue_fields.tags %}<p>Subjects: {{ hit.catalogue_fields.tags }}</p>{% endif %}{% if hit.catalogue_fields.inscription %}<p>Recorded inscription: {{ hit.catalogue_fields.inscription }}</p>{% endif %}<p class="muted">{{ hit.evidence.catalogue_label }} · {{ hit.inventory }} · existing catalogue record</p></details>{% endif %}
 </article>{% empty %}<p>No match in this selection. Unsearched or unavailable material may contain relevant evidence.</p>{% endfor %}
 {% if results.next_offset != None %}<a href="?q={{ query|urlencode }}&amp;offset={{ results.next_offset }}{% if fuzzy %}&amp;fuzzy=1{% endif %}">Next results</a>{% endif %}
 {% endif %}

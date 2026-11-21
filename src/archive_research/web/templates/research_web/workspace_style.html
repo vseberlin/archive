@@ -9,4 +9,24 @@
 @media(max-width:1100px){.workspace-shell{grid-template-columns:minmax(0,1fr) 300px}.workspace-queue{display:none}.review-workspace .queue-toggle{display:block}.queue-open .workspace-queue{display:flex;grid-column:1/-1;max-height:240px;border-bottom:1px solid var(--line)}.queue-open .workspace-shell{height:auto}.queue-open .workspace-stage,.queue-open .workspace-decision{height:680px}}
 @media(max-width:760px){.workbench-page>main{padding:8px}.workspace-heading{padding:10px}.workspace-shell{display:flex;flex-direction:column;height:auto;min-height:0}.workspace-stage{height:660px}.workspace-decision{border-left:0;border-top:1px solid var(--line)}.decision-scroll{overflow:visible}.decision-actions{position:sticky;bottom:0;z-index:3}.decision-buttons{grid-template-columns:1fr 1fr 1.4fr}.decision-buttons button:last-child{grid-column:auto}.case-navigation{gap:8px}.workspace-heading h1{font-size:16px}.queue-open .workspace-decision{height:auto}.workspace-focus .workspace-stage{height:calc(100dvh - 160px);min-height:540px}.review-workspace .workspace-viewers{gap:7px}.viewer-controls label{display:none}}
 @media(pointer:coarse){.review-workspace button{min-height:44px}.review-workspace input,.review-workspace textarea,.review-workspace select{font-size:16px}}
+
+/* Shared image row gives both preview windows exactly the same height. */
+.paired-viewers{grid-template-rows:16px 36px minmax(0,1fr) auto;row-gap:5px}
+.paired-viewers .workspace-pane,.paired-viewers .viewer-panel:not([hidden]){display:contents}
+.paired-viewers .workspace-pane>*,.paired-viewers .workspace-pane .viewer-panel>*{grid-column:1}
+.paired-viewers .evidence-pane>*,.paired-viewers .evidence-pane .viewer-panel>*{grid-column:2}
+.paired-viewers .workspace-pane>label,.paired-viewers .workspace-pane>.field-label{grid-row:1;font-size:11px;text-transform:uppercase;color:var(--muted)}
+.paired-viewers .workspace-pane>select,.paired-viewers .fixed-source-label{grid-row:2;height:36px;margin:0!important}
+.fixed-source-label{font-size:12px;font-weight:600;padding:8px;background:#e4efeb;border:1px solid var(--line);border-radius:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.paired-viewers .viewer-scroll{grid-row:3}.paired-viewers .viewer-caption{grid-row:4}
+.paired-viewers .source-inspection{grid-row:5;display:flex;gap:6px}.focused-question{flex-shrink:0}
+.catalogue-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.catalogue-columns>[data-catalogue-side=anchor]{grid-column:1}.catalogue-columns>[data-catalogue-side=evidence]{grid-column:2}.catalogue-columns h3{font-size:13px}.catalogue-columns dd{margin:0;overflow-wrap:anywhere}.catalogue-summary{font-size:11px;margin:4px 0!important}
+.paired-viewers.single .evidence-pane{display:none}
+.comparison-decision-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;flex-shrink:0}.comparison-decision-row>div{grid-column:2;min-width:0}
+.inline-pair-buttons{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:5px;overflow:hidden;max-width:100%}
+.review-workspace .inline-pair-buttons button{min-height:28px;padding:3px 9px;font-size:12px;border:0;border-radius:0;white-space:nowrap}
+.review-workspace .inline-pair-buttons button+button{border-left:1px solid var(--line)}
+#panel-comparison-note textarea{min-height:65px;margin:4px 0}#panel-comparison-note label{font-size:12px}
+@media(pointer:coarse){.review-workspace .inline-pair-buttons button{min-height:44px}}
+.reading-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.reading-columns.single{grid-template-columns:1fr}.reading-columns>section{min-width:0;grid-row:1}.reading-columns>[data-reading-side=anchor]{grid-column:1}.reading-columns>[data-reading-side=evidence]{grid-column:2}.reading-block{padding:8px 0;border-bottom:1px solid var(--line)}.reading-block .ocr-text{white-space:pre-wrap;overflow-wrap:anywhere}.reading-block.selected{background:#fff0ce}.workspace-figure .text-region{position:absolute;box-sizing:border-box;border:3px solid #cc7200;background:#ffd66b33;pointer-events:none}
 </style>

@@ -34,6 +34,8 @@ def selected_members(roots, root_name, unit, record_key, *, identity_namespace):
     name = Path(unit).name
     manifests = {
         'trafo': 'db-restore/manifests/representations.csv',
+        'wf-sender': 'db-restore/manifests/representations.csv',
+        'brigadebuecher': '00_MANIFESTS/representation-members.csv',
         'bibliothek': '00_MANIFESTS/master-files.csv',
         'FEB_ Forschungs-und-Entwicklungsberichte_aus_dem_WF': '00_MANIFESTS/master-files.csv',
     }

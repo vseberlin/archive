@@ -31,13 +31,21 @@ def validate_inputs(roots, work, task, recipe):
     settings=recipe.record()['parameters']['settings']; model_path(roots,settings)
     origin=settings['region_origin']
     if origin is not None:
-        require(set(origin) in ({'key','figure','receipt_sha256'}, {'key','figure','receipt_sha256','evidence_sha256'}),'Invalid region origin')
+        require(set(origin) in ({'key','figure','receipt_sha256'}, {'key','figure','receipt_sha256','evidence_sha256'},
+                               {'key','block','receipt_sha256'}, {'key','block','receipt_sha256','evidence_sha256'}),'Invalid region origin')
         try:
             row,result,digest=read_origin(roots,work,origin,page_from_record(task['page']))
         except ValueError as error:
             raise ValueError('Layout origin: ' + str(error)) from error
-        require(result.recipe.extractor in ('pdf-layout','scan-layout') and digest==origin['receipt_sha256'],'Layout origin changed or belongs to another page')
-        figures=row['feature']['figures'];index=origin['figure']
+        require(result.recipe.extractor in ('pdf-layout','scan-layout','document-layout') and digest==origin['receipt_sha256'],'Layout origin changed or belongs to another page')
+        if result.recipe.extractor=='document-layout':
+            require('block' in origin,'Document figure needs its block origin')
+            figures=row['feature']['blocks'];index=origin['block']
+            require(type(index) is int and 0<=index<len(figures) and figures[index]['label']=='figure',
+                    'Document block is not a figure')
+        else:
+            require('figure' in origin,'Layout figure needs its figure origin')
+            figures=row['feature']['figures'];index=origin['figure']
         require(type(index) is int and 0<=index<len(figures),'Unknown layout figure')
         require(task.get('region') and Region(**task['region'])==Region(**figures[index]['region']),
                 'Visual crop differs from layout figure')

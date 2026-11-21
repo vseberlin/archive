@@ -28,6 +28,13 @@ class PhysicalObjectForm(forms.Form):
         return value.isoformat() if value else ''
 
 
+class ComparisonDecisionForm(forms.Form):
+    revision = forms.CharField(widget=forms.HiddenInput, max_length=64)
+    review = forms.ChoiceField(choices=[(s, s.title()) for s in REVIEW_STATES])
+    reason = forms.CharField(required=False, max_length=TEXT_LIMITS['reason'],
+                             widget=forms.Textarea(attrs={'rows': 2}), label='Note (optional)')
+
+
 class ReviewForm(forms.Form):
     revision = forms.CharField(widget=forms.HiddenInput, max_length=64)
     value = forms.CharField(label='Assertion', max_length=TEXT_LIMITS['value'],
@@ -43,3 +50,34 @@ class ReviewForm(forms.Form):
     def __init__(self, *args, views, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['citation_keys'].choices = [(v['key'], v['label']) for v in views]
+
+
+class PersonAttributionForm(forms.Form):
+    revision = forms.CharField(widget=forms.HiddenInput, max_length=64)
+    attribution_key = forms.CharField(widget=forms.HiddenInput, max_length=100, required=False)
+    target_view_key = forms.ChoiceField(widget=forms.HiddenInput)
+    position = forms.CharField(label='Person’s position in the displayed photograph', max_length=200,
+                              help_text='For example: second from the left in the front row. Use the displayed orientation.')
+    candidate_key = forms.ChoiceField(label='Your proposed name', required=False)
+    reason = forms.CharField(label='Why you make this attribution', max_length=3000,
+                             widget=forms.Textarea(attrs={'rows': 3}),
+                             help_text='Record your own evidence and reasoning separately from the documentary candidate suggestion.')
+    uncertainty = forms.CharField(label='Uncertainty or conflicting evidence', max_length=1000,
+                                  widget=forms.Textarea(attrs={'rows': 2}))
+    citation_keys = forms.MultipleChoiceField(label='Additional supporting sources', widget=forms.CheckboxSelectMultiple)
+    review = forms.ChoiceField(label='Attribution outcome', choices=[('', 'Choose an outcome'),
+                              ('accepted', 'Attribute this person'), ('rejected', 'Reject this attribution'),
+                              ('unresolved', 'Leave unresolved')])
+
+    def __init__(self, *args, case, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['target_view_key'].choices = [(v['key'], v['label']) for v in case['views']]
+        self.fields['citation_keys'].choices = self.fields['target_view_key'].choices
+        self.fields['candidate_key'].choices = [('', 'Unnamed / unresolved')] + [
+            (p['key'], p['name']) for p in sorted(case.get('documentary_people', []), key=lambda p: p['name'])]
+
+    def clean(self):
+        data = super().clean()
+        if data.get('review') in ('accepted', 'rejected') and not data.get('candidate_key'):
+            self.add_error('candidate_key', 'Select a documented candidate, or leave the person unresolved.')
+        return data

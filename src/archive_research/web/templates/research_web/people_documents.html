@@ -1,0 +1,25 @@
+{% extends 'research_web/base.html' %}
+{% block title %}Event and documented names · {{ case.title }}{% endblock %}
+{% block extra_head %}{% include 'research_web/people_style.html' %}{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{% url 'case' case.key %}">{{ case.key }} · Research findings</a></p>
+<h1>One event, different records</h1>
+<p><strong>{{ overview.event }}</strong> · {{ overview.date }}</p>
+<nav class="pr-modes" aria-label="Review task"><a href="{% url 'people' case.key %}?mode=documents" aria-current="page">Event &amp; documented names</a><a href="{% url 'people' case.key %}?mode=people">Assign a person in a photo · optional</a></nav>
+<p>Keep the people named in the documents even when you cannot say who is where. Review a name and role below; assigning a position in a photograph is a separate, optional task.</p>
+<section class="pr-event-photos" aria-label="Distinct photographs of the event">
+{% for photo in photographs %}<article class="card"><h2>{{ photo.view.label }}</h2><p class="pr-count">{{ photo.people_count }} people in this photograph</p>
+{% if photo.view.available %}<a href="{% url 'citation' case.key photo.view.key %}?revision={{ revision }}" target="_blank" rel="noopener"><img src="{% url 'media' case.key photo.view.key %}?revision={{ revision }}" alt="{{ photo.view.alt }}"></a>{% else %}<p class="notice">Source unavailable: {{ photo.view.error }}</p>{% endif %}
+<p class="muted">{{ photo.count_source }}</p><a href="{% url 'people' case.key %}?mode=people&amp;target={{ photo.view.key }}">Assign a name here, if known →</a></article>{% endfor %}
+</section>
+<p class="pr-gap">Same documented event and setting; different exposures and visible groups. The counts belong to each photograph. They do not give the total number of attendees, or identify which named people appear in both.</p>
+<section id="documented-names"><h2>People named in the documents</h2><p>The columns show the wording in each selected passage. A missing name here does not mean the person was absent. Confirmation below concerns the name and event role, not a face.</p>
+<div class="pr-mentions-scroll"><table class="pr-mentions"><thead><tr><th scope="col">Name and event role</th>{% for document in documents %}<th scope="col"><a href="{% url 'citation' case.key document.view.key %}?revision={{ revision }}" target="_blank" rel="noopener">{{ document.label }} ↗</a></th>{% endfor %}<th scope="col">Documentary finding</th></tr></thead><tbody>
+{% for mention in mentions %}<tr><th scope="row">{{ mention.person.name }}<small>{{ mention.person.context.attendance }}</small><a class="pr-small-link" href="{% url 'page_search' %}?q={{ mention.person.name|urlencode }}">Search this name</a></th>
+{% for source in mention.sources %}<td>{% if source %}<strong>{{ source.wording }}</strong>{% if source.qualification %}<p class="muted">{{ source.qualification }}</p>{% endif %}{% else %}<span class="muted">Not named in this selected passage</span>{% endif %}</td>{% endfor %}
+<td><span class="badge {{ mention.record.review }}">{{ mention.record.review|title }}</span>
+<details><summary>Finding, sources &amp; history</summary><p>{{ mention.record.value }}</p><p>{{ mention.record.uncertainty }}</p><a href="{% url 'case' case.key %}?assertion={{ mention.record.key }}">Inspect or correct the finding</a></details>
+{% if not case.read_only %}<form method="post" action="{% url 'review' case.key mention.record.key %}" class="pr-mention-review">{% csrf_token %}<input type="hidden" name="revision" value="{{ revision }}"><input type="hidden" name="documentary_workspace" value="1"><input type="hidden" name="value" value="{{ mention.record.value }}"><input type="hidden" name="scope" value="{{ mention.record.scope }}"><input type="hidden" name="uncertainty" value="{{ mention.record.uncertainty }}"><input type="hidden" name="reason" value="">{% for key in mention.record.citation_keys %}<input type="hidden" name="citation_keys" value="{{ key }}">{% endfor %}<button name="review" value="accepted">Confirm name / role</button><button name="review" value="unresolved" class="quiet">Unresolved</button></form>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div></section>
+<section class="pr-event-documents" aria-label="Document evidence and reading quality">{% for document in documents %}<article class="card"><h2>{{ document.label }}</h2><p>{{ document.note }}</p>{% if document.additional_mentions %}<p><strong>Other source mentions:</strong> {{ document.additional_mentions }}</p>{% endif %}<details><summary>Inspect the selected passage</summary>{% if document.view.available %}<a href="{% url 'citation' case.key document.view.key %}?revision={{ revision }}" target="_blank" rel="noopener"><img loading="lazy" src="{% url 'media' case.key document.view.key %}?revision={{ revision }}" alt="{{ document.view.alt }}"></a>{% else %}<p class="notice">Source unavailable: {{ document.view.error }}</p>{% endif %}<p class="pr-transcription">{{ document.view.observation }}</p></details></article>{% endfor %}</section>
+{% endblock %}

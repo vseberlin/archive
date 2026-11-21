@@ -25,13 +25,25 @@ def read_current(roots, work, key, _parents=(), *, verify_source=True):
     if verify_source:
         roots.source(result.page.source)
     settings=result.recipe.record()['parameters'].get('settings',{})
+    if result.recipe.extractor=='spelling':
+        _,parent,_=read_origin(roots,work,settings['ocr_origin'],result.page,(*_parents,key),verify_source=verify_source)
+        require(parent.recipe.extractor in ('ocr','document-text') and parent.region==result.region,'Spelling parent binding differs')
     origin=(settings.get('ocr_origin') if result.recipe.extractor=='scan-layout' else
             settings.get('region_origin') if result.recipe.extractor=='visual' else
-            settings.get('caption_origin') if result.recipe.extractor=='ocr' else None)
+            (settings.get('caption_origin') or settings.get('layout_origin')) if result.recipe.extractor=='ocr' else None)
     if origin is not None:
         _,parent,parent_digest=read_origin(roots,work,origin,result.page,(*_parents,key), verify_source=verify_source)
         require(parent_digest==origin['receipt_sha256'] and content_page(parent.page)==content_page(result.page),
                 'Parent extraction receipt changed')
+    if result.recipe.extractor=='document-text':
+        for parent_origin in [settings['layout_origin'], *settings['ocr_origins'],
+                              *([settings['order_origin']] if 'order_origin' in settings else [])]:
+            read_origin(roots,work,parent_origin,result.page,(*_parents,key),verify_source=verify_source)
+    if result.recipe.extractor=='document-layout' and settings.get('refinement'):
+        for parent_origin in (settings['layout_origin'],settings['ocr_origin']):
+            read_origin(roots,work,parent_origin,result.page,(*_parents,key),verify_source=verify_source)
+    if result.recipe.extractor=='handwriting':
+        read_origin(roots,work,settings['layout_origin'],result.page,(*_parents,key),verify_source=verify_source)
     return row,result,digest
 
 

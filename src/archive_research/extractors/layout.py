@@ -157,7 +157,16 @@ def visual_tasks(roots, work, key, model):
     from ..receipts import read_current
     from ..result_records import origin as dependency_origin
     row,result,digest=read_current(roots,work,key)
-    require(result.recipe.extractor in ('pdf-layout','scan-layout'),'Expected a layout receipt')
+    require(result.recipe.extractor in ('pdf-layout','scan-layout','document-layout'),'Expected a layout receipt')
+    if result.recipe.extractor=='document-layout':
+        from .document_layout import block_origins,visual_selection
+        origins=block_origins(roots,work,key,row,result,digest)
+        figures,_=visual_selection(row['feature']['blocks'])
+        return [{'id':key+f'-figure-{b["index"]}','extractor':'visual','page':asdict(result.page),
+                 'region':b['region'],'settings':{'model':model,
+                 'clockwise':result.recipe.record()['parameters']['settings'].get('clockwise',0),
+                 'region_origin':{**origins[b['index']],'block':b['index']}}}
+                for b in row['feature']['blocks'] if b['index'] in figures]
     return [{'id':key+f'-figure-{i}','extractor':'visual','page':asdict(result.page),
              'region':figure['region'],'settings':{'model':model,'region_origin':{
                  **dependency_origin(roots,work,key,digest),'figure':i}}}

@@ -96,7 +96,7 @@ def lookup(key, revision):
     return roots, row, current
 
 
-def search_projection():
+def search_projection(*, allow_stale_reviews=False):
     from archive_research import Roots
     from archive_research.storage import target
     from archive_research.search_projection import validate
@@ -104,7 +104,16 @@ def search_projection():
     work_root(config.parent)
     roots = Roots.from_toml(config)
     path = target(roots.root('artifacts', 'work'), settings.PROJECT['research_index'])
-    return roots, validate(json.loads(path.read_text()))
+    value = validate(json.loads(path.read_text()))
+    if not allow_stale_reviews:
+        history = settings.PILOT_ROOT / 'records/assertions.jsonl'
+        for spec in value['selection'].get('findings', []):
+            if roots.root(spec['root'], 'read') / spec['path'] == history:
+                if hashlib.sha256(history.read_bytes()).hexdigest() != spec['sha256']:
+                    from .records import StaleProjection, snapshot as record_snapshot
+                    raise StaleProjection(record_snapshot()[3],
+                        'Saved reviews are ahead of search. Rebuild browsing to refresh findings; do not repeat a decision.')
+    return roots, value
 
 
 def search(query):

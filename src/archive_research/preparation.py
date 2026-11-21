@@ -39,6 +39,20 @@ def inspect_page(roots, source, member, kind, index, logical_page=None, printed_
     return page
 
 
+def crop_prepared(image, transform, page, region):
+    """Crop an already normalized image without changing the rendering contract."""
+    import math
+    shown = processed_region(region, transform, page)
+    left, top = math.floor(shown.x * image.width + 1e-9), math.floor(shown.y * image.height + 1e-9)
+    right = min(image.width, math.ceil((shown.x + shown.width) * image.width - 1e-9))
+    bottom = min(image.height, math.ceil((shown.y + shown.height) * image.height - 1e-9))
+    cropped = image.crop((left, top, right, bottom))
+    a, b, c, d, e, f = transform.to_source
+    mapped = Transform(*cropped.size, (a, b, c + a*left + b*top, d, e, f + d*left + e*top),
+                       transform.steps + ('explicit source-region crop; outward pixel rounding',))
+    return cropped,mapped
+
+
 def render(roots, page, directory, *, dpi=300, clockwise=0, region=None):
     from PIL import Image
     require(type(dpi) is int and 72 <= dpi <= 600, 'DPI outside bounded trial range')
@@ -72,19 +86,9 @@ def render(roots, page, directory, *, dpi=300, clockwise=0, region=None):
         transform = Transform(transform.width, transform.height, transform.to_source,
                               transform.steps + (tonal_step,))
         if region is not None:
-            import math
-            shown = processed_region(region, transform, page)
-            # Avoid adding a pixel for floating-point noise at an integer edge.
-            left, top = math.floor(shown.x * image.width + 1e-9), math.floor(shown.y * image.height + 1e-9)
-            right = min(image.width, math.ceil((shown.x + shown.width) * image.width - 1e-9))
-            bottom = min(image.height, math.ceil((shown.y + shown.height) * image.height - 1e-9))
-            cropped = image.crop((left, top, right, bottom))
+            cropped, transform = crop_prepared(image,transform,page,region)
             image.close()
             image = cropped
-            a, b, c, d, e, f = transform.to_source
-            transform = Transform(*image.size, (a, b, c + a*left + b*top,
-                                                d, e, f + d*left + e*top),
-                                  transform.steps + ('explicit source-region crop; outward pixel rounding',))
         target = directory / 'processed.png'
         image.save(target)
     finally:

@@ -51,8 +51,18 @@ def prepared_view(roots, page, directory, root, *, dpi, clockwise, region=None):
             storage.write_json(root, receipt.name, {**value, 'verified_source':source})
         return image, Transform(**transform), value['rotation']
     roots.source(page.source, verify_hash=bool(page.source.sha256))
-    rendered, transform, rotation = render(roots, page, directory, dpi=dpi,
-                                           clockwise=clockwise, region=region)
+    if region is not None:
+        from PIL import Image
+        from .preparation import crop_prepared
+        full,transform,rotation=prepared_view(roots,page,directory,root,dpi=dpi,clockwise=clockwise)
+        with Image.open(full) as original:
+            cropped,transform=crop_prepared(original,transform,page,region)
+            rendered=directory/'processed-crop.png'
+            try:cropped.save(rendered)
+            finally:cropped.close()
+    else:
+        rendered, transform, rotation = render(roots, page, directory, dpi=dpi,
+                                               clockwise=clockwise, region=region)
     data = rendered.read_bytes()
     roots.source(page.source)
     storage.write(root, image.name, data)

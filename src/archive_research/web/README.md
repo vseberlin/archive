@@ -1,9 +1,11 @@
 # Local WF research pilot
 
-The approved pilot provides local login and 16 real photograph, report and
-relationship review cases, including the published book and patent material.
+The approved pilot provides local login and the original 16 real photograph,
+report and relationship review cases, plus three connected research baseline jobs.
+These include published book and patent material, publication photographs,
+caption-based names, Brigadebuch events and cross-unit photographic evidence.
 The homepage shows real cases; the synthetic demonstration has a separate link.
-There are 52 source views: 51 prepared images and one explicitly unreadable TIFF.
+There are 69 source views: 68 prepared images and one explicitly unreadable TIFF.
 Bounded assertion review/correction, readable history and recovery share the
 existing authority files. Citation links open a region viewer and bound source.
 Generic research administration remains read-only.
@@ -41,9 +43,67 @@ development process; there is no service or startup automation.
 
 ## Unified review workspace
 
+The text panel follows both displayed pages, with fixed Source and Compare with
+columns. Explicitly selected OCR blocks retain their source coordinates in the
+shared search projection. “Show passage on page” highlights that region on the
+corresponding full-page preview; cropped previews do not reuse full-page boxes.
+Separately prepared and crop-specific cached readings retain priority. A full-page
+cache copied from an indexed extraction follows the currently selected reading
+for that exact source page, including its blocks, when the page is reused in a
+different case. An older cache must not mask a later selected assembly.
+Unreviewed text and possible omissions
+are labelled in plain language; extractor settings remain outside the workbench.
+A refreshed projection is required to make new extraction results visible.
+
+Explicitly prepared profile examples use the same source-bound cases and review
+history. Their per-view cached readings can retain bounded table rows, raw header
+text and unassigned words. The shared text panel renders escaped cells, labels
+unrecovered words and warns that text-line bands are not verified logical rows.
+It does not infer header spans, repair numbers or accept findings. Source/preview
+binding changes withhold the cached reading; no processing runs during requests.
+
+
+The Existing catalogue panel follows the two displayed sources. It shows their
+prepared titles, dates, creators, descriptions, subjects, recorded relationships
+and inscriptions where available, with catalogue attribution. Links use the
+catalogue's exact representation path and named root. Descriptions remain
+available without OCR or an online source; missing links and differing accounts
+are explicit. This context uses the shared research index and does not adopt or
+rewrite a finding. Technical provenance remains in the prepared index and logs.
+
+**Presentation rule, agreed 20 November: one question, one fixed comparison,
+one answer.** The workbench is for answering research questions. It presents
+relevant evidence, proposed findings, contradictions, uncertainty and review
+decisions. Detail, full-page and zoom controls inspect the assigned evidence;
+they do not change the question or introduce unrelated sources.
+
+Source and Compare with are fixed by the question. A dropdown is permitted only
+when that question requires several report pages, and then selects only the
+relevant pages of the assigned report. It cannot select another object, report or
+comparison candidate. Give each candidate comparison its own named question.
+Questions must ask for an archival answer; page counts and "images inspected"
+are evidence limits or activities, not questions or answers. Show relevant gaps
+once and make clear which proposed answer Confirm will save.
+
+Processing details belong in existing technical logs and run receipts, not in
+the workbench, including collapsed panels. Keep engine/model details, settings,
+retries, timings, raw scores and processing failures out of the research view.
+Show their research consequence only when relevant: "Transcription available;
+uncertain passages need review" or "No transcription available", rather than
+"Tesseract returned no words". Preserve source attribution, review history,
+alternative readings and evidence limitations; do not imply a draft is verified.
+The [canonical presentation contract](../../../docs/architecture/archive-django-consolidation-plan.md#production-research-view-and-experimental-inspection)
+and [R/D decisions and acceptance checklist](../../../docs/architecture/archive-django-consolidation-plan.md#agreed-r-and-d-workbench-specification--20-november)
+own the requirements and case-specific implementation status. Record future
+workbench decisions there. R02's fixed bindings and shared metadata context are
+delivered; R01/R03 candidate navigation, D-case restructuring and remaining
+technical UI wording still need implementation. Documentation does not mark them
+complete.
+
 The case URL keeps a filtered case list, two evidence panes, page text and the
 finding form on one screen. The anchor and comparison selectors use only the
-case's existing bound views. Image/Compare and Enlarge workspace change the
+case's existing bound views in the legacy layout; their presence does not satisfy
+the fixed-question contract. Replace them as specified above. Image/Compare and Enlarge workspace change the
 presentation without changing the draft. Zoom fits each prepared image before
 magnifying it; the original PDF/image remains available through its source link.
 Text/OCR, recorded context, source details and history share an inline drawer.
@@ -63,6 +123,100 @@ automatic metadata adoption or the full document-preparation gate. Full-page OCR
 coverage and quality qualification remain preparation responsibilities. The
 workspace reports missing text and does not label these views ready for review.
 The standalone review and citation URLs remain available for existing links.
+
+### Questions with fixed evidence
+
+A case may bind existing findings to `finding_views` in its existing evidence
+record. Each binding contains `question`, `source_view`, `evidence_view`,
+`source_context` and `evidence_context`. Both displayed sources are fixed for
+that question; selecting another question changes the finding and its evidence
+together. Each context list permits one existing full-page view of that same
+source page, exposed as Detail / Full page buttons. Anchors must refer to pages
+already cited by the finding. Unrelated sources and unknown findings are refused.
+These are presentation bindings, not reproduction decisions or new findings.
+Existing review forms, citation choices, stale-draft protection and history apply.
+
+## Documentary people and manual attributions
+
+Cases with explicitly prepared `documentary_people` expose a People link. The
+candidate list filters names and documented event/date/department/attendance or
+catalogue context; it does not read image features or rank people by appearance.
+Each candidate needs a documentary rationale, source-view citations and uncertainty.
+Documented portraits need their own attribution text and supporting citations.
+Missing portraits are shown explicitly. This is a bounded case selection, not a
+global person index or an assertion that all attendees appear in a photograph.
+
+Cases with `documentary_overview` open an event/document view first. It shows
+distinct photographs with attributed human count observations and a source-by-source
+name table. Full names, surname-only references and absence from a selected passage
+remain distinct. Each row links an existing `names_event_participant` finding;
+confirmation uses the existing review endpoint without requiring a photo position.
+The finding must cite every displayed name source. Document quality notes and other
+uncertain readings remain visible. Counts are not attendance totals or identity links.
+
+For optional photo attribution, the reviewer chooses a displayed photograph, describes a person's position, selects
+a candidate (or leaves the name unresolved), supplies reasoning/uncertainty and
+selects supporting sources. The operation appends a `person_attribution` assertion
+to the existing JSONL history under the existing record lock. It retains the
+candidate's documentary rationale, portrait context, exact view descriptions and
+bindings separately from the reviewer's source choices and attribution reason.
+Reviewer/time, accepted/rejected/unresolved outcome and corrections use the existing
+history and projection. Earlier versions remain readable. Stale forms and changed
+sources are refused; a saved-but-unindexed result uses the existing rebuild flow.
+
+No name is assigned automatically. No facial embeddings, person similarity scores,
+biometric matching or additional database is introduced. These manual research
+attributions remain unadopted and real-material export remains disabled.
+
+The review page keeps the photograph beside a scrollable evidence/decision pane,
+with photo navigation, inline document/portrait/context panels, zoom, a manual
+position marker, history and Save & next. Draft text is retained per target in
+this browser tab's session storage, never as a saved review. Its original revision
+is retained too: restoring an older draft cannot silently bypass stale-form checks.
+If browser storage is unavailable, unsaved navigation warns instead. The prototype's
+invented detector boxes, hard-coded reviewer, external scripts and browser-only
+review history are not used.
+
+### Photograph matches and search feedback
+
+The shared case workspace renders explicit `reproduction_pairs` with one fixed
+source in the original two-pane layout. A candidate-only dropdown controls the
+right image and its per-pair Match / Not a match / Uncertain controls below. Switching
+candidates displays their saved state; saving retains the candidate and current
+context finding. The controls submit a bounded decision and optional note; the server generates the
+finding and citations from the configured views. No candidate decision changes
+another candidate or an event/context finding. This view requires no people data
+and has no case-ID branches. Notes retain their original revision in tab drafts.
+Both previews share one grid row so their window heights stay equal. Compact
+decision toggles sit outside the preview grid, below the candidate. Optional notes
+live in the shared Comparison note drawer tab and remain associated with their
+pair's form; saved history appears only in the existing History tab.
+
+A combined finding may reference its individual pairs through `component_assertions`.
+Its earlier wording/history remains readable, but only the individual pairs are
+active in search and review queues. The summary is derived from current pair
+decisions; no automatic aggregate approval or inferred transitive link is saved.
+Combined findings cannot be independently reviewed after decomposition.
+
+An explicit case `reproduction_pairs` mapping links each reproduction finding to
+its query/source view and candidate photograph. The Photograph matches tab uses
+the existing review operation; caption-name findings remain separately reviewable.
+Confirm/reject/unresolved save exact source stamps, physical page and normalized
+region for both sides. This is photograph-reproduction feedback, never a person
+blacklist. A change of page, region or source version is a different comparison.
+
+Reviewed matches sort ahead of new leads. Rejected pairs are hidden by default
+and remain available through Show rejected, history and corrections. The same
+feedback applies to the selected search projection's visual query in either
+direction, before pagination. Contradictory reviews remain visible. Raw similarity
+scores are unchanged; no retraining or new extraction occurs.
+
+Every save refreshes only the selected finding history and comparison feedback
+inside the existing search projection, preserving all prepared extraction and
+catalogue entries. Rejected findings leave text-finding results; original sources
+remain searchable. Failed refresh uses the existing saved-but-unindexed recovery:
+rebuild browsing to refresh findings without resubmitting a decision. Stale finding
+search is withheld. Source coverage timestamps stay distinct from finding updates.
 
 ## Prepared page search and image leads
 
@@ -210,9 +364,9 @@ storage confirmation failed, the UI also reports saved and requires rebuilding.
 
 Generic research admin add/change/delete remain disabled, including for the local
 superuser. Built-in account administration remains available to that user.
-All research records retain `metadata_adopted=false`. The bounded 16-case load is
-complete; arbitrary imports, new assertions/relations and production deployment
-remain outside the current scope. No real case received an automated review.
+All research records retain `metadata_adopted=false`. The original 16-case load is
+complete. Explicitly selected research-baseline additions use the preparation
+operation below; arbitrary imports and production deployment remain outside scope. No real case received an automated review.
 
 For the synthetic demonstration, **Download unadopted research JSON** exports evidence, full revision history and
 current assertions together. It explicitly omits source media, credentials and
@@ -224,6 +378,22 @@ mixed/real export and portable packaging are refused, keeping real material out
 of the synthetic bundle. No automatic exports or jobs run.
 
 ## Prepared local selection
+
+An explicitly requested research baseline can append 1–8 named cases through
+`web selection prepare-additions --plan PLAN`, then
+`web selection apply-additions`. Preparation records the current research revision;
+application refuses changed reviews, duplicate case keys and invalid citations
+before replacing either readable authority file. Existing case data and history
+are retained; all new findings start unreviewed. Each finding supplies its own
+relationship, evidence citations, rationale and uncertainty. This extends the
+existing preparation operation; it does not discover or import arbitrary corpora.
+
+Image views may select a normalized `region_xywh` with `preview_crop=true` and
+an explicit `preview_clockwise` rotation. The prepared crop retains its original
+source binding, full-source link and source coordinates. Text shown beside it is
+labelled page context; a crop does not establish caption association. Source
+orientation requiring a separate mapping is refused. Crops are research working
+views and never new archival derivatives or Master candidates.
 
 Every real case has an optional **Physical museum object** section. Its separate
 form records an existing inventory/object reference, catalogue URL, last recorded

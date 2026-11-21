@@ -19,7 +19,11 @@ from . import storage
 from . import result_records
 
 # Explicit adapters keep feature implementations out of the page runner.
-FEATURE_ADAPTERS = {'visual': 'extractors.visual_features', 'pdf-layout': 'extractors.layout', 'scan-layout': 'extractors.scan_layout', 'faces': 'extractors.faces'}
+FEATURE_ADAPTERS = {'visual': 'extractors.visual_features', 'pdf-layout': 'extractors.layout', 'scan-layout': 'extractors.scan_layout', 'faces': 'extractors.faces', 'document-layout': 'extractors.document_layout', 'document-text': 'extractors.document_text', 'scientific-region': 'extractors.scientific_region'}
+FEATURE_ADAPTERS['scientific-table']='extractors.scientific_table'
+FEATURE_ADAPTERS['ruled-table']='extractors.ruled_table'
+FEATURE_ADAPTERS['spelling']='extractors.spelling'
+FEATURE_ADAPTERS['handwriting']='extractors.handwriting'
 
 
 def page_from_record(value):
@@ -81,6 +85,19 @@ def retryable(value, recipe):
 
 
 def recipe_for(task):
+    from .profiles import resolve_ocr_task, ocr_profile
+    task = resolve_ocr_task(task)
+    recipe = _recipe_for(task)
+    if 'ocr_profile' in task:
+        profile = ocr_profile(task['ocr_profile']['name'])
+        recipe = Recipe.create(recipe.extractor, recipe.version, **recipe.record()['parameters'],
+                               ocr_profile={'name': profile['name'], 'version': profile['version'],
+                                            'accuracy_qualified': False, 'checks': profile['checks'],
+                                            'limits': profile['limits']})
+    return recipe
+
+
+def _recipe_for(task):
     extractor = task['extractor']
     if extractor in FEATURE_ADAPTERS:
         return importlib.import_module('.'+FEATURE_ADAPTERS[extractor], __package__).recipe_for(task)
@@ -100,6 +117,22 @@ def recipe_for(task):
     settings = {'dpi': 300, 'clockwise': 0, 'languages': 'deu+eng', 'psm': 3, 'timeout': 240,
                 **task.get('settings', {})}
     allowed = {'dpi', 'clockwise', 'languages', 'psm', 'timeout'}
+    if 'character_boxes' in settings:
+        require(extractor=='ocr' and settings['character_boxes'] is True,'Invalid character OCR selection')
+        allowed.add('character_boxes')
+    if 'image_preparation' in settings:
+        from .imaging import OCR_PREPARATIONS
+        require(extractor == 'ocr' and settings['image_preparation'] in OCR_PREPARATIONS,
+                'Unknown OCR image preparation')
+        require('normalization' not in settings, 'Select one OCR image preparation')
+        allowed.add('image_preparation')
+        if OCR_PREPARATIONS[settings['image_preparation']][2]:
+            dependencies.update({name:importlib.metadata.version(name) for name in ('numpy','opencv-python-headless')})
+    if 'normalization' in settings:
+        require(extractor == 'ocr' and settings['normalization'] == 'local-red-v1',
+                'Unknown OCR normalization')
+        allowed.add('normalization')
+        dependencies.update({name:importlib.metadata.version(name) for name in ('numpy','opencv-python-headless')})
     if 'thresholding_method' in settings:
         require(extractor == 'ocr' and type(settings['thresholding_method']) is int and
                 settings['thresholding_method'] in (0,1,2), 'Invalid OCR thresholding method')
@@ -107,11 +140,14 @@ def recipe_for(task):
     if 'caption_origin' in settings:
         require(extractor=='ocr' and task.get('region') is not None,'Caption OCR needs a region')
         allowed.add('caption_origin')
+    if 'layout_origin' in settings:
+        require(extractor=='ocr' and task.get('region') is not None, 'Layout OCR needs a region')
+        allowed.add('layout_origin')
     require(set(settings) == allowed, 'Unknown extractor setting')
     require(type(settings['timeout']) is int and 1 <= settings['timeout'] <= 600, 'Invalid bounded timeout')
     if extractor == 'ocr':
         dependencies['tessdata'] = tessdata_fingerprints(settings['languages'])
-    return Recipe.create(extractor, '2' if set(settings)&{'thresholding_method','caption_origin'} else '1', settings=settings, preparation=RENDER_POLICY, dependencies=dependencies,
+    return Recipe.create(extractor, '4' if extractor == 'ocr' else '1', settings=settings, preparation=RENDER_POLICY, dependencies=dependencies,
                          coverage={'member': task['page']['member'], 'kind': task['page']['kind'],
                                    'index': task['page']['index']}, output='bbox-xhtml' if extractor == 'pdf-text' else 'alto')
 
@@ -134,12 +170,18 @@ def cached(roots, work, key, page, recipe, region=None):
         file = roots.artifact(artifact)
         require(storage.stamp(file) == value['artifact_stamps'][artifact.path], 'Cached artifact changed')
         require(hashlib.sha256(file.read_bytes()).hexdigest() == artifact.sha256, 'Cached artifact content changed')
-    require(len(result.artifacts) >= 2 if recipe.extractor in ('text-regions', 'line-ocr', *FEATURE_ADAPTERS) else len(result.artifacts) == 2,
-            'Incomplete cached artifacts')
+    if recipe.extractor=='ocr' and recipe.record()['parameters']['settings'].get('character_boxes'):
+        require(len(result.artifacts)==3 and {a.kind for a in result.artifacts}==
+                {'processed-page','machine-ocr-alto','machine-ocr-character-hocr'},'Incomplete character OCR artifacts')
+    else:
+        require(len(result.artifacts) >= 2 if recipe.extractor in ('text-regions', 'line-ocr', *FEATURE_ADAPTERS) else len(result.artifacts) == 2,
+                'Incomplete cached artifacts')
     return value
 
 
 def extract_one(roots, work, task, *, encoders=None):
+    from .profiles import resolve_ocr_task
+    task = resolve_ocr_task(task)
     page = page_from_record(task['page'])
     region = Region(**task['region']) if task.get('region') is not None else None
     recipe = recipe_for(task)
@@ -149,12 +191,15 @@ def extract_one(roots, work, task, *, encoders=None):
     with storage.lock(root):
         try:
             roots.source(page.source)
-            if task['extractor'] in ('visual', 'scan-layout', 'faces'):
+            if task['extractor'] in FEATURE_ADAPTERS:
                 adapter = importlib.import_module('.'+FEATURE_ADAPTERS[task['extractor']], __package__)
                 adapter.validate_inputs(roots, work, task, recipe)
             if task['extractor']=='ocr' and 'caption_origin' in task.get('settings',{}):
                 from .extractors.caption_regions import validate_inputs
                 validate_inputs(roots,work,task,recipe)
+            if task['extractor']=='ocr' and 'layout_origin' in task.get('settings',{}):
+                from .extractors.document_layout import validate_ocr
+                validate_ocr(roots,work,task,recipe)
             if task['extractor'] == 'line-ocr':
                 from .extractors.line_ocr import model_paths
                 model_paths(roots, recipe.record()['parameters']['settings'])
@@ -201,6 +246,16 @@ def extract_one(roots, work, task, *, encoders=None):
             with tempfile.TemporaryDirectory(prefix='.page-', dir=root) as temporary:
                 image, transform, rotation = render(roots, page, Path(temporary), root, dpi=settings['dpi'],
                                                      clockwise=settings['clockwise'], region=region)
+                if settings.get('normalization') == 'local-red-v1':
+                    from .imaging import normalize_ocr_image
+                    image = storage.write(root, key+'.normalized.png', normalize_ocr_image(image, dpi=settings['dpi']))
+                    transform = replace(transform, steps=transform.steps+(
+                        'local-red-v1: red channel, Gaussian background sigma 30*dpi/300, gain 5, offset 230; geometry unchanged',))
+                if settings.get('image_preparation'):
+                    from .imaging import prepare_ocr_image
+                    data, transform = prepare_ocr_image(image, transform,
+                        method=settings['image_preparation'], dpi=settings['dpi'])
+                    image = storage.write(root, key+'.ocr-input.png', data)
                 if task['extractor'] == 'visual':
                     from .extractors.visual_features import extract, Encoder, space_id
                     encoder = None
@@ -218,6 +273,41 @@ def extract_one(roots, work, task, *, encoders=None):
                     raw, feature = extract(image,page,transform,roots,recipe)
                     words = []; suffix, kind = '.faces.json', 'face-region-detections'
                     note = 'Face regions only; identities are not inferred; detection coverage is not recall.'
+                elif task['extractor'] == 'spelling':
+                    from .extractors.spelling import extract
+                    raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work,encoders)
+                    suffix,kind='.spelling.json','derived-spelling-text'
+                    note='Derived dictionary corrections; literal OCR and all contributing boxes retained.'
+                elif task['extractor'] == 'handwriting':
+                    from .extractors.handwriting import extract
+                    raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work,encoders)
+                    suffix,kind='.handwriting.json','selected-handwritten-line-readings'
+                    note='Explicit handwritten lines; line geometry only; unreviewed text and incomplete page coverage.'
+                elif task['extractor'] == 'ruled-table':
+                    from .extractors.ruled_table import extract
+                    raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work)
+                    suffix,kind='.ruled-table.json','ruled-cell-text-proposal'
+                    note='Deterministic ruled-cell candidates and literal OCR; forms stay in the text path.'
+                elif task['extractor'] == 'scientific-table':
+                    from .extractors.scientific_table import extract
+                    raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work)
+                    suffix,kind='.scientific-table.json','scientific-table-proposal'
+                    note='Unreviewed table structure from retained model output; cell text and spans require review.'
+                elif task['extractor'] == 'scientific-region':
+                    from .extractors.scientific_region import extract
+                    raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,encoders=encoders,work=work)
+                    suffix,kind='.scientific.json','scientific-region-proposal'
+                    note='Unreviewed formula/table proposal; block coordinates only; original OCR retained.'
+                elif task['extractor'] == 'document-text':
+                    from .extractors.document_text import extract
+                    raw,words,feature,extra_artifacts=extract(page,transform,roots,recipe,work,key)
+                    suffix,kind='.alto.xml','assembled-page-alto'
+                    note='Layout-bound regional OCR; explicit block order retained; full-page accuracy is unqualified.'
+                elif task['extractor'] == 'document-layout':
+                    from .extractors.document_layout import extract
+                    raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work=work)
+                    suffix,kind='.document-layout.json','document-layout-regions'
+                    note='Detected document regions; article grouping and reading order require separate assessment.'
                 elif task['extractor'] == 'scan-layout':
                     from .extractors.scan_layout import extract
                     raw, words, feature, extra_artifacts = extract(image,page,transform,roots,settings,Path(temporary),key,work)
@@ -251,11 +341,16 @@ def extract_one(roots, work, task, *, encoders=None):
                         for variant in candidate['variants']:
                             variant.pop('raw_alto', None)  # Full raw output remains in .regions.json.
                 else:
-                    from .extractors.ocr import extract
-                    raw, words = extract(image, page, transform, languages=settings['languages'],
-                                         psm=settings['psm'], timeout=settings['timeout'],
-                                         **({'thresholding_method':settings['thresholding_method']}
-                                            if 'thresholding_method' in settings else {}))
+                    from .extractors.ocr import extract, positioned_alto
+                    ocr_options={'languages':settings['languages'],'psm':settings['psm'],'timeout':settings['timeout'],
+                        **({'thresholding_method':settings['thresholding_method']} if 'thresholding_method' in settings else {})}
+                    if settings.get('character_boxes'):
+                        from .extractors.ocr import extract_characters
+                        raw,hocr,words,feature=extract_characters(image,page,transform,Path(temporary),**ocr_options)
+                        extra_artifacts.append((key+'.hocr.html',hocr,'machine-ocr-character-hocr'))
+                    else:
+                        raw,words=extract(image,page,transform,**ocr_options)
+                        words,feature=positioned_alto(raw,page,transform)
                     suffix, kind = '.alto.xml', 'machine-ocr-alto'
                     note = 'Unreviewed machine OCR; confidence is not factual verification.'
                 roots.source(page.source)
@@ -268,13 +363,13 @@ def extract_one(roots, work, task, *, encoders=None):
                     stamps[name] = storage.stamp(path)
             roots.source(page.source)
             limitations = (note, 'Coverage is this explicitly requested page/frame, not the whole object.')
-            if not words and task['extractor'] not in ('visual','faces'):
+            if not words and task['extractor'] not in ('visual','faces','scientific-region','scientific-table'):
                 limitations += ('No words returned; this does not establish that the page is blank.',)
             if region is not None:
                 limitations += ('Selected region only; retained image is a crop, not the complete page.',)
             status = 'complete' if words else 'partial'
             if task['extractor'] == 'visual': status = 'complete'
-            if task['extractor'] in ('pdf-layout', 'scan-layout'): status = 'partial'  # Semantic coverage is deliberately incomplete.
+            if task['extractor'] in ('pdf-layout', 'scan-layout', 'document-layout', 'document-text','ruled-table','spelling','handwriting'): status = 'partial'  # Semantic coverage is deliberately incomplete.
             if discovery and (not discovery['coverage']['scan_complete'] or
                               any(r['status'] != 'text_extracted' for r in discovery['regions'])):
                 status = 'partial'
@@ -316,8 +411,10 @@ def load_plan(path, expected_sha256=None):
     require(isinstance(value['tasks'], list) and value['tasks'], 'Explicit bounded tasks required')
     require(len({task['id'] for task in value['tasks']}) == len(value['tasks']), 'Duplicate task labels')
     for task in value['tasks']:
+        from .profiles import resolve_ocr_task
+        resolve_ocr_task(task)  # Fail before launching a batch with an invalid preset.
         page_from_record(task['page'])
         if task.get('region') is not None:
             Region(**task['region'])
-            require(task['extractor'] in ('ocr','visual'), 'Region extraction requires OCR or visual features')
+            require(task['extractor'] in ('ocr','visual','scientific-region','scientific-table','ruled-table','spelling'), 'Unsupported region extractor')
     return value

@@ -114,10 +114,46 @@ reuse nor byte equality merges archival objects.
 catalogue CSV snapshots/field mappings and existing finding history. It preserves
 literal wording, provenance, unresolved identities and available/offline coverage.
 Queries read this projection without reopening the corpus or running extraction.
-Text search supports paging, ranked fields, match reasons, German normalization
-and optional spelling leads; visual search keeps same-document candidates and
+Text search requires a strict majority of distinct query terms (both terms for a
+two-term query), after removing common name titles. Coverage ranks first, then
+exact wording above adjacent name/initial, long-word compound/stem and optional
+OCR/spelling alternatives. Mixed letter/number query terms remain required;
+canonical UID queries require the exact identifier. Names with initials are
+ambiguous retrieval leads, not person identities: a common surname alone cannot
+satisfy a multi-term name query, and context must be reviewed. Explicit author or
+Bearbeiter fields/labels and credited creators receive a small boost. OCR alternatives are tried even
+when the exact word exists elsewhere. These are bounded heuristics, not a German
+linguistic model or a calibrated identity score.
+
+Results expose matched/missing terms, literal field offsets and the matching
+method. Snippets center on the densest local match and safely highlight original
+text, including OCR errors. Existing projections need no rebuild for these query
+changes. Page-level hits remain; block-level indexing is deferred.
+Visual search keeps same-document candidates and
 reports incompatible model spaces. Corrections require an explicit refresh.
 Existing neutral UIDs can be mapped explicitly; there is no production allocator.
+
+Catalogue selections map literal CSV columns to descriptive fields, including
+creators, dates, places, subjects, relationships and inscriptions where present.
+Optional `path_fields` name unit-relative representation columns; the catalogue's
+parent path and named root bind each representation to its existing object.
+There are no basename, title or fuzzy identity joins. `group_objects: true`
+combines representation rows only when their existing object key and selected
+descriptions agree; differing accounts and rows without an object key stay
+separate. Row numbers, row checksums and the catalogue snapshot remain recorded.
+An optional `object_metadata` mapping (`source`, `object_field`, `fields`) joins
+an explicitly selected object table by its unique existing key. It cannot
+overwrite catalogue fields; ambiguous supplementary keys refuse the refresh.
+
+The workbench reads these same prepared entries for each comparison side.
+Existing catalogue wording, attribution and differing accounts remain separate
+from observations and reviewed findings. A missing link is explicit; neither OCR
+nor online source availability is required to display retained descriptions.
+`refresh_catalogues` replaces only selected catalogue entries, preserving
+extractions, findings and feedback, and validates all inputs before returning a
+replacement. The caller must publish it atomically under the existing research
+lock. Coverage distinguishes CSV rows from grouped descriptive records; neither
+is an inferred count of distinct archival objects or whole-archive coverage.
 
 `extract --chunk-size 2 --worker-timeout 900` processes a bounded chunk with one
 cached visual encoder per model space and saves per-item progress. Worker timeout
@@ -497,6 +533,109 @@ Full-page rasters, vector drawings and missing native text remain explicit cover
 gaps: this is not a general scanned-newspaper layout model. Raw XML, page previews,
 figure crops, candidate text and omissions are retained in flat work artifacts.
 
+### Document layout and structured OCR quality trials
+
+Recognition, reading order, geometry and complete available-page coverage are
+indexing-quality requirements, not just workbench presentation requirements.
+Qualify bounded reports against retained source images before scaling. A successful
+processor or nonempty text does not establish completeness. Keep old results and
+measure critical dates, identifiers, formulas and units separately from average
+character error. Region detection must be checked against full-page readings:
+report forms can be misclassified as figures or tables.
+
+OCR-only `settings.image_preparation` can select `rgb-v1`, `gray-v1`,
+`gray-up2-v1`, `gray-close2-v1` or `gray-up2-close2-v1`. These are opt-in trials,
+mutually exclusive with the earlier contrast normalization. Grayscale uses Pillow
+luminance conversion without stretching; 2x resizing uses Lanczos with the inverse
+source transform rescaled. PNG DPI is explicitly set to render DPI times scale.
+Dark-ink 2x2 grayscale closing inverts the foreground, dilates then erodes with
+complementary anchors to avoid a pixel translation, and inverts back. It may also
+join neighbouring marks, so compare real passages before choosing it. The existing
+`thresholding_method=2` requests Tesseract's internal Sauvola; grayscale input still
+undergoes internal thresholding. Rendering at 400 dpi does not constitute rescanning
+the source or recovering detail absent from its embedded images. Each derivative
+retains its own recipe, source coordinates and original unmodified input.
+
+OCR recipe v4 retains ALTO blocks/lines and word `block_index`, `line_index` and
+`word_index`, alongside source coordinates. Search preserves those block boundaries
+instead of joining nearby rows across columns. This cannot repair a block that
+the recognizer itself merged across captions; those need separate region OCR.
+Optional `settings.normalization = "local-red-v1"` is an explicitly selected
+contrast trial for faded coloured paper, using existing NumPy/OpenCV dependencies.
+It writes a separate same-size image: red channel, Gaussian background sigma
+`30 * dpi / 300`, gain 5, offset 230, clipped to 8 bits. Its recipe fingerprints
+dependencies and the transform records the operation. It is not a default or a
+universal improvement; compare against untreated input. Preserve the original
+source, prepared render and each page's declared rotation.
+`clockwise` is an additional editorial rotation: PDF embedded rotation is already
+applied by the renderer. Do not copy a workbench display rotation into that setting.
+Inspect the prepared image and total transform before comparing OCR variants.
+
+For an explicit language-model comparison, set `TESSDATA_PREFIX` only for the
+bounded extraction process and its workers. The directory must contain every
+requested `<language>.traineddata`; the existing recipe records their SHA256
+fingerprints, so `fast` and `best` results cannot share a cache key. Keep page
+preparation, language order and PSM fixed. ALTO output is requested with
+`tessedit_create_alto=1`, without depending on a distribution-specific
+`configs/alto` file in that model directory. Do not replace system language files
+or infer an archive-wide accuracy improvement from a small development sample.
+
+`document-layout` is a separate optional adapter for DocLayout-YOLO 0.0.4.
+Its `settings.model` is a fingerprinted local `Source`, never a model-hub name.
+The bounded recipe records CPU/native-PyTorch execution (MKLDNN disabled), input
+size, confidence, region limit and dependency versions. Model regions and crops
+are proposals; detection does not establish article order, completeness or a
+caption relationship. Recipe v2 blocks Python socket connections during import
+and inference, including upstream connectivity/analytics hooks. The upstream implementation is AGPL-3.0; the selected
+DocStructBench model card declares Apache-2.0. Keep the download URL, revision,
+hash and licences with the work inputs. Do not install the training stack or
+replace an existing OpenCV/torch runtime to run a workbench request.
+
+The legacy helper
+`extractors.document_layout.ocr_tasks(roots, work, key, psms=(4,6), languages='deu')`
+derives ordinary OCR tasks from the selected layout receipt. Strongly overlapping
+same-class detections and near-identical differently labelled text detections are
+suppressed for OCR/assembly but preserved in the raw layout. Tables are included
+as literal OCR text; cell/column semantics remain unverified. Near-identical
+illustration/abandon detections are logged as suppressed image-text proposals,
+with a reminder to inspect for omitted labels. This is not a proof of non-text.
+Each crop binds its `layout_origin` (receipt and block). A different
+OCR mode creates another receipt without rerunning detection. Prepared crops reuse
+the verified full-page image, preserving the direct renderer's pixels and affine
+mapping. PSM 4 assumes a column, PSM 6 a uniform block; neither is universally best.
+
+`document-text` assembles one explicitly selected OCR receipt per retained text
+block. Settings include `layout_origin`, `ocr_origins`, a complete `block_order`,
+and optionally a fingerprinted annotation `Source`. Annotations bind the layout
+digest, order, article groups and caption links; assistant inspection is not an
+operator review. Assembly maps crop words/lines through their full transforms,
+creates unique IDs and explicit reading order in ALTO 4.4, and retains structured
+JSON with the originating receipts. Text remains unqualified outside measured
+passages; the result status is deliberately partial. No PDF is rewritten.
+
+`document_text.propose_order` can anchor regions to a fresh whole-page OCR
+receipt and insert missing headings geometrically. Supplying that receipt as
+`order_origin` makes the proposed order reproducible and checked before reuse.
+Unanchored regions are listed; the proposal inherits whole-page segmentation
+errors and does not claim verified article order.
+
+For report caption grids, `document_text.geometric_order` proposes order using
+horizontal whitespace cuts between coherent regions, then vertical gutters.
+`order_method: "geometric-cuts-v1"` validates that declared order and cannot be
+combined with `order_origin`. Document-text recipe v2 retains block/line/word
+associations through assembly. No geometric proposal proves semantic order;
+full-width headings, neighbouring columns, bottom captions and footers need
+explicit coverage checks. Layout recipe v4 also permits the contrast trial and
+records table eligibility; old layout receipts remain readable.
+
+Search and the workbench preserve assembled line/block boundaries. Existing
+native/whole-page receipts remain available. Explicit selection, not OCR confidence,
+chooses the displayed result; a saved workbench OCR cache keeps precedence.
+`extractors.document_evaluation` measures selected-region character/word errors
+and article-order inversions separately. Checked development examples are not
+independent acceptance. Fine-tuning requires demonstrated layout failures and a
+separate evaluation set; it is not triggered by an OCR error count.
+
 `layout.visual_tasks(roots, work, receipt_key, model)` derives explicit visual crop
 tasks from a verified layout receipt. The originating receipt digest, figure position
 and source region are bound into the recipe and checked before cache reuse.
@@ -715,3 +854,334 @@ API shape checked against the [Responses reference](https://developers.openai.co
 on 17 November 2026. The HTTP path remains unqualified by a live response.
 Codex saved-login behavior is documented in
 [non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode).
+
+## Optional R&D region trial
+
+The `rd_reports` profile preserves word-positioned text/captions and routes formula,
+table and illustration blocks separately. `scientific-region` accepts an explicit
+source-page crop and a fingerprinted local PaddleOCR-VL-1.5 manifest. Formula
+LaTeX, raw model output, token-comparison diagnostics and inert table HTML remain
+unreviewed feature sidecars; no replacement OCR words or inferred word boxes are
+created. `scientific-table` converts a retained recognition receipt's HTML or
+OTSL grid to inert HTML without repeating inference. Empty cells and rectangular
+row/column spans are preserved as proposed; malformed grids are refused.
+Handwriting flags skip model recognition; automatic handwriting detection remains
+unimplemented. OCR with `character_boxes: true` retains ALTO and character hOCR
+from the same pass. Element/count token hypotheses and below-baseline character
+geometry propose inline crops, including inside automatically detected captions.
+OCR omissions still cause missed candidates. Caption/header/floating hOCR lines
+are retained; zero-area character boxes preserve text but cannot supply a crop.
+
+`scientific_tokens` validates simple, case-sensitive element/count sequences,
+retaining alternatives for OCR confusions. It does not parse general equations,
+charges or grouped chemistry. Unique agreement of both engines lowers review
+priority; a confusion repair additionally needs subscript geometry. Raw readings
+remain unchanged, and agreement is not acceptance. The search projection retains
+engine-labelled normalized proposals and their disagreement evidence; a uniquely
+agreed reading also has plain and Unicode fields. No catalogue value is adopted.
+
+Recognized number/unit expressions stay in text. Unknown units and number-led
+damaged formulas must not be silently declared quantities. Form classification
+uses explicit form wording, preferably from full-page context. `ruled-table`
+keeps forms as key/value proposals and otherwise tests closed ruled cells with
+OpenCV, then runs Tesseract per cell, retaining empty cells and source coordinates.
+A detected grid is still an unreviewed table hypothesis; unruled tables need
+confirmation before invoking vision. Cropping away context can defeat routing.
+Closed ruled regions can also contain multiple logical rows. Original OCR words
+inside the detected extent but outside all detected cells are retained in
+`unassigned_source_words`, with an explicit incomplete-extraction warning. Zero
+unassigned words does not prove completeness, because source OCR can omit text.
+
+One model is loaded per bounded extraction worker and reused for its crops;
+receipts separate loading, input preparation and generation time. Use the existing
+bounded `extract --chunk-size` option, not an indefinite model service. Formula
+pixel rendering is now optional (`render_check: true`) and is not the default
+comparison. The private `rd-token-profile-report-20261120.md` records the bounded
+trial, including misses, failed controls and CPU cost; full indexing stays blocked
+on material-specific validation.
+
+The local optional runtime uses Transformers 4.55.4, tokenizers 0.21.4,
+huggingface-hub 0.36.2, sentencepiece 0.2.1, protobuf 6.33.1 and einops 0.8.1 alongside the existing
+CPU vision dependencies. Models are pinned/downloaded separately, all model files
+are verified, and inference uses local files with Python network hooks denied.
+There is no server, external submission or automatic dependency/model installer.
+
+## Optional German spelling layer
+
+The `spelling` extractor derives text from an immutable `ocr` or `document-text`
+receipt. Install the optional `spelling` extra (`symspellpy==6.9.0`); there is no
+automatic installer or network lookup in extraction. Supply fingerprinted Sources
+for `dictionary` (German `word frequency` lines) and `custom_lexicon` (JSON with
+`terms`, `names`, and optional `provenance`), plus the exact `ocr_origin`.
+`protected_regions` optionally identifies formulas, handwriting or other text
+that must not be changed. Character-OCR formula/quantity membership is inherited
+when word sequences agree, falling back to region protection otherwise.
+The same page and crop must be bound on both receipts. The lexicon is reused
+within the existing bounded worker. No new service or review subsystem is needed.
+
+Processing order:
+
+1. Rejoin alphabetic line-break hyphenation within one OCR block, including OCR
+   dash variants and surrounding parentheses. Retain every original word index,
+   raw spelling and separate source box. Never join across block/column boundaries,
+   missing line metadata, or continuation words such as `und`/`oder`.
+2. Preserve known German words, archive terms, listed names, acronyms, units,
+   identifiers and protected regions. Validate unknown compounds using exact
+   dictionary parts (minimum four letters, at most four parts, explicit linking
+   forms). Keep the compound intact; no global `lookup_compound` or
+   `word_segmentation` rewrite is used.
+3. Retrieve **all** SymSpell suggestions through distance 2. Exactly one distance-1
+   candidate may replace an ordinary-text token in the derived layer, preserving
+   initial capitalization and punctuation. Candidate frequency only orders the
+   suggestions; it never hides alternatives. Protected-name/unit/acronym targets,
+   mixed case, ambiguous distance-1 results, distance-2 results, unknown words and
+   unjoined fragments remain review items. SymSpell uses Damerau OSA distance,
+   including adjacent transpositions. Listed names are protected; this is not NER.
+
+`feature.corrected_tokens` contains `raw_indices`, `raw_texts`, `regions`, status
+and suggestions. `feature.corrected_text` is searchable on an explicitly refreshed
+projection; original receipt words and ALTO remain literal. Search evidence retains
+the complete mapping and review status. The later review stage is represented by
+`review_items`; no automatic model/remote dispatch or workbench diagnostics are
+introduced. Automatic changes are derived processing, not catalogue adoption.
+
+The private trial's `spelling-trial-report-20261120.md` records the pinned German
+100k frequency list, editable archive lexicon, checked-caption results and limits.
+The list must include domain/historical forms: general-dictionary uniqueness alone
+can wrongly change valid `gedampft` into `gedämpft`. Expand the custom lexicon from
+checked sources, not unreviewed OCR. Unknown compounds and names still require
+material-specific validation before full indexing.
+
+`scientific_document.correction_proposal` separately guards explicit proposed edits using
+protected source regions and technical-token checks, retaining original OCR.
+It is not an automatic spelling-correction engine. Caller-selected regions must
+also protect units/names/identifiers whose OCR contains only letters. Rendering
+supports Matplotlib MathText only; unsupported LaTeX/mhchem stays unrendered.
+Foreground image similarity is an uncalibrated mismatch signal, never automatic
+acceptance. Table markup validity does not certify spans or cell text.
+
+### OCR material presets
+
+`archive-research ocr-profiles` lists the four explicit version-1 presets owned by
+`profiles.py`: `clean_print`, `historical_newspaper`, `rd_reports` and `brigadebuch`. These are
+extraction settings and scope checks, distinct from research-subject guidance.
+They are candidate recipes, not certificates of recognition accuracy.
+
+Add a versioned selection to each existing extraction-plan task:
+
+```json
+{
+  "id": "selected-page-ocr",
+  "extractor": "ocr",
+  "ocr_profile": {"name": "clean_print", "version": 1},
+  "page": "the existing source-bound Page record goes here",
+  "settings": {"languages": "deu+eng", "clockwise": 0}
+}
+```
+
+The `page` placeholder must be replaced by the ordinary Page object, not a path.
+The existing `extract --plan ...` command executes the plan. No web request starts
+OCR, and no preset writes into the live search index or reviewer records.
+
+Their ordinary-print component uses 300-DPI grayscale Tesseract, PSM 3 for a whole-page baseline and PSM 6
+for an explicitly bound text crop. Language selection, rotation and bounded timeout
+remain explicit; traineddata contents and tool versions enter each receipt. The
+preset does not download models or silently choose fast versus best language data.
+The local validation run uses the retained best German/English files.
+
+Clean print supports native PDF extraction and OCR. Newspapers and R&D additionally
+support existing `document-layout` and `document-text` stages. Newspaper layout uses
+the original image; R&D retains the tested `local-red-v1` layout preparation. Both
+require explicit reading-order evidence for assembly; a geometric order remains
+an unreviewed proposal. Inspect a PDF text layer before selecting it: nonempty text
+alone never suppresses OCR or establishes accuracy.
+
+For regional tasks, use the existing layout helper with one selected reading:
+
+```python
+ocr_tasks(roots, "artifacts", layout_key, psms=(6,), languages="deu+eng",
+          ocr_profile={"name": "rd_reports", "version": 1})
+```
+
+Carry that same profile/version into the assembly task. Existing layout receipts
+may be reused when their preparation matches; every contributing OCR receipt must
+have the selected profile. The assembly adapter already requires all selected
+text blocks exactly once and verifies crop coordinates and origin bindings.
+
+Preset conflicts (different DPI, thresholding/upscaling experiments or PSM), unknown
+versions and specialist recognizers are refused before a batch starts. Unprofiled
+plans retain their old semantics and cache keys. Profile identity is part of each
+new recipe/cache key. Raw ALTO and coordinates remain unchanged by postprocessing:
+spelling is a separate, still-to-be-qualified stage. Formula and handwriting
+recognition are outside these presets; no table-cell accuracy is claimed.
+
+### Material extraction and separate downstream processing
+
+The three material profiles describe page preparation and extraction context.
+Their existing `ocr_profile` selection is the text-recognition component, not a
+command to send every extracted part through OCR. The shared `document-layout`
+receipt retains regions, crop artifacts, source coordinates and proposed labels.
+Text and visual processing consume that evidence independently. Changing a text
+recipe does not rerun layout or a photograph's visual features.
+
+Prepare a bounded downstream plan from an existing layout receipt:
+
+```sh
+archive-research document-parts --roots /absolute/roots.toml \
+  --layout-key <retained-layout-key> --profile historical_newspaper \
+  --output newspaper-parts.json
+```
+
+The output is a new flat file in the configured work root; existing selections
+are never overwritten. It contains the ordinary finite extraction `tasks` plus
+an accounting of **every** detected part, including unresolved and duplicate
+proposals. This command performs no inference or index refresh. The plan can be
+executed using the existing `extract --plan /absolute/work/newspaper-parts.json`.
+An empty task list is an explicit no-eligible-work result; do not execute it.
+
+| Part | Processing |
+| --- | --- |
+| Ordinary text, titles and captions | Existing positioned crop OCR; correction/search are later independent consumers |
+| Photographs/illustrations | Existing visual feature adapter, only with `--visual-model /absolute/model-source.json` |
+| Tables | Retained specialist input; ordinary OCR does not establish rows/cells |
+| Formulas and handwriting | Retained source crops; recognition remains deferred |
+| Unknown/ambiguous labels | Retained without automatic processing |
+
+The optional model JSON is an existing fingerprinted `Source` record. No weights
+are downloaded. Visual tasks bind the exact layout block and render from the
+original page; they do not embed a contrast-normalized layout crop. Changing the
+block, crop, source or parent receipt fails validation. Caption/article links and
+reading-order information already present in extraction are retained as proposals;
+missing associations are not inferred by proximity or silently accepted.
+
+Routing uses `ordinary-text-v1`: duplicate text is accounted for and text with
+at least half its area inside a detected table, figure, formula or handwriting
+region is withheld from generic OCR. This conservative geometric rule is an
+unqualified candidate. Inline formulas can still occur within otherwise ordinary
+text. The plan retains specialist regions for downstream protection; it never
+enables spelling correction automatically. Detector mistakes remain visible:
+a table mislabelled as plain text still needs extraction correction/qualification.
+
+For an ordinary-text assembly, pass the plan's `text_scope` into the existing
+`document-text` settings and into `geometric_order` or `propose_order`. Supply the
+selected OCR origins and an explicit order basis as before. Assembly requires
+every eligible ordinary-text block exactly once and lists `unassembled_parts`;
+specialist omissions must not be described as full-page text coverage. Existing
+unscoped tasks, OCR presets and retained assemblies keep their prior semantics
+and cache identities. Clean print's full-page baseline remains available; a
+complex page requires a retained region extraction before using this routing.
+
+Benchmark extraction separately from its consumers. The existing evaluation
+manifest accepts `layout_readings` (the same `id`/`receipt` fields as text
+readings), `part_regions` (`region` and `kind`) and `part_reference_complete`.
+`part_score` reports one-to-one IoU region coverage and material-kind confusion;
+partial annotations leave precision undefined rather than treating unannotated
+regions as false positives. CER/WER and critical-token scores remain separate
+text measurements. Photo retrieval, caption association and reading order still
+need their own acceptance checks. Optional `scorecard_name` selects a flat JSON
+output name. The same final-test freeze/operator-reference gates apply to region
+evaluation. No diagnostic score automatically qualifies a profile or chooses a
+fallback.
+
+### Bordered-table recovery from retained page evidence
+
+`document-tables` prepares one `document-layout` refinement task from a retained
+layout and a whole-page positioned OCR/native-text receipt. It does not run
+recognition. Execute that task with the ordinary finite extraction runner, then
+use its resulting layout key with `document-parts`:
+
+```sh
+archive-research document-tables --roots /absolute/roots.toml \
+  --layout-key <original-layout-key> --reading-key <positioned-text-key> \
+  --output table-plan.json
+archive-research extract --roots /absolute/roots.toml \
+  --plan /absolute/work/table-plan.json --summary table-run.json
+archive-research document-parts --roots /absolute/roots.toml \
+  --layout-key <refined-layout-key> --profile historical_newspaper \
+  --output table-separated-parts.json
+```
+
+Use a new output filename; plan preparation refuses overwrite. The current
+refinement is `bordered-tables-v3` / `document-layout` recipe 7. Version 2 / recipe 6
+remains reproducible with its original text-band behavior. Version 3 proposes
+logical rows for supported ruled property/value tables: a label with values in
+at least two other columns starts a row; nearby label/unit continuation lines
+share its cells. Uncertain or sparse row starts retain the text-band fallback.
+Each grouped cell retains line word indices, raw line breaks and source geometry;
+original text-band cells and all unassigned words remain available. This groups
+text without correcting spelling, units or values. It reuses the
+existing OpenCV ruling detector and positioned words. Closed frames need either
+repeated numeric alignment and recurring whitespace gutters, or long supported
+column rules plus numeric rows. A box alone cannot establish a table. Explicit
+forms and photographic regions are excluded. Unbordered/broken-frame cases and
+insufficient evidence remain unresolved; no vision fallback runs automatically.
+
+Original region records are retained unchanged. New table containers are appended;
+an already detected matching table receives separate structural evidence. A
+near-identical table/figure conflict stays recorded and is withheld from visual
+processing, rather than being treated as a photograph. Existing non-table parts
+keep their original exact dependency bindings, so their OCR and visual features
+can be reused. Scoped text assembly accepts that verified lineage and excludes
+table contents while listing every unassembled part. Refinement cannot silently
+alter a retained crop or stack on another refinement.
+
+Each proposed table has source-coordinate cells, exact raw OCR word indices,
+header/context text, unassigned words, gutter-crossing warnings and an inert HTML
+preview. All source words inside the table remain accounted for, either assigned
+once or explicitly unassigned. Rows are either retained geometric text bands or
+explicit logical-row proposals with original text bands retained. Neither is a
+verified transcription: grouped labels, merged headers and spans still need review.
+`no_source_words` never asserts that a source cell is blank. Column boundaries
+are explicitly in prepared-page normalized coordinates; cells are transformed
+back into source-page coordinates, including rotated PDFs. Numeric OCR errors
+are preserved, not repaired by the table parser.
+
+The newspaper and CCD-report examples are development regressions. Their region
+and structural checks do not establish general table recognition accuracy, and
+no output is adopted or automatically selected in the workbench/index.
+
+### Mixed albums and selected handwritten lines
+
+`brigadebuch` separates material extraction from recognition. A `document-layout`
+task can bind `settings.region_annotation` to a hashed local Source containing
+`format: archive-material-regions-1`, `metadata_adopted: false`, its exact `page`,
+and ordered `blocks`. Each block has `index`, `label` and normalized source
+`region`; handwritten blocks may have explicit `lines` with unique `id` and
+contained `region`. Optional `caption_links` bind `text_block` to `image_block`
+with `status: proposed`. These are prepared annotations, not automatic detection
+or independently verified segmentation. Unselected page content stays unprocessed.
+
+```sh
+archive-research document-parts --roots /absolute/roots.toml \
+  --layout-key SELECTED_LAYOUT_KEY --profile brigadebuch \
+  --handwriting /absolute/handwriting-selection.json \
+  --output mixed-album-parts.json
+```
+
+The selection JSON contains `backend` and, for learned methods, `model_manifest`
+as a fingerprinted Source. Supported backends are `dehtr-v2` (ONNX CPU),
+`trocr-small-de` (local Transformers/safetensors) and `tesseract-control` (deu,
+PSM 7). The manifest pins repository, revision and each local model file's name,
+relative path, SHA-256 and byte size. Download model data explicitly before
+processing; the adapter checks all files and denies Python network connections.
+It neither downloads models nor executes model-supplied code. Public TrOCR model
+files are briefly staged in native `/tmp`; source images stay in the work root.
+
+Run the resulting plan through the existing `extract` operation in an environment
+containing the selected backend. Ordinary text goes to its own OCR component,
+photographs remain source-bound crops (or explicitly selected visual tasks), and
+only annotated handwritten lines reach handwriting recognition. Reuse the same
+processor for handwriting in other materials by supplying its bound layout part;
+it has no dependence on Brigadebuch catalogue descriptions.
+
+Each reading retains the exact line crop, literal text, source coordinates,
+backend, timings and truncation warnings. No word boxes, calibrated confidence,
+automatic correction or automatic fallback decision are invented. Results are
+partial: even perfect selected lines do not establish whole-page coverage.
+Independent references, names/dates, line omissions and fallback benefit must be
+measured before widening scope. Existing evaluation accepts one entry per selected
+handwritten part, with its corresponding reference lines and alternative receipts.
+Compare whole splits using summed errors/reference length, not mean page rates.
+
+The workbench can display an alternative raw reading beside each selected line;
+both are escaped text and neither changes the proposed finding or saved review.

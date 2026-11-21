@@ -2,6 +2,107 @@
 import re
 from .common import require
 
+# Material presets for extraction, distinct from the research-subject guidance
+# below. No preset is a claim of independently measured recognition accuracy.
+# Increment the version whenever its fixed settings or scope change.
+OCR_PROFILES = {
+    'brigadebuch': {
+        'version': 1, 'label': 'Brigadebuch and mixed album pages',
+        'extractors': ['ocr', 'document-layout', 'document-text', 'handwriting'],
+        'workflow': ['inspect mixed page regions', 'retain photographs and caption links',
+                     'route printed text to OCR and selected handwritten lines to handwriting recognition'],
+        'checks': ['region and line coverage', 'different hands', 'names and dates',
+                   'caption associations', 'omissions and unsupported symbols'],
+        'limits': ['Prepared regions are explicit proposals, not automatic handwriting detection.',
+                   'Line recognition does not qualify full-page reading order or formulas.'],
+    },
+    'clean_print': {
+        'version': 1, 'label': 'Clean printed text',
+        'extractors': ['pdf-text', 'ocr'],
+        'workflow': ['inspect existing PDF text when present', 'whole-page OCR when needed'],
+        'checks': ['text-layer correctness', 'missing text', 'paragraph order',
+                   'source coordinates', 'names, dates, numbers and identifiers'],
+        'limits': ['Complex columns, scene text and handwriting require another profile.'],
+    },
+    'historical_newspaper': {
+        'version': 1, 'label': 'Historical newspaper',
+        'extractors': ['pdf-text', 'ocr', 'document-layout', 'document-text'],
+        'workflow': ['inspect existing PDF text', 'detect page regions',
+                     'recognize text/caption crops', 'assemble explicit reading order'],
+        'checks': ['omitted columns and captions', 'article order and continuations',
+                   'image texture excluded from text', 'caption associations',
+                   'source coordinates', 'names, dates, numbers and identifiers'],
+        'limits': ['Whole-page OCR is a baseline, not an assembled article reading.',
+                   'Fraktur and other scripts are not qualified by ordinary German language data.'],
+    },
+    'rd_reports': {
+        'version': 1, 'label': 'Typewritten and R&D reports',
+        'extractors': ['pdf-text', 'ocr', 'document-layout', 'document-text'],
+        'workflow': ['inspect existing PDF text', 'detect page regions',
+                     'recognize text/caption crops', 'assemble explicit reading order'],
+        'checks': ['faint or broken type', 'captions separated from illustrations',
+                   'source coordinates', 'dates, quantities and type identifiers',
+                   'forms and tables retained with explicit limitations'],
+        'limits': ['Formula recognition and correction are deferred; preserve raw readings.',
+                   'No automatic handwriting reading or verified table-cell structure is claimed.'],
+    },
+}
+
+
+def ocr_profile(name):
+    """Return a detached, versioned candidate preset for explicit task selection."""
+    from copy import deepcopy
+    require(isinstance(name, str) and name in OCR_PROFILES, 'Unknown OCR material profile')
+    return {'name': name, **deepcopy(OCR_PROFILES[name]),
+            'accuracy_qualified': False, 'postprocessing': 'raw text; spelling is a separate stage',
+            'ocr_settings': {'dpi': 300, 'languages': 'deu+eng', 'image_preparation': 'gray-v1',
+                             'page_psm': 3, 'region_psm': 6},
+            'layout_preparation': 'local-red-v1' if name == 'rd_reports' else 'original',
+            'language_models': 'Exact traineddata fingerprints are bound in each OCR recipe; no download or substitution.'}
+
+
+def resolve_ocr_task(task):
+    """Expand a material preset inside the existing finite extraction task contract.
+
+    Unprofiled tasks retain their existing recipes. Named profiles deliberately
+    reject preprocessing experiments and deferred recognizers; explicit model,
+    crop and reading-order bindings remain the existing adapters' responsibility.
+    """
+    from copy import deepcopy
+    if 'ocr_profile' not in task:
+        return task
+    selected = task['ocr_profile']
+    require(isinstance(selected, dict) and set(selected) == {'name', 'version'},
+            'OCR profile needs an explicit name and version')
+    profile = ocr_profile(selected['name'])
+    require(type(selected['version']) is int and selected['version'] == profile['version'],
+            'Unsupported OCR profile version')
+    extractor = task['extractor']
+    require(extractor in profile['extractors'], 'Extractor outside OCR profile; specialist work remains separate')
+    result = deepcopy(task)
+    settings = result.setdefault('settings', {})
+    require(isinstance(settings, dict), 'OCR settings must be an object')
+    if extractor == 'handwriting':
+        require(profile['name']=='brigadebuch', 'Handwriting is a separately bound processor')
+        return result
+    fixed = {'dpi': 300}
+    if extractor == 'ocr':
+        fixed.update(psm=6 if task.get('region') is not None else 3, image_preparation='gray-v1')
+        settings.setdefault('languages', 'deu+eng')
+        require(not set(settings) & {'normalization', 'thresholding_method', 'character_boxes'},
+                'OCR profile uses the frozen grayscale reading; experiments require an unprofiled task')
+    elif extractor == 'document-layout' and profile['name'] == 'rd_reports':
+        fixed['normalization'] = 'local-red-v1'
+    else:
+        require('normalization' not in settings, 'OCR profile uses the original layout image')
+    if extractor == 'document-text':
+        require(any(k in settings for k in ('annotation', 'order_origin', 'order_method')),
+                'OCR profile assembly requires an explicit reading-order basis')
+    for key, value in fixed.items():
+        require(key not in settings or settings[key] == value, 'Setting conflicts with OCR profile: '+key)
+        settings[key] = value
+    return result
+
 ROUTES = {
     'buildings_places': {'label':'Buildings and places',
         'clues':r'fassade|gebäude|gewerbebau|gewerbehof|fabrikhof|kirch|straße|strasse|schornstein|turm|bauwerk|brücke|backstein|architektur',
@@ -64,6 +165,21 @@ ROUTES['machinery_industry']['profiles'] = {
                         'Do not force letters into an unresolved inscription or apply a later scheme to an earlier logo.',
                         'Type, type-series, batch/date and specimen numbers are distinct; prefix plus number is not proven unique without an allocation rule.',
                         'Similar appearance does not establish type or specimen; dimensions require a scale.'],
+    },
+}
+ROUTES['documents_signs']['profiles'] = {
+    'rd_reports': {
+        'label': 'R&D reports',
+        'extract_first': ['page layout: text, formula, table and illustration regions',
+                          'word-positioned literal text and captions with nested formula regions',
+                          'retain uncertain formula crops without further formula recognition or correction',
+                          'handwritten additions, displaced subscripts and unresolved regions'],
+        'compare_against': ['source crops including small subscripts, units and technical identifiers',
+                            'literal OCR before correction'],
+        'limitations': ['Never spell-correct protected formula regions, numbers, units or identifiers.',
+                        'Formula recognition/correction is deferred by the user.',
+                        'Handwriting requires review; table structure does not verify cell text.',
+                        'Resampling blurred copies cannot restore missing scan detail.'],
     },
 }
 

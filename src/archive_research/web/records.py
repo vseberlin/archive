@@ -12,6 +12,8 @@ from django.db import transaction
 
 from archive_research.common import ReviewError, atomic_write, checked_member, content_revision, file_lock, read_bytes, require
 from .models import ResearchCase
+from .people import RELATION as PERSON_ATTRIBUTION, validate_candidates, validate_attribution
+from archive_research.review_feedback import view_locator, validate_pair
 
 TEXT_LIMITS = {'value': 500, 'scope': 1000, 'uncertainty': 1000, 'reason': 3000}
 REVIEW_STATES = ('accepted', 'rejected', 'unresolved')
@@ -51,8 +53,8 @@ def physical_assessment(records, case_key):
 
 
 class StaleProjection(ReviewError):
-    def __init__(self, revision):
-        super().__init__('Browsing is behind the readable records. Rebuild browsing before continuing.')
+    def __init__(self, revision, message='Browsing is behind the readable records. Rebuild browsing before continuing.'):
+        super().__init__(message)
         self.revision = revision
 
 
@@ -122,6 +124,11 @@ def _snapshot():
     # the same captured bytes. No old workbench files or locks are opened.
     evidence_bytes = read_bytes(root / 'evidence.json')
     assertion_bytes = read_bytes(root / 'assertions.jsonl')
+    return validate_records(evidence_bytes, assertion_bytes)
+
+
+def validate_records(evidence_bytes, assertion_bytes):
+    """Validate prepared additions before replacing either authority file."""
     evidence = json.loads(evidence_bytes)
     assertions = [json.loads(line) for line in assertion_bytes.splitlines() if line.strip()]
     require(evidence.get('metadata_adopted') is False, 'Adopted evidence is not supported')
@@ -138,8 +145,23 @@ def _snapshot():
                     and permission.get('external_redistribution') is False,
                     'Recorded local-use authority and redistribution boundary required')
         require(isinstance(case.get('read_only', False), bool), 'Invalid read-only flag')
+        if case.get('superseded_by'):
+            require(case['read_only'] and case['superseded_by'] in cases and
+                    case['superseded_by'] != case['key'] and
+                    not cases[case['superseded_by']].get('superseded_by'),
+                    'Retired case needs a current research case; history remains read-only')
+        require(type(case.get('research_priority', 0)) is int and
+                0 <= case.get('research_priority', 0) <= 100, 'Invalid research priority')
         views = case['views']
         require(1 <= len(views) <= 12 and len({v['key'] for v in views}) == len(views), 'Unique bounded source views required')
+        validate_candidates(case)
+        pairs = case.get('reproduction_pairs', {})
+        require(isinstance(pairs, dict) and len(pairs) <= 20, 'Bounded reproduction comparisons required')
+        for key, pair in pairs.items():
+            require(isinstance(key, str) and isinstance(pair, dict) and
+                    set(pair) == {'query_view_key', 'candidate_view_key'} and
+                    set(pair.values()) <= {v['key'] for v in views} and
+                    pair['query_view_key'] != pair['candidate_view_key'], 'Unknown reproduction comparison views')
         for view in views:
             require(view['rotation'] in (0, 90, 180, 270), 'Unsupported rotation')
             require(isinstance(view['page_sequence'], int) and 1 <= view['page_sequence'] <= view['page_count'],
@@ -147,6 +169,7 @@ def _snapshot():
             region = view['region_xywh']
             require(len(region) == 4 and all(0 <= n <= 1 for n in region) and region[2] > 0 and region[3] > 0
                     and region[0] + region[2] <= 1 and region[1] + region[3] <= 1, 'Invalid citation region')
+            require(isinstance(view.get('preview_crop', False), bool), 'Invalid preview crop flag')
             for field in ('source', 'preview'):
                 binding = view.get(field)
                 if binding is None:
@@ -182,6 +205,10 @@ def _snapshot():
         for field, limit in TEXT_LIMITS.items():
             require(isinstance(record[field], str) and (field == 'reason' or record[field].strip())
                     and len(record[field]) <= limit, f'Invalid assertion {field}')
+        validate_attribution(record, case)
+        if 'reproduction_pair' in record:
+            require(record['relation'] == 'reproduced_in', 'Comparison feedback requires a reproduction finding')
+            validate_pair(record['reproduction_pair'])
         require(record['review'] in {'unreviewed', 'accepted', 'rejected', 'unresolved'}, 'Invalid review')
         identity = (owner, record['key'])
         previous = current.get(identity)
@@ -191,6 +218,74 @@ def _snapshot():
         require(record['supersedes_revision'] == (previous['revision'] if previous else None), 'Broken correction linkage')
         current[identity] = record
     require({owner for owner, key in current} == set(cases), 'Every case needs its prepared review record')
+    for owner, case in cases.items():
+        finding_views = case.get('finding_views', {})
+        require(isinstance(finding_views, dict) and len(finding_views) <= 40,
+                'Bounded finding views required')
+        by_view = {v['key']: v for v in case['views']}
+        for key, focus in finding_views.items():
+            require((owner, key) in current and isinstance(focus, dict) and
+                    set(focus) - {'evidence_pages'} == {'question', 'source_view', 'evidence_view', 'source_context', 'evidence_context'} and
+                    isinstance(focus['question'], str) and 0 < len(focus['question'].strip()) <= 400,
+                    'Finding views need an existing finding and a question')
+            require(all(isinstance(focus[side + '_view'], str) and
+                        focus[side + '_view'] in by_view for side in ('source', 'evidence')),
+                    'Unknown finding inspection views')
+            if key in case.get('reproduction_pairs', {}):
+                pair = case['reproduction_pairs'][key]
+                for side, field in [('source', 'query_view_key'), ('evidence', 'candidate_view_key')]:
+                    selected, original = by_view[focus[side + '_view']], by_view[pair[field]]
+                    require(selected['source'] == original['source'] and
+                            selected['page_sequence'] == original['page_sequence'],
+                            'Fixed photograph comparison must preserve the saved pair')
+            cited = [by_view[k] for k in current[(owner, key)]['citation_keys']]
+            for side in ('source', 'evidence'):
+                anchor = focus[side + '_view']; context = focus[side + '_context']
+                require(isinstance(anchor, str) and anchor in by_view and isinstance(context, list) and
+                        all(isinstance(k, str) for k in context) and len(context) <= 1 and
+                        len(set(context)) == len(context) and anchor not in context and
+                        set(context) <= set(by_view), 'Unknown finding inspection views')
+                selected = by_view[anchor]
+                def same_page(other):
+                    return other['source'] == selected['source'] and other['page_sequence'] == selected['page_sequence']
+                require(any(same_page(v) for v in cited), 'Finding view must use a cited source page')
+                require(all(same_page(by_view[k]) for k in context),
+                        'Inspection must stay on the fixed source page')
+                require(all(by_view[k]['region_xywh'] == [0, 0, 1, 1] and
+                            not by_view[k].get('preview_crop', False) for k in context),
+                        'Full-page inspection needs a full-page view')
+            pages = focus.get('evidence_pages', [])
+            require(isinstance(pages, list) and len(pages) <= 8 and
+                    len(pages) == len(set(pages)) and set(pages) <= set(by_view) and
+                    focus['evidence_view'] not in pages, 'Invalid question-bound report pages')
+            selected = by_view[focus['evidence_view']]
+            require(not pages or (selected.get('source') and selected['source']['path'].lower().endswith('.pdf') and
+                    not focus['evidence_context'] and all(
+                        by_view[k]['source'] == selected['source'] and
+                        any(v['source'] == by_view[k]['source'] and
+                            v['page_sequence'] == by_view[k]['page_sequence'] for v in cited)
+                        for k in pages)), 'Report navigation must stay on cited pages of the assigned report')
+        for record in [r for (c, _), r in current.items() if c == owner and 'component_assertions' in r]:
+            children = record['component_assertions']
+            pairs = case.get('reproduction_pairs', {})
+            require(record['relation'] == 'reproduced_in' and isinstance(children, list) and
+                    2 <= len(children) <= 20 and len(set(children)) == len(children) and
+                    record['key'] not in children and set(children) <= set(pairs),
+                    'A combined reproduction finding must reference distinct comparison pairs')
+            require(len({pairs[k]['query_view_key'] for k in children}) == 1,
+                    'Comparison components must share a fixed source')
+            require(all((owner, k) in current and not current[(owner, k)].get('component_assertions')
+                        for k in children), 'Comparison components must be individual findings')
+        for mention in case.get('documentary_overview', {}).get('mentions', []):
+            require((owner, mention['assertion_key']) in current and
+                    current[(owner, mention['assertion_key'])]['relation'] == 'names_event_participant',
+                    'Every documentary mention needs its own finding')
+            require({s['view_key'] for s in mention['sources']} <=
+                    set(current[(owner, mention['assertion_key'])]['citation_keys']),
+                    'The finding must cite every displayed name source')
+        for key in case.get('reproduction_pairs', {}):
+            require((owner, key) in current and current[(owner, key)]['relation'] == 'reproduced_in',
+                    'Every comparison needs a reproduction finding')
     if 'photo' in cases and case_synthetic(cases['photo'], evidence):
         require({key for owner, key in current if owner == 'photo'} == ASSERTION_KEYS
                 and len([r for r in assertions if assertion_case(r) == 'photo']) >= 7,
@@ -220,6 +315,8 @@ def _project(captured):
             ResearchCase.objects.update_or_create(key=case['key'], defaults={
                 'title': case['title'], 'revision': revision, 'payload': payload})
         ResearchCase.objects.exclude(key__in=[c['key'] for c in evidence['cases']]).delete()
+    from .feedback import refresh_search
+    refresh_search(captured)
     return revision
 
 
@@ -237,7 +334,7 @@ def _checked_cases(revision, evidence):
     cases = list(ResearchCase.objects.order_by('key'))
     if {c.key for c in cases} != {c['key'] for c in evidence['cases']} or any(c.revision != revision for c in cases):
         raise StaleProjection(revision)
-    return cases
+    return sorted(cases, key=lambda case: (-case.payload.get('research_priority', 0), case.key))
 
 
 def check_sources(evidence, case_key=None):
@@ -253,6 +350,8 @@ def check_sources(evidence, case_key=None):
 
 def display_region(view):
     """Map unrotated top-left normalized coordinates onto a prepared rotated page."""
+    if view.get('preview_crop'):
+        return {'x': 0, 'y': 0, 'width': 100, 'height': 100}
     x, y, w, h = view['region_xywh']
     rotations = {0: (x, y, w, h), 90: (1-y-h, x, h, w),
                  180: (1-x-w, 1-y-h, w, h), 270: (y, 1-x-w, h, w)}
@@ -260,7 +359,7 @@ def display_region(view):
     return dict(zip(('x', 'y', 'width', 'height'), (n*100 for n in rotations[view['rotation']])))
 
 
-def save_review(key, submitted, actor, case_key='photo'):
+def save_review(key, submitted, actor, case_key='photo', *, comparison_decision=False):
     """Replace one readable history file, then refresh its disposable projection."""
     with file_lock(settings.PILOT_ROOT / 'records/.research.lock'):
         evidence, history, current, revision = _snapshot()
@@ -273,6 +372,18 @@ def save_review(key, submitted, actor, case_key='photo'):
         check_sources(evidence, case_key)
         previous = next((r for r in current if r['key'] == key and assertion_case(r) == case_key), None)
         require(previous is not None, 'Unknown assertion')
+        require(not previous.get('component_assertions'), 'Review each photograph comparison separately')
+        require(previous['relation'] != PERSON_ATTRIBUTION, 'Use the person-attribution form to correct this record')
+        if comparison_decision:
+            pair = case.get('reproduction_pairs', {}).get(key)
+            require(pair is not None, 'An explicit photograph pair is required')
+            views = {v['key']: v for v in case['views']}
+            source, candidate = (views[pair[k]] for k in ('query_view_key', 'candidate_view_key'))
+            submitted = {**submitted,
+                'value': f"The photograph in {source['label'][:200]} is also shown in {candidate['label'][:200]}.",
+                'scope': 'Comparison of these two cited views only. A different exposure may still document the same event.',
+                'uncertainty': previous['uncertainty'],
+                'citation_keys': list(dict.fromkeys([*previous['citation_keys'], *pair.values()]))}
         require(isinstance(actor, str) and actor.strip(), 'Authenticated reviewer required')
         fields = {}
         for field, limit in TEXT_LIMITS.items():
@@ -290,6 +401,14 @@ def save_review(key, submitted, actor, case_key='photo'):
                   'revision': previous['revision'] + 1, 'supersedes_revision': previous['revision'],
                   'reviewer': actor, 'reviewed_at': datetime.now(timezone.utc).isoformat(),
                   'based_on_revision': revision, 'synthetic': case_synthetic(case, evidence), 'metadata_adopted': False}
+        pair = case.get('reproduction_pairs', {}).get(key)
+        if pair:
+            views = {v['key']: v for v in case['views']}
+            require(set(pair.values()) <= set(citations), 'Cite both photographs/pages in this comparison')
+            record['reproduction_pair'] = {'query': view_locator(views[pair['query_view_key']]),
+                                           'candidate': view_locator(views[pair['candidate_view_key']])}
+        validate_records(json.dumps(evidence).encode(),
+                         b''.join(json.dumps(r).encode()+b'\n' for r in history + [record]))
         return _append_record(record)
 
 

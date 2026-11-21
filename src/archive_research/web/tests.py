@@ -52,6 +52,661 @@ class PilotTests(TestCase):
         for url in ['/', '/cases/photo/', '/media/photo/report-figure/']:
             self.assertEqual(anon.get(url).status_code, 302)
 
+    def test_prepared_table_reading_escapes_cells_and_withholds_stale_or_invalid_data(self):
+        from .processing import binding, ocr_status
+        view = snapshot()[0]['cases'][0]['views'][0]
+        path = self.root / 'cache' / f"{view['key']}-ocr.json"
+        result = {'binding': binding(view), 'status': 'ready', 'text': '', 'note': '',
+                  'tables': [{'header': 'Raw heading', 'rows': [['<script>bad()</script>\nW/(m·K)', '']],
+                              'unassigned': 'Loose OCR words'}]}
+        path.write_text(json.dumps(result))
+        response = self.client.get('/cases/photo/')
+        self.assertContains(response, '&lt;script&gt;bad()&lt;/script&gt;')
+        self.assertNotContains(response, '<script>bad()</script>')
+        self.assertContains(response, '&lt;script&gt;bad()&lt;/script&gt;\nW/(m·K)</td>')
+        self.assertContains(response, 'vertical-align:top;white-space:pre-wrap')
+        self.assertContains(response, 'No words recovered')
+        self.assertContains(response, 'Loose OCR words')
+        self.assertEqual(ocr_status({**view, 'rotation': (view['rotation'] + 90) % 360})['status'], 'stale')
+        result['tables'][0]['rows'].append(['wrong width'])
+        path.write_text(json.dumps(result))
+        self.assertEqual(ocr_status(view)['status'], 'unavailable')
+        self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), self.original_assertions)
+
+    def test_handwriting_alternative_is_escaped_and_does_not_change_review(self):
+        from .processing import binding
+        view = snapshot()[0]['cases'][0]['views'][0]
+        result = {'binding': binding(view), 'status': 'ready', 'text': 'First reading',
+                  'note': 'Selected handwritten lines only.', 'blocks': [
+                      {'index': 0, 'text': 'First reading', 'display_region': [0, 0, 1, 1],
+                       'alternative_text': '<script>alternative</script>'}]}
+        (self.root / 'cache' / f"{view['key']}-ocr.json").write_text(json.dumps(result))
+        response = self.client.get('/cases/photo/')
+        self.assertContains(response, 'Alternative reading — check the scan')
+        self.assertContains(response, '&lt;script&gt;alternative&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alternative</script>')
+        self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), self.original_assertions)
+
+    def test_search_highlights_caption_and_escapes_source_markup(self):
+        from collections import Counter
+        from archive_research.search_projection import base_entry, seal, tokens, FORMAT
+        text = 'Page opening. ' * 100 + '<script>alert(1)</script> Pumpstraße im Werk.'
+        entry = base_entry('a'*64, 'extraction', {'unit': 'synthetic', 'object_id': 'page'}, {}, {'text': text}, {})
+        counts = Counter(tokens(' '.join(entry['fields'].values())))
+        entry['token_count'] = sum(counts.values())
+        projection = seal({'format': FORMAT, 'metadata_adopted': False, 'entries': [entry],
+                           'postings': {word: [[0, count]] for word, count in counts.items()},
+                           'coverage': {}, 'unavailable': [], 'refreshed_at': 'synthetic'})
+        with override_settings(PROJECT={'mode': 'synthetic', 'research_index': 'synthetic.json'}), \
+             patch('archive_research.web.extraction.search_projection', return_value=(None, projection)):
+            response = self.client.get('/research/', {'q': 'Pumpstrasse'})
+        self.assertContains(response, '<mark>Pumpstraße</mark>', html=True)
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
+
+    def prepare_people_case(self):
+        from copy import deepcopy
+        evidence, _, current, _ = snapshot()
+        case = deepcopy(evidence['cases'][0])
+        case.update(key='people', title='Invented documentary attribution fixture')
+        first, second = [v['key'] for v in case['views'][:2]]
+        case['documentary_target_view'] = first
+        case['documentary_people'] = [
+            {'key': 'ada', 'name': 'Ada Example', 'reason': 'Named in the invented workshop attendance list.',
+             'context': {'event': 'Workshop', 'date': '1967-03-06', 'department': 'Assembly'},
+             'citation_keys': [second], 'uncertainty': 'Attendance does not establish depiction.',
+             'portraits': [{'view_key': second, 'caption': 'Invented illustration, not a real portrait.',
+                           'citation_keys': [second]}]},
+            {'key': 'berta', 'name': 'Bärta Example', 'reason': 'Named in an invented catalogue caption.',
+             'context': {'event': 'Award', 'date': '1955-10', 'department': 'Accounts'},
+             'citation_keys': [second], 'uncertainty': 'No portrait prepared.', 'portraits': []}]
+        evidence['cases'].append(case)
+        initial = {**current[0], 'case_key': 'people', 'key': 'context', 'relation': 'research_assessment',
+                   'subject': 'people', 'revision': 0, 'supersedes_revision': None}
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        with (self.root/'records/assertions.jsonl').open('ab') as handle:
+            handle.write(json.dumps(initial).encode()+b'\n')
+        rebuild()
+        return {'revision': snapshot()[3], 'attribution_key': '', 'target_view_key': first,
+                'position': 'Second from the left', 'candidate_key': 'ada', 'review': 'accepted',
+                'reason': 'Invented reviewer reasoning, distinct from the attendance record.',
+                'uncertainty': 'Tentative; documentary context alone is insufficient.', 'citation_keys': [first]}
+
+    def test_documentary_people_filters_text_and_does_not_assign_names(self):
+        from .people import candidates
+        self.prepare_people_case()
+        case = snapshot()[0]['cases'][-1]
+        self.assertEqual([p['key'] for p in candidates(case, 'workshop 1967 assembly')], ['ada'])
+        self.assertEqual([p['key'] for p in candidates(case, 'barta')], ['berta'])
+        self.assertEqual(candidates(case, 'unmentioned'), [])
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        response = self.client.get('/cases/people/people/')
+        for text in ['Why this person is a candidate', 'Documented portrait attribution',
+                     'No independently documented portrait', 'No reviewer attribution has been saved']:
+            self.assertContains(response, text)
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+        self.assertContains(self.client.get('/cases/people/people/?q=unknown'), 'does not establish that the person was absent')
+
+    def test_person_attribution_add_correct_and_leave_unresolved_preserves_history(self):
+        from .people import save_attribution
+        data = self.prepare_people_case()
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        save_attribution('people', data, 'operator')
+        self.assertTrue((self.root/'records/assertions.jsonl').read_bytes().startswith(before))
+        record = snapshot()[2][-1]
+        self.assertEqual(record['reviewer'], 'operator')
+        self.assertTrue(record['reviewed_at'])
+        self.assertFalse(record['metadata_adopted'])
+        detail = record['person_attribution']
+        self.assertNotEqual(record['reason'], detail['candidate']['reason'])
+        self.assertEqual(set(record['citation_keys']), {v['key'] for v in detail['evidence_views']})
+        self.assertIn(detail['candidate']['citation_keys'][0], record['citation_keys'])
+        with self.assertRaisesRegex(ReviewError, 'Records changed'):
+            save_attribution('people', data, 'operator')
+        data.update(revision=snapshot()[3], attribution_key=record['key'], candidate_key='', review='unresolved')
+        save_attribution('people', data, 'second-reviewer')
+        latest = snapshot()[2][-1]
+        self.assertEqual(latest['revision'], 1)
+        self.assertIsNone(latest['person_attribution']['candidate'])
+        self.assertEqual(latest['reviewer'], 'second-reviewer')
+        self.assertEqual(snapshot()[1][-2], record)
+        self.assertContains(self.client.get('/cases/people/people/'), 'Attribution history · 2 revisions')
+        with self.assertRaisesRegex(ReviewError, 'person-attribution form'):
+            save_review(record['key'], {**latest, 'revision': snapshot()[3]}, 'operator', case_key='people')
+
+    def test_person_attribution_rejects_unknown_fields_and_changed_sources_without_writes(self):
+        from .people import save_attribution
+        data = self.prepare_people_case()
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        for changes in [{'candidate_key': 'invented-unknown'}, {'candidate_key': ''}, {'position': ''},
+                        {'reason': ''}, {'citation_keys': ['unknown']}, {'attribution_key': 'context'},
+                        {'target_view_key': 'unknown'}]:
+            with self.subTest(changes=changes), self.assertRaises(ReviewError):
+                save_attribution('people', {**data, **changes}, 'operator')
+        with patch('archive_research.web.records.check_sources', side_effect=ReviewError('Source changed')):
+            self.assertEqual(self.client.post('/cases/people/people/', data).status_code, 409)
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+
+    def test_person_attribution_access_and_stale_draft(self):
+        from .people import save_attribution
+        data = self.prepare_people_case()
+        url = '/cases/people/people/'
+        self.assertEqual(Client().get(url).status_code, 302)
+        csrf = Client(enforce_csrf_checks=True)
+        csrf.force_login(self.user)
+        self.assertEqual(csrf.post(url, data).status_code, 403)
+        save_attribution('people', data, 'operator')
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        response = self.client.post(url, {**data, 'reason': 'My retained stale draft'})
+        self.assertContains(response, 'My retained stale draft', status_code=409)
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+        self.user.is_staff = False
+        self.user.save()
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_person_attribution_projection_failure_is_saved_once(self):
+        data = self.prepare_people_case()
+        before = len(snapshot()[1])
+        with patch('archive_research.web.records._project', side_effect=RuntimeError('test failure')):
+            response = self.client.post('/cases/people/people/', data)
+        self.assertContains(response, 'Do not submit again', status_code=503)
+        self.assertEqual(len(snapshot()[1]), before+1)
+        rebuild()
+        self.assertEqual(self.client.post('/cases/people/people/', data).status_code, 409)
+        self.assertEqual(len(snapshot()[1]), before+1)
+
+    def test_person_attribution_read_only_and_candidate_citation_validation(self):
+        from .people import save_attribution
+        data = self.prepare_people_case()
+        evidence = snapshot()[0]
+        evidence['cases'][-1]['read_only'] = True
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        rebuild()
+        with self.assertRaisesRegex(ReviewError, 'read-only'):
+            save_attribution('people', {**data, 'revision': snapshot()[3]}, 'operator')
+        self.assertNotContains(self.client.get('/cases/people/people/'), 'Save attribution')
+        evidence['cases'][-1]['documentary_people'][0]['citation_keys'] = ['not-a-source']
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        with self.assertRaisesRegex(ReviewError, 'documentary citations'):
+            snapshot()
+
+    def prepare_comparison_case(self):
+        self.prepare_people_case()
+        evidence, history, current, _ = snapshot()
+        selected = evidence['cases'][-1]
+        first, second = [v['key'] for v in selected['views'][:2]]
+        selected['reproduction_pairs'] = {'context': {'query_view_key': second, 'candidate_view_key': first}}
+        history[-1].update(relation='reproduced_in', review='unreviewed', reviewer=None, reviewed_at=None,
+                           value='Distinctive fixture reproduction proposal', citation_keys=[first, second])
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        atomic_write(self.root/'records/assertions.jsonl', b''.join(json.dumps(r).encode()+b'\n' for r in history))
+        rebuild()
+        record = snapshot()[2][-1]
+        return {**{k: record[k] for k in ('value', 'scope', 'uncertainty', 'citation_keys')},
+                'revision': snapshot()[3], 'review': 'rejected', 'reason': 'Different photograph.',
+                'people_workspace': '1', 'mode': 'matches', 'target_view_key': first}
+
+    def prepare_documentary_overview(self):
+        self.prepare_people_case()
+        evidence, history, _, _ = snapshot()
+        case = evidence['cases'][-1]
+        first, second = [v['key'] for v in case['views'][:2]]
+        case['documentary_overview'] = {
+            'event': 'Invented founding event', 'date': '1967-03-06',
+            'photographs': [{'view_key': key, 'people_count': count, 'count_source': 'Fixture observer count'}
+                            for key, count in [(first, 8), (second, 5)]],
+            'documents': [{'view_key': key, 'label': label, 'note': 'Separate source reading',
+                           'additional_mentions': ''} for key, label in [(first, 'Newspaper'), (second, 'Diary')]],
+            'mentions': [{'candidate_key': 'ada', 'assertion_key': 'context', 'sources': [
+                {'view_key': first, 'wording': 'Ada Example', 'qualification': 'Printed full name'}]}]}
+        history[-1].update(relation='names_event_participant', review='unreviewed', reviewer=None,
+                           reviewed_at=None, value='Ada Example is named as an event participant.',
+                           citation_keys=[first, second])
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        atomic_write(self.root/'records/assertions.jsonl', b''.join(json.dumps(r).encode()+b'\n' for r in history))
+        rebuild()
+        return first, second
+
+    def prepare_grouped_comparisons(self):
+        from copy import deepcopy
+        self.prepare_comparison_case()
+        evidence, history, _, _ = snapshot()
+        case = evidence['cases'][-1]
+        first, second = [v['key'] for v in case['views'][:2]]
+        third = deepcopy(case['views'][0])
+        third.update(key='another-candidate', label='Another invented reproduction', region_xywh=[0, 0, .5, .5])
+        case['views'].append(third)
+        case['reproduction_pairs'] = {
+            key: {'query_view_key': second, 'candidate_view_key': view}
+            for key, view in [('pair-a', first), ('pair-b', third['key'])]}
+        original = deepcopy(history[-1])
+        history[-1]['component_assertions'] = ['pair-a', 'pair-b']
+        history.extend([{**original, 'key': key, 'citation_keys': [second, view]}
+                        for key, view in [('pair-a', first), ('pair-b', third['key'])]])
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        atomic_write(self.root/'records/assertions.jsonl', b''.join(json.dumps(r).encode()+b'\n' for r in history))
+        rebuild()
+
+    def prepare_finding_views(self):
+        from copy import deepcopy
+        self.prepare_people_case()
+        evidence, history, _, _ = snapshot()
+        case = evidence['cases'][-1]
+        first, second = [v['key'] for v in case['views'][:2]]
+        full = deepcopy(case['views'][0])
+        full.update(key='full-source-page', label='Full source page', region_xywh=[0, 0, 1, 1], preview_crop=False)
+        case['views'].append(full)
+        case['finding_views'] = {
+            'context': {'question': 'Do these documents concern the same event?',
+                        'source_view': first, 'evidence_view': second,
+                        'source_context': [full['key']], 'evidence_context': []},
+            'other-question': {'question': 'What names does this passage document?',
+                               'source_view': second, 'evidence_view': first,
+                               'source_context': [], 'evidence_context': [full['key']]}}
+        history[-1].update(citation_keys=[first, second], review='unreviewed', reviewer=None, reviewed_at=None)
+        history.append({**history[-1], 'key': 'other-question'})
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        atomic_write(self.root/'records/assertions.jsonl', b''.join(json.dumps(r).encode()+b'\n' for r in history))
+        rebuild()
+        return first, second
+
+    def test_question_selects_fixed_sources_and_full_page_inspection(self):
+        first, second = self.prepare_finding_views()
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        for key, left, right in [('context', first, second), ('other-question', second, first)]:
+            response = self.client.get('/cases/people/', {'assertion': key})
+            self.assertEqual(response.context['assertion']['key'], key)
+            focus = response.context['finding_focus']
+            self.assertEqual((focus['anchor']['key'], focus['evidence']['key']), (left, right))
+            self.assertContains(response, focus['question'])
+            self.assertNotContains(response, 'id="anchor-select"')
+            self.assertNotContains(response, 'id="evidence-select"')
+            self.assertNotContains(response, 'aria-label="Choose comparison evidence"')
+            self.assertContains(response, 'Full page')
+            self.assertContains(response, 'data-inspect-index=')
+            self.assertNotContains(response, 'data-view="2"')
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+
+    def test_fixed_question_save_and_stale_draft_keep_finding_binding(self):
+        self.prepare_finding_views()
+        row = next(r for r in snapshot()[2] if r.get('case_key') == 'people' and r['key'] == 'context')
+        data = {**{k: row[k] for k in ('value', 'scope', 'uncertainty', 'citation_keys')},
+                'workspace': '1', 'revision': snapshot()[3], 'review': 'accepted', 'reason': 'Checked event evidence.'}
+        response = self.client.post('/cases/people/review/context/', data)
+        self.assertEqual(response.status_code, 302)
+        page = self.client.get(response.url)
+        self.assertEqual(page.context['assertion']['key'], 'context')
+        self.assertEqual(page.context['finding_focus']['source_view'], 'photo-view')
+        other = next(r for r in snapshot()[2] if r.get('case_key') == 'people' and r['key'] == 'other-question')
+        self.assertEqual(other['review'], 'unreviewed')
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        response = self.client.post('/cases/people/review/context/', {**data, 'reason': 'Keep my stale draft'})
+        self.assertContains(response, 'Keep my stale draft', status_code=409)
+        self.assertEqual(response.context['finding_focus']['source_view'], 'photo-view')
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+
+    def test_finding_inspection_rejects_unrelated_or_uncited_sources(self):
+        from copy import deepcopy
+        from .records import validate_records
+        self.prepare_finding_views()
+        evidence = snapshot()[0]
+        history = (self.root/'records/assertions.jsonl').read_bytes()
+        for field, value, message in [('source_view', 'absent', 'Unknown finding'),
+                                      ('source_view', 'patent-passage', 'cited source page'),
+                                      ('source_context', ['report-figure'], 'fixed source page')]:
+            with self.subTest(field=field, value=value):
+                changed = deepcopy(evidence)
+                changed['cases'][-1]['finding_views']['context'][field] = value
+                with self.assertRaisesRegex(ReviewError, message):
+                    validate_records(json.dumps(changed).encode(), history)
+
+    def test_fixed_question_rejects_arbitrary_report_page(self):
+        from .records import validate_records
+        self.prepare_finding_views()
+        evidence = snapshot()[0]
+        evidence['cases'][-1]['finding_views']['context']['evidence_pages'] = ['patent-passage']
+        with self.assertRaisesRegex(ReviewError, 'Report navigation'):
+            validate_records(json.dumps(evidence).encode(), (self.root/'records/assertions.jsonl').read_bytes())
+
+    def test_fixed_reproduction_question_preserves_pair_and_hides_other_candidates(self):
+        self.prepare_grouped_comparisons()
+        evidence = snapshot()[0]
+        case = evidence['cases'][-1]
+        case['finding_views'] = {
+            key: {'question': 'Is this photograph reproduced here?',
+                  'source_view': pair['query_view_key'], 'evidence_view': pair['candidate_view_key'],
+                  'source_context': [], 'evidence_context': []}
+            for key, pair in case['reproduction_pairs'].items()}
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        rebuild()
+        response = self.client.get('/cases/people/')
+        self.assertEqual(response.context['assertion']['key'], 'pair-a')
+        self.assertEqual([c['key'] for c in response.context['comparison']['candidates']], ['pair-a'])
+        self.assertEqual([a['key'] for a in response.context['finding_links']], ['pair-a', 'pair-b'])
+        self.assertContains(response, 'data-fixed-comparison="true"')
+        self.assertNotContains(response, 'id="evidence-select"')
+
+    def test_fixed_report_question_allows_only_its_cited_pages(self):
+        from copy import deepcopy
+        first, second = self.prepare_finding_views()
+        evidence, history, _, _ = snapshot()
+        case = evidence['cases'][-1]
+        original = next(v for v in case['views'] if v['key'] == second)
+        original['source'] = {**original['source'], 'path': 'report.pdf'}
+        original['page_sequence'] = 1
+        original['page_count'] = 2
+        page = deepcopy(original)
+        page.update(key='report-page-two', page_sequence=2)
+        case['views'].append(page)
+        case['finding_views']['context']['evidence_pages'] = [page['key']]
+        for row in history:
+            if row.get('case_key') == 'people' and row['key'] == 'context':
+                row['citation_keys'].append(page['key'])
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        atomic_write(self.root/'records/assertions.jsonl', b''.join(json.dumps(r).encode()+b'\n' for r in history))
+        rebuild()
+        response = self.client.get('/cases/people/', {'assertion': 'context'})
+        self.assertContains(response, 'id="report-page-select"')
+        self.assertNotContains(response, 'id="anchor-select"')
+        self.assertEqual([v['key'] for v in response.context['finding_focus']['evidence_views']], [second, page['key']])
+
+    def test_retired_case_redirect_preserves_historical_citations(self):
+        self.prepare_finding_views()
+        evidence = snapshot()[0]
+        evidence['cases'][-1].update(read_only=True, superseded_by='photo')
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        rebuild()
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        response = self.client.get('/cases/people/')
+        self.assertRedirects(response, '/cases/photo/')
+        historical = self.client.get('/cases/people/', {'revision': snapshot()[3]})
+        self.assertEqual(historical.status_code, 200)
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+
+    def test_fixed_view_script_switches_only_local_inspection_and_reading(self):
+        import shutil
+        if not shutil.which('node'):
+            self.skipTest('Node is required for the workspace interaction check')
+        script = Path(__file__).with_name('templates').joinpath('research_web/workspace_script.html').read_text()
+        script = script.removeprefix('<script>').strip().removesuffix('</script>')
+        fixture = r'''
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+function element(dataset = {}, value = '') {
+  return {dataset, value, hidden: false, textContent: '', attrs: {}, events: {},
+    classList: {toggle() {}, contains() {return false;}},
+    setAttribute(k,v) {this.attrs[k] = v;},
+    addEventListener(k,fn) {this.events[k] = fn;}, querySelector() {return null;}};
+}
+const anchor = element({picker:'anchor'}, '0'), evidence = element({picker:'evidence'}, '2');
+const panes = [0,1,2,3].map(i => element({pane:i < 2 ? 'anchor':'evidence', view:String(i)}));
+const reading = [0,1,2,3].map(i => element({reading:String(i), readingSide:i < 2 ? 'anchor':'evidence'}));
+const catalogue = ['anchor','evidence'].flatMap(side => [0,1,2,3].map(i => element({catalogueSide:side, catalogueView:String(i)})));
+const inspection = [0,1,2,3].map(i => element({inspectSide:i < 2 ? 'anchor':'evidence', inspectIndex:String(i), label:'View '+i}));
+const modes = ['single','compare'].map(mode => element({mode}));
+const labels = {anchor:element(), evidence:element()};
+const mark = {style:{}, hidden:true, offsetLeft:10, offsetTop:20, offsetWidth:30, offsetHeight:10};
+const zoom = element({}, '100'), scroll = {clientWidth:100, clientHeight:100, scrollTo(value) {this.last=value;}};
+const block = element();
+const passage = element({readingTarget:'anchor', readingView:'1', x:'70', y:'10', width:'10', height:'30'});
+passage.closest = () => block;
+panes[1].querySelector = selector => ({'img':{naturalWidth:0}, '.viewer-scroll':scroll,
+  '.text-region':mark, '[data-zoom]':zoom}[selector] || null);
+const selectors = {'[data-picker="anchor"]':anchor, '[data-picker="evidence"]':evidence,
+  '.workspace-viewers':element(), '[data-enlarge]':element(), '[data-toggle-queue]':element(),
+  '.workspace-queue':element(), '[data-focused-label="anchor"]':labels.anchor,
+  '[data-focused-label="evidence"]':labels.evidence};
+const groups = {'[data-pane]':panes, '[data-reading]':reading, '[data-inspect-side]':inspection, '[data-mode]':modes, '[data-catalogue-side]':catalogue, '[data-show-text-region]':[passage]};
+const root = element();
+root.querySelector = selector => selectors[selector] || null;
+root.querySelectorAll = selector => groups[selector] || [];
+vm.runInNewContext(SCRIPT, {document:{getElementById:() => root}, window:{}, URL});
+assert.deepEqual(panes.map(p => p.hidden), [false,true,false,true]);
+assert.deepEqual(catalogue.filter(p => !p.hidden).map(p => p.dataset.catalogueView), ['0','2']);
+inspection[1].events.click();
+assert.equal(anchor.value, '1'); assert.equal(evidence.value, '2');
+assert.equal(labels.anchor.textContent, 'View 1');
+assert.equal(inspection[1].attrs['aria-pressed'], 'true');
+passage.events.click();
+assert.equal(mark.hidden, false); assert.equal(mark.style.left, '70%');
+assert.equal(mark.style.top, '10%'); assert.equal(zoom.value, '200');
+assert.equal(passage.attrs['aria-pressed'], 'true');
+assert.equal(scroll.last.top, -25);
+inspection[3].events.click();
+assert.equal(evidence.value, '3'); assert.equal(anchor.value, '1');
+assert.deepEqual(panes.map(p => p.hidden), [true,false,true,false]);
+assert.deepEqual(reading.map(p => p.hidden), [true,false,true,false]);
+assert.deepEqual(catalogue.filter(p => !p.hidden).map(p => p.dataset.catalogueView), ['1','3']);
+modes[0].events.click();
+assert.deepEqual(reading.map(p => p.hidden), [true,false,true,true]);
+assert.deepEqual(catalogue.filter(p => !p.hidden).map(p => p.dataset.catalogueView), ['1']);
+inspection[0].events.click();
+assert.deepEqual(reading.map(p => p.hidden), [false,true,true,true]);
+'''
+        result = subprocess.run(['node'], input='const SCRIPT = '+json.dumps(script)+';\n'+fixture,
+                                text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_fixed_source_comparisons_work_without_documentary_people_or_case_specific_code(self):
+        self.prepare_grouped_comparisons()
+        evidence = snapshot()[0]
+        evidence['cases'][-1].pop('documentary_people')
+        atomic_write(self.root/'records/evidence.json', json.dumps(evidence).encode())
+        rebuild()
+        response = self.client.get('/cases/people/')
+        for text in ['Source · fixed reference', 'Compare with', '>Match</button>', '>Not a match</button>',
+                     'Uncertain', 'Another invented reproduction', 'No reproduction has been confirmed yet']:
+            self.assertContains(response, text)
+        self.assertNotContains(response, 'id="anchor-select"')
+        self.assertContains(response, 'id="evidence-select"')
+        self.assertContains(response, 'data-comparison-key=', count=2)
+        self.assertContains(response, 'class="workspace-shell"')
+        self.assertContains(response, 'class="workspace-queue"')
+        self.assertContains(response, 'class="workspace-drawer"')
+        self.assertNotContains(response, 'name="value"')
+        self.assertContains(response, 'name="comparison_workspace"', count=2)
+
+    def test_pair_decision_generates_finding_and_does_not_review_sibling_or_combined_claim(self):
+        self.prepare_grouped_comparisons()
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        data = {'comparison_workspace': '1', 'revision': snapshot()[3], 'review': 'accepted',
+                'reason': 'Same scene details and crop.', 'value': 'Forged aggregate claim',
+                'citation_keys': ['unknown']}
+        response = self.client.post('/cases/people/review/pair-a/', data)
+        self.assertEqual(response.status_code, 302)
+        current = {r['key']: r for r in snapshot()[2] if r.get('case_key') == 'people'}
+        self.assertEqual(current['pair-a']['review'], 'accepted')
+        self.assertNotIn('Forged', current['pair-a']['value'])
+        self.assertIn('also shown in', current['pair-a']['value'])
+        self.assertIn('reproduction_pair', current['pair-a'])
+        self.assertEqual(current['pair-b']['review'], 'unreviewed')
+        self.assertEqual(current['context']['review'], 'unreviewed')
+        self.assertTrue((self.root/'records/assertions.jsonl').read_bytes().startswith(before))
+        data.update(revision=snapshot()[3], review='rejected')
+        self.assertEqual(self.client.post('/cases/people/review/pair-b/', data).status_code, 302)
+        response = self.client.get('/cases/people/')
+        self.assertContains(response, 'This photograph is also shown in:')
+        self.assertContains(response, 'Different photograph:')
+        self.assertNotContains(response, '2 comparisons still open')
+        reviewed = self.client.get('/cases/people/?state=reviewed')
+        self.assertFalse(next(r for r in reviewed.context['queue'] if r['key'] == 'people')['outside_filter'])
+        data.update(revision=snapshot()[3])
+        with self.assertRaisesRegex(ReviewError, 'separately'):
+            save_review('context', data, 'operator', case_key='people')
+
+    def test_pair_stale_note_is_retained_and_changed_source_is_refused(self):
+        self.prepare_grouped_comparisons()
+        data = {'comparison_workspace': '1', 'revision': snapshot()[3], 'review': 'accepted', 'reason': ''}
+        self.assertEqual(self.client.post('/cases/people/review/pair-a/', data).status_code, 302)
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        response = self.client.post('/cases/people/review/pair-b/', {**data, 'reason': 'My stale comparison note'})
+        self.assertContains(response, 'My stale comparison note', status_code=409)
+        self.assertContains(response, 'This submission was not saved', status_code=409)
+        with patch('archive_research.web.records.check_sources', side_effect=ReviewError('Source changed')):
+            response = self.client.post('/cases/people/review/pair-b/', {**data, 'revision': snapshot()[3]})
+            self.assertEqual(response.status_code, 409)
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+
+    def test_candidate_dropdown_retains_each_decision_and_context_finding(self):
+        self.prepare_grouped_comparisons()
+        evidence, history, current, _ = snapshot()
+        row = next(r for r in current if r.get('case_key') == 'people' and r['key'] == 'pair-a')
+        history.append({**row, 'key': 'technical-context', 'relation': 'documented_technical_context',
+                        'value': 'Independent technical context', 'revision': 0, 'supersedes_revision': None})
+        atomic_write(self.root/'records/assertions.jsonl', b''.join(json.dumps(r).encode()+b'\n' for r in history))
+        rebuild()
+        url = '/cases/people/?assertion=technical-context'
+        for key, review in [('pair-a', 'accepted'), ('pair-b', 'rejected')]:
+            data = {'comparison_workspace': '1', 'return_assertion': 'technical-context',
+                    'revision': snapshot()[3], 'review': review, 'reason': ''}
+            response = self.client.post(f'/cases/people/review/{key}/', data)
+            self.assertEqual(response.url, url+'&comparison='+key)
+            page = self.client.get(response.url)
+            self.assertContains(page, 'id="workspace-review"')
+            self.assertEqual(page.context['assertion']['key'], 'technical-context')
+            selected = next(c for c in page.context['comparison']['candidates'] if c['active'])
+            self.assertEqual((selected['key'], selected['record']['review']), (key, review))
+        for key, review in [('pair-a', 'accepted'), ('pair-b', 'rejected')]:
+            page = self.client.get(url+'&comparison='+key)
+            selected = next(c for c in page.context['comparison']['candidates'] if c['active'])
+            self.assertEqual(selected['record']['review'], review)
+        self.assertEqual(next(r for r in snapshot()[2] if r['key'] == 'technical-context')['review'], 'unreviewed')
+
+    def test_event_overview_separates_document_mentions_and_photo_counts(self):
+        self.prepare_documentary_overview()
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        response = self.client.get('/cases/people/people/')
+        for text in ['One event, different records', '8 people in this photograph', '5 people in this photograph',
+                     'Fixture observer count', 'Not named in this selected passage', 'Confirm name / role']:
+            self.assertContains(response, text)
+        self.assertNotContains(response, 'name="position"')
+        self.assertNotContains(response, 'name="candidate_key"')
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+        self.assertContains(self.client.get('/cases/people/people/?mode=people'), 'name="position"')
+        self.assertEqual(self.client.post('/cases/people/people/?mode=documents', {'mode': 'documents'}).status_code, 405)
+
+    def test_documentary_confirmation_needs_no_position_and_keeps_stale_draft(self):
+        self.prepare_documentary_overview()
+        row = snapshot()[2][-1]
+        data = {**{k: row[k] for k in ('value', 'scope', 'uncertainty', 'citation_keys')},
+                'reason': '', 'review': 'accepted', 'revision': snapshot()[3], 'documentary_workspace': '1'}
+        response = self.client.post('/cases/people/review/context/', data)
+        self.assertRedirects(response, '/cases/people/people/?mode=documents#documented-names')
+        current = snapshot()[2][-1]
+        self.assertEqual(current['relation'], 'names_event_participant')
+        self.assertEqual(current['review'], 'accepted')
+        self.assertEqual(current['reviewer'], 'operator')
+        self.assertNotIn('person_attribution', current)
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        stale = self.client.post('/cases/people/review/context/', {**data, 'reason': 'Retain source reading note'})
+        self.assertContains(stale, 'Retain source reading note', status_code=409)
+        self.assertContains(stale, 'name="documentary_workspace"', status_code=409)
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+
+    def test_overview_rejects_unbound_sources_and_counts_without_provenance(self):
+        from copy import deepcopy
+        from .records import validate_records
+        self.prepare_documentary_overview()
+        evidence = snapshot()[0]
+        history = (self.root/'records/assertions.jsonl').read_bytes()
+        for mutation in ['unknown_source', 'missing_count_source', 'unknown_finding', 'uncited_source']:
+            changed = deepcopy(evidence)
+            checked_history = history
+            overview = changed['cases'][-1]['documentary_overview']
+            if mutation == 'unknown_source':
+                overview['mentions'][0]['sources'][0]['view_key'] = 'unbound'
+            elif mutation == 'missing_count_source':
+                overview['photographs'][0]['count_source'] = ''
+            elif mutation == 'unknown_finding':
+                overview['mentions'][0]['assertion_key'] = 'unbound'
+            else:
+                rows = [json.loads(line) for line in history.splitlines()]
+                rows[-1]['citation_keys'] = [overview['documents'][1]['view_key']]
+                checked_history = b''.join(json.dumps(row).encode()+b'\n' for row in rows)
+            with self.subTest(mutation=mutation), self.assertRaises(ReviewError):
+                validate_records(json.dumps(changed).encode(), checked_history)
+
+    def test_documentary_review_cannot_remove_required_source_or_damage_history(self):
+        _, second = self.prepare_documentary_overview()
+        row = snapshot()[2][-1]
+        data = {**{k: row[k] for k in ('value', 'scope', 'uncertainty')},
+                'reason': '', 'review': 'accepted', 'revision': snapshot()[3], 'citation_keys': [second]}
+        before = (self.root/'records/assertions.jsonl').read_bytes()
+        response = self.client.post('/cases/people/review/context/', data)
+        self.assertContains(response, 'must cite every displayed name source', status_code=409)
+        self.assertEqual(before, (self.root/'records/assertions.jsonl').read_bytes())
+        snapshot()
+
+    def test_reproduction_review_updates_queue_and_correction_restores_pair(self):
+        data = self.prepare_comparison_case()
+        url = '/cases/people/people/?mode=matches'
+        self.assertContains(self.client.get(url), 'Confirm match')
+        response = self.client.post('/cases/people/review/context/', data)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('mode=matches', response.url)
+        latest = snapshot()[2][-1]
+        self.assertEqual(set(latest['reproduction_pair']), {'query', 'candidate'})
+        response = self.client.get(url)
+        self.assertContains(response, '1 rejected comparison hidden')
+        self.assertNotContains(response, 'Confirm match')
+        self.assertContains(self.client.get(url+'&show_rejected=1'), 'Confirm match')
+        stale = self.client.post('/cases/people/review/context/', {**data, 'reason': 'Retain my comparison draft'})
+        self.assertContains(stale, 'Retain my comparison draft', status_code=409)
+        data.update(revision=snapshot()[3], review='accepted', show_rejected='1')
+        self.assertEqual(self.client.post('/cases/people/review/context/', data).status_code, 302)
+        self.assertContains(self.client.get(url), 'Confirm match')
+        self.assertEqual(snapshot()[2][-1]['review'], 'accepted')
+
+    def test_save_refreshes_selected_search_without_reextracting_and_recovers_failure(self):
+        import hashlib
+        from types import SimpleNamespace
+        from archive_research.search_projection import seal, FORMAT, query
+        from archive_research.web.feedback import refresh_search
+        data = self.prepare_comparison_case()
+        history = self.root/'records/assertions.jsonl'
+        spec = {'unit': 'fixture', 'object_id': 'history', 'representation': 'history', 'root': 'records',
+                'path': 'assertions.jsonl', 'size_bytes': history.stat().st_size,
+                'mtime_ns': history.stat().st_mtime_ns, 'sha256': hashlib.sha256(history.read_bytes()).hexdigest()}
+        path = self.root/'cache/reviews-index.json'
+        value = seal({'format': FORMAT, 'metadata_adopted': False, 'selection': {'findings': [spec]},
+                      'entries': [], 'postings': {}, 'unavailable': [], 'coverage': {}, 'refreshed_at': 'fixture'})
+        path.write_text(json.dumps(value))
+        roots = SimpleNamespace(root=lambda name, access: self.root/('records' if name == 'records' else 'cache'))
+        loader = lambda **kwargs: (roots, json.loads(path.read_text()))
+        with override_settings(PROJECT={'mode': 'synthetic', 'research_index': path.name}), \
+             patch('archive_research.web.extraction.search_projection', side_effect=loader):
+            self.assertEqual(self.client.post('/cases/people/review/context/', data).status_code, 302)
+            indexed = json.loads(path.read_text())
+            self.assertEqual(indexed['review_feedback'][0]['review'], 'rejected')
+            self.assertEqual(query(indexed, 'Distinctive fixture reproduction')['hits'], [])
+            before = len(snapshot()[1])
+            data.update(revision=snapshot()[3], review='accepted')
+            with patch('archive_research.web.feedback.atomic_write', side_effect=OSError('index unavailable')):
+                self.assertEqual(self.client.post('/cases/people/review/context/', data).status_code, 503)
+            self.assertEqual(len(snapshot()[1]), before+1)
+
+            rebuild()
+            self.assertEqual(query(json.loads(path.read_text()), 'Distinctive fixture reproduction')['hits'][0]['review'], 'accepted')
+            self.assertEqual(len(snapshot()[1]), before+1)
+
+    def test_stale_finding_search_offers_existing_rebuild_action(self):
+        from types import SimpleNamespace
+        from archive_research.search_projection import seal, FORMAT
+        self.prepare_comparison_case()
+        spec = {'unit': 'fixture', 'object_id': 'history', 'representation': 'history', 'root': 'records',
+                'path': 'assertions.jsonl', 'size_bytes': 1, 'mtime_ns': 1, 'sha256': '0'*64}
+        path = self.root/'cache/stale-index.json'
+        path.write_text(json.dumps(seal({'format': FORMAT, 'metadata_adopted': False,
+            'selection': {'findings': [spec]}, 'entries': [], 'postings': {}, 'coverage': {}, 'unavailable': []})))
+        roots = SimpleNamespace(root=lambda name, access: self.root/('records' if name == 'records' else 'cache'))
+        with override_settings(PROJECT={'mode': 'synthetic', 'research_index': path.name,
+                                        'extraction_roots': str(self.root/'roots.toml')}), \
+             patch('archive_research.Roots.from_toml', return_value=roots):
+            response = self.client.get('/research/?q=example')
+        self.assertContains(response, 'Saved reviews are ahead of search', status_code=409)
+        self.assertContains(response, 'Rebuild browsing', status_code=409)
+        self.assertContains(response, snapshot()[3], status_code=409)
+
     def test_real_login_logout_and_csrf(self):
         client = Client(enforce_csrf_checks=True)
         self.assertEqual(client.post('/login/', {'username': 'operator', 'password': 'fixture-only-password'}).status_code, 403)
@@ -261,7 +916,56 @@ class PilotTests(TestCase):
         atomic_write(path, json.dumps(cached).encode())
         response = self.client.get('/cases/photo/')
         self.assertNotContains(response, 'OCR evidence')
-        self.assertContains(response, 'Text preparation is incomplete')
+        self.assertContains(response, 'No usable text is available')
+
+    def test_workspace_existing_catalogue_is_bound_escaped_and_separate_from_findings(self):
+        from archive_research.search_projection import base_entry
+        from .workspace import catalogue_context
+        from archive_research.search_projection import catalogue_lookup
+        views = snapshot()[0]['cases'][0]['views']
+        entries = []
+        for i, view in enumerate(views[:2]):
+            entries.append(base_entry('catalogue:' + str(i), 'catalogue',
+                {'unit': 'invented', 'object_id': str(i)}, {},
+                {'title': 'Recorded title '+str(i), 'description': '<script>catalogue only</script>',
+                 'date_text': '1955' if i == 0 else '1956', 'creator': 'Ada Example', 'inventory': 'INV-'+str(i)},
+                {'catalogue': {'root': view['source'].get('root', 'sample')},
+                 'catalogue_label': 'Invented catalogue', 'representation_paths': [view['source']['path']]}))
+        projection = {'entries': entries}
+        lookup = catalogue_lookup(projection)
+        self.assertFalse(catalogue_context({'source': {'root': 'wrong-root', 'path': views[0]['source']['path']}}, lookup)['available'])
+        with patch('archive_research.web.workspace.text_projection', return_value=projection), \
+             patch('archive_research.web.workspace.ocr_status', return_value={'status': 'not_generated'}):
+            response = self.client.get('/cases/photo/')
+        self.assertContains(response, 'Existing catalogue')
+        self.assertContains(response, '&lt;script&gt;catalogue only&lt;/script&gt;')
+        self.assertNotContains(response, '<script>catalogue only</script>')
+        displayed = response.context['views']
+        self.assertEqual(displayed[0]['catalogue']['dates'], ['1955'])
+        self.assertEqual(displayed[1]['catalogue']['dates'], ['1956'])
+        self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), self.original_assertions)
+        self.assertEqual((self.root / 'records/evidence.json').read_bytes(), self.original_evidence)
+        with patch('archive_research.web.workspace.text_projection', return_value=projection), \
+             patch('archive_research.web.workspace.check_binding', side_effect=ReviewError('Offline source')):
+            response = self.client.get('/cases/photo/')
+        self.assertFalse(response.context['views'][0]['available'])
+        self.assertTrue(response.context['views'][0]['catalogue']['available'])
+
+    def test_catalogue_context_retains_conflicting_and_historical_descriptions(self):
+        from archive_research.search_projection import base_entry, catalogue_lookup
+        from .workspace import catalogue_context
+        entries = [base_entry('catalogue:'+str(i), 'catalogue', {'unit': 'invented', 'object_id': 'same'}, {},
+                   {'description': description, 'historical_description': 'Earlier bear caption', 'inventory': 'INV-1'},
+                   {'catalogue': {'root': 'archive'}, 'catalogue_label': 'Invented catalogue',
+                    'representation_paths': ['units/invented/masters/photo.tif']})
+                   for i, description in enumerate(['Bear being weighed', 'Desk and monitors'])]
+        context = catalogue_context({'source': {'root': 'archive', 'path': 'units/invented/masters/photo.tif'}},
+                                    catalogue_lookup({'entries': entries}))
+        self.assertTrue(context['conflicting_fields'])
+        self.assertFalse(context['ambiguous_object'])
+        rows = {row['key']: row for row in context['rows']}
+        self.assertEqual(len(rows['description']['values']), 2)
+        self.assertEqual(rows['historical_description']['values'][0]['text'], 'Earlier bear caption')
 
     def test_workspace_invalid_and_stale_submissions_keep_draft_in_comparison(self):
         url = '/cases/photo/review/photo-type/'
@@ -328,6 +1032,74 @@ class PilotTests(TestCase):
             entry['evidence']['page']['index'] -= 1
             entry['evidence']['page']['source']['mtime_ns'] += 1
             self.assertEqual(prepared_text(view, projection)['status'], 'not_generated')
+
+    def test_workspace_tiff_text_does_not_borrow_another_frame(self):
+        from .workspace import prepared_text
+        view = snapshot()[0]['cases'][0]['views'][0]
+        entry = {'kind': 'extraction', 'extractor': 'ocr', 'key': 'a'*64, 'availability': 'available',
+                 'evidence': {'page': {'kind': 'tiff', 'index': 0, 'source': {**view['source'], 'root': 'sample'}}, 'region': None},
+                 'fields': {'text': 'Newspaper caption'}}
+        projection = {'entries': [entry], 'projection_sha256': 'b'*64}
+        with patch('archive_research.web.workspace.ocr_status', return_value={'status': 'not_generated'}):
+            self.assertEqual(prepared_text(view, projection)['text'], 'Newspaper caption')
+            entry['evidence']['page']['index'] = 1
+            self.assertEqual(prepared_text(view, projection)['status'], 'not_generated')
+            entry['evidence']['page']['index'] -= 1
+            entry['evidence']['page']['source']['mtime_ns'] += 1
+            self.assertEqual(prepared_text(view, projection)['status'], 'not_generated')
+
+    def test_workspace_assembled_text_keeps_blocks_and_manual_cache_priority(self):
+        from .workspace import prepared_text
+        view=snapshot()[0]['cases'][0]['views'][1]
+        entry={'kind':'extraction','extractor':'document-text','key':'a'*64,'availability':'available',
+               'evidence':{'page':{'kind':'pdf','index':view['page_sequence'],
+                                  'source':{**view['source'],'root':'sample'}},'region':None},
+               'fields':{'text':'Title\n\nBody','positioned_lines':'Title\n\nBody'}}
+        projection={'entries':[entry],'projection_sha256':'b'*64}
+        with patch('archive_research.web.workspace.ocr_status',return_value={'status':'not_generated'}):
+            text=prepared_text(view,projection)
+            self.assertEqual(text['label'],'Layout-guided OCR')
+            self.assertEqual(text['text'],'Title\n\nBody')
+            entry['evidence']['text_blocks']=[{'index':0,'text':'Caption <check>',
+                'region':{'x':.1,'y':.2,'width':.3,'height':.1}}]
+            rotated={**view,'rotation':90,'preview_crop':False}
+            block=prepared_text(rotated,projection)['blocks'][0]
+            self.assertAlmostEqual(block['display_region']['x'],70)
+            self.assertAlmostEqual(block['display_region']['y'],10)
+            self.assertEqual(prepared_text({**rotated,'preview_crop':True},projection)['blocks'],[])
+            with patch('archive_research.web.workspace.text_projection',return_value=projection):
+                response=self.client.get('/cases/photo/')
+            self.assertContains(response,'data-show-text-region')
+            self.assertContains(response,'data-reading-view="1"')
+            self.assertContains(response,'Caption &lt;check&gt;')
+            self.assertContains(response,'data-reading-side="anchor"')
+            self.assertContains(response,'data-reading-side="evidence"')
+        saved={'status':'ready','text':'Existing operator-side OCR cache'}
+        with patch('archive_research.web.workspace.ocr_status',return_value=saved):
+            self.assertEqual(prepared_text(view,projection),saved)
+
+    def test_reused_page_uses_selected_blocks_over_older_index_derived_cache(self):
+        from .workspace import prepared_text
+        view=snapshot()[0]['cases'][0]['views'][1]
+        evidence={'page':{'kind':'pdf','index':view['page_sequence'],
+                         'source':{**view['source'],'root':'sample'}},'region':None}
+        old={'kind':'extraction','extractor':'ocr','key':'a'*64,'availability':'available',
+             'evidence':evidence,'fields':{'text':'Interleaved old columns'}}
+        selected={**old,'extractor':'document-text','key':'b'*64,
+                  'evidence':{**evidence,'text_blocks':[{'index':0,'text':'Separated caption',
+                      'region':{'x':.1,'y':.2,'width':.3,'height':.1}}]},
+                  'fields':{'text':'Separated caption'}}
+        projection={'entries':[old,selected],'projection_sha256':'c'*64}
+        cache={'status':'ready','text':'Interleaved old columns','extraction_key':old['key']}
+        with patch('archive_research.web.workspace.ocr_status',return_value=cache):
+            shown=prepared_text(view,projection)
+            self.assertEqual(shown['text'],'Separated caption')
+            self.assertEqual(len(shown['blocks']),1)
+            self.assertEqual(prepared_text(view,None),cache)
+            self.assertEqual(prepared_text({**view,'preview_crop':True},projection),cache)
+            self.assertEqual(prepared_text(view,{**projection,'entries':[]}),cache)
+        with patch('archive_research.web.workspace.ocr_status',return_value={'status':'not_generated'}):
+            self.assertEqual(prepared_text({**view,'key':'another-case-same-page'},projection),shown)
 
     def test_write_permissions_methods_and_csrf(self):
         data = self.review_data()
@@ -816,3 +1588,55 @@ class PilotTests(TestCase):
         self.assertContains(self.client.post('/cases/P01/physical-object/', {
             'revision': snapshot()[3], 'reason': 'Leave empty.'}), 'No physical-object fields changed', status_code=409)
         self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), original)
+
+    def prepare_test_addition(self):
+        self.add_local_case()
+        evidence, history, current, revision = snapshot()
+        case = {**evidence['cases'][1], 'key': 'R01'}
+        proposal = {**next(r for r in current if r.get('case_key') == 'P01'),
+                    'key': 'R01-link', 'subject': 'R01', 'reason': 'Specific fixture evidence.'}
+        proposal = {k: proposal[k] for k in ('key', 'subject', 'relation', 'value', 'scope',
+                                            'uncertainty', 'reason', 'citation_keys')}
+        case['prepared_assertions'] = [proposal]
+        packet = {'expected_revision': revision, 'cases': [case]}
+        path = self.root / 'cache/research-additions-prepared.json'
+        path.write_text(json.dumps(packet))
+        return path, packet
+
+    @override_settings(PROJECT={'mode': 'local_review'})
+    def test_sample_additions_preserve_review_history_and_refuse_replay(self):
+        from .load_selection import apply_additions
+        self.prepare_test_addition()
+        before = (self.root / 'records/assertions.jsonl').read_bytes()
+        existing = snapshot()[0]['cases']
+        apply_additions()
+        after = (self.root / 'records/assertions.jsonl').read_bytes()
+        self.assertTrue(after.startswith(before))
+        evidence, _, current, _ = snapshot()
+        self.assertEqual(evidence['cases'][:len(existing)], existing)
+        new = next(r for r in current if r.get('case_key') == 'R01')
+        self.assertEqual(new['review'], 'unreviewed')
+        self.assertIsNone(new['reviewer'])
+        with self.assertRaisesRegex(ReviewError, 'Reviews changed'):
+            apply_additions()
+        self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), after)
+
+    @override_settings(PROJECT={'mode': 'local_review'})
+    def test_invalid_sample_citations_write_neither_authority_file(self):
+        from .load_selection import apply_additions
+        path, packet = self.prepare_test_addition()
+        packet['cases'][0]['prepared_assertions'][0]['citation_keys'] = ['unknown-source']
+        path.write_text(json.dumps(packet))
+        before = [(self.root / 'records' / name).read_bytes() for name in ('evidence.json', 'assertions.jsonl')]
+        with self.assertRaisesRegex(ReviewError, 'Unknown or duplicate citation'):
+            apply_additions()
+        self.assertEqual(before, [(self.root / 'records' / name).read_bytes() for name in ('evidence.json', 'assertions.jsonl')])
+
+    @override_settings(PROJECT={'mode': 'local_review'})
+    def test_sample_preparation_refuses_existing_preview_keys_before_rendering(self):
+        from .load_selection import prepare
+        _, packet = self.prepare_test_addition()
+        with patch('archive_research.web.load_selection.subprocess.run') as render:
+            with self.assertRaisesRegex(ReviewError, 'overwrite existing previews'):
+                prepare({'cases': packet['cases']}, additions=True)
+            render.assert_not_called()

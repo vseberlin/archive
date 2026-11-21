@@ -1,0 +1,8 @@
+{% for candidate in comparison.candidates %}
+<section class="inline-pair" data-pair-panel="{{ candidate.view_index }}"{% if not candidate.active %} hidden{% endif %} aria-label="Decision for {{ candidate.view.label }}">
+{% if not case.payload.read_only %}<form method="post" action="{% url 'review' case.key candidate.key %}" id="pair-decision-{{ candidate.key }}" class="pair-decision" data-key="{{ candidate.key }}" data-bound="{% if candidate.form.is_bound %}1{% endif %}">{% csrf_token %}{{ candidate.form.revision }}<input type="hidden" name="comparison_workspace" value="1"><input type="hidden" name="return_assertion" value="{{ assertion.key }}">
+{% if candidate.form.errors %}<div class="workspace-error" role="alert">Not saved. {{ candidate.form.errors }}</div>{% endif %}
+<div class="inline-pair-buttons" role="group" aria-label="Photograph match"><button type="submit" name="review" value="accepted" aria-pressed="{% if candidate.record.review == 'accepted' %}true{% else %}false{% endif %}">Match</button><button type="submit" name="review" value="rejected" class="quiet" aria-pressed="{% if candidate.record.review == 'rejected' %}true{% else %}false{% endif %}">Not a match</button><button type="submit" name="review" value="unresolved" class="quiet" aria-pressed="{% if candidate.record.review == 'unresolved' %}true{% else %}false{% endif %}">Uncertain</button></div>
+</form>{% else %}<span class="badge {{ candidate.record.review }}">{{ candidate.state_label }}</span>{% endif %}
+</section>
+{% endfor %}

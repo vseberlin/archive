@@ -1,0 +1,7 @@
+{% if finding_focus %}<h3>This photograph comparison</h3><p>Match confirms that the two images show the same photograph. Each question keeps its own decision.</p>{% else %}<h3>Photograph comparisons</h3><p>Choose a candidate in <strong>Compare with</strong>, then save Match, Not a match or Uncertain below that image. Each photograph keeps its own decision.</p>{% endif %}
+<p class="muted">Match means the same photograph, allowing crop or print changes. Different exposures can still show the same event.</p>
+<h3>Saved results</h3>
+{% if comparison.accepted %}<p>This photograph is also shown in:</p><ul>{% for candidate in comparison.accepted %}<li>{{ candidate.view.label }}</li>{% endfor %}</ul>{% else %}<p>No reproduction has been confirmed yet.</p>{% endif %}
+{% if comparison.rejected %}<p>Different photograph:</p><ul>{% for candidate in comparison.rejected %}<li>{{ candidate.view.label }}</li>{% endfor %}</ul>{% endif %}
+{% if comparison.pending %}<p>{{ comparison.pending|length }} comparison{{ comparison.pending|pluralize }} still open or uncertain.</p>{% endif %}
+<p class="muted">Findings are generated from the saved pair decisions. Earlier combined findings remain in History.</p>

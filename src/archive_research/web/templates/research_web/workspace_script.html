@@ -14,8 +14,15 @@
     panel.querySelector('.workspace-figure').style.width = width * Number(panel.querySelector('[data-zoom]').value) / 100 + 'px';
   }
   const updateReading = () => {
-    const selected = mode === 'single' ? anchor.value : evidence.value;
-    all('[data-reading]').forEach(panel => { panel.hidden = panel.dataset.reading !== selected; });
+    all('[data-reading]').forEach(panel => {
+      const selected = panel.dataset.readingSide === 'anchor' ? anchor.value : evidence.value;
+      panel.hidden = panel.dataset.reading !== selected || (mode === 'single' && panel.dataset.readingSide === 'evidence');
+    });
+    root.querySelector('.reading-columns')?.classList.toggle('single', mode === 'single');
+    all('[data-catalogue-side]').forEach(panel => {
+      const value = panel.dataset.catalogueSide === 'anchor' ? anchor.value : evidence.value;
+      panel.hidden = panel.dataset.catalogueView !== value || (mode === 'single' && panel.dataset.catalogueSide === 'evidence');
+    });
   };
   function selectView(side, value) {
     const picker = side === 'anchor' ? anchor : evidence;
@@ -27,19 +34,57 @@
     if (side === 'evidence') all('[data-evidence]').forEach(button => {
       button.setAttribute('aria-pressed', String(button.dataset.evidence === value));
     });
+    if (side === 'evidence' && !root.dataset.fixedComparison) {
+      all('[data-pair-panel]').forEach(panel => { panel.hidden = panel.dataset.pairPanel !== value; });
+      all('[data-pair-note]').forEach(panel => { panel.hidden = panel.dataset.pairNote !== value; });
+      const selected = picker.selectedOptions?.[0];
+      if (selected?.dataset.comparisonKey) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('comparison', selected.dataset.comparisonKey);
+        window.history.replaceState(null, '', url);
+      }
+    }
+    all('[data-inspect-side]').filter(button => button.dataset.inspectSide === side).forEach(button => {
+      const active = button.dataset.inspectIndex === value;
+      button.setAttribute('aria-pressed', String(active));
+      if (active) root.querySelector('[data-focused-label="' + side + '"]').textContent = button.dataset.label;
+    });
     updateReading();
   }
   [anchor, evidence].forEach(picker => picker.addEventListener('change', () => selectView(picker.dataset.picker, picker.value)));
   all('[data-evidence]').forEach(button => button.addEventListener('click', () => {
     setMode('compare'); selectView('evidence', button.dataset.evidence);
   }));
+  all('[data-inspect-side]').forEach(button => button.addEventListener('click', () => {
+    if (button.dataset.inspectSide === 'evidence') setMode('compare');
+    selectView(button.dataset.inspectSide, button.dataset.inspectIndex);
+  }));
   function setMode(value) {
     mode = value;
     root.querySelector('.workspace-viewers').classList.toggle('single', mode === 'single');
+    const decisions = root.querySelector('.comparison-decision-row');
+    if (decisions) decisions.hidden = mode === 'single';
     all('[data-mode]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.mode === mode)));
     updateReading();
   }
   all('[data-mode]').forEach(button => button.addEventListener('click', () => setMode(button.dataset.mode)));
+  all('[data-show-text-region]').forEach(button => button.addEventListener('click', () => {
+    const panel = all('[data-pane]').find(p => p.dataset.pane === button.dataset.readingTarget && p.dataset.view === button.dataset.readingView);
+    if (!panel || panel.hidden) return;
+    const mark = panel.querySelector('.text-region');
+    ['x','y','width','height'].forEach((key, i) => {
+      mark.style[['left','top','width','height'][i]] = Number(button.dataset[key]) + '%';
+    });
+    mark.hidden = false;
+    all('[data-show-text-region]').filter(b => b.dataset.readingTarget === button.dataset.readingTarget).forEach(b => {
+      b.setAttribute('aria-pressed', String(b === button));
+      b.closest('.reading-block').classList.toggle('selected', b === button);
+    });
+    panel.querySelector('[data-zoom]').value = '200'; fit(panel);
+    const scroll = panel.querySelector('.viewer-scroll');
+    scroll.scrollTo({left: mark.offsetLeft + mark.offsetWidth / 2 - scroll.clientWidth / 2,
+                     top: mark.offsetTop + mark.offsetHeight / 2 - scroll.clientHeight / 2});
+  }));
   all('[data-zoom]').forEach(input => {
     const panel = input.closest('.viewer-panel');
     input.addEventListener('input', () => fit(panel));

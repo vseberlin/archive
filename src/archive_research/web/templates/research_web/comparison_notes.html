@@ -1,0 +1,4 @@
+{% for candidate in comparison.candidates %}<section data-pair-note="{{ candidate.view_index }}" data-key="{{ candidate.key }}"{% if not candidate.active %} hidden{% endif %}>
+<h2>{{ candidate.view.label }}</h2><p class="muted">Optional note for this comparison. It is saved with your next Match, Not a match or Uncertain decision. Earlier notes are in History.</p>
+{% if not case.payload.read_only %}{{ candidate.form.reason.label_tag }}{{ candidate.form.reason.errors }}{{ candidate.form.reason }}<p class="muted" data-pair-draft>{% if candidate.form.is_bound %}Your note is retained · not saved{% else %}No unsaved note{% endif %}</p>{% else %}<p>This case is read-only. See History for saved notes.</p>{% endif %}
+</section>{% endfor %}

@@ -1,0 +1,6 @@
+<h3>{{ view.label }}</h3>
+{% if view.catalogue.available %}
+{% if view.catalogue.ambiguous_object %}<p class="text-gap">More than one catalogue object points to this file. The association needs review.</p>{% endif %}
+{% if view.catalogue.conflicting_fields %}<p class="text-gap">Catalogue records disagree. The differing descriptions are retained below.</p>{% endif %}
+<dl>{% for row in view.catalogue.rows %}<dt>{{ row.label }}{% if row.conflict %} · conflicting records{% endif %}</dt><dd>{% for value in row.values %}<p>{{ value.text|linebreaksbr }}</p><p class="muted">{{ value.sources|join:"; " }}</p>{% endfor %}</dd>{% endfor %}</dl>
+{% else %}<p>No catalogue description is linked to this source in the current selection.</p>{% endif %}
