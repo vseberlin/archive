@@ -1,8 +1,12 @@
 """Geometry and coverage of detection-only face regions; no biometric matching."""
 import unittest
+import json
+from dataclasses import asdict
+from unittest.mock import patch
 from PIL import Image
 import numpy as np
 from archive_research.extractors.faces import detect, starts, overlap
+import test_positioned_extraction as positioned
 
 class Detector:
     def __init__(self): self.sizes=[]
@@ -43,5 +47,36 @@ class FaceRegionsTests(unittest.TestCase):
         self.assertEqual(positions[-1]+320,1000)
         self.assertLessEqual(max(b-a for a,b in zip(positions,positions[1:])),240)
         self.assertEqual(overlap([0,0,20,20],[21,0,20,20]),0)
+
+class FaceCropTests(unittest.TestCase):
+    setUp=positioned.PositionedTests.setUp
+    bind=positioned.PositionedTests.bind
+
+    def test_cropped_detection_plan_maps_boxes_back_to_original_source(self):
+        from archive_research.contracts import Region
+        from archive_research.preparation import inspect_page
+        from archive_research.runner import load_plan,extract_one
+        from archive_research.receipts import read_current
+        p=self.input/'page.png';Image.new('RGB',(200,100),'white').save(p)
+        page=inspect_page(self.roots,self.bind(p),1,'image',0)
+        model=self.input/'model.onnx';model.write_bytes(b'fixture')
+        task={'id':'crop','extractor':'faces','page':asdict(page),
+              'region':asdict(Region(.2,.1,.5,.5)),
+              'settings':{'model':asdict(self.bind(model)),'rotations':[0]}}
+        plan=self.input/'plan.json';plan.write_text(json.dumps(
+            {'format':'archive-research-plan-1','metadata_adopted':False,'tasks':[task]}))
+        self.assertEqual(load_plan(plan)['tasks'],[task])
+        def detected(image,settings,detector):
+            self.assertEqual(image.size,(100,50))
+            return [{'box':[10,5,20,10],'score':.9,'rotation':0}],1,1,None
+        with patch('cv2.FaceDetectorYN'),patch('archive_research.extractors.faces.detect',side_effect=detected):
+            result=extract_one(self.roots,'artifacts',task)
+        self.assertIn(result['state'],('complete','partial'),result)
+        row,_,_=read_current(self.roots,'artifacts',result['key'])
+        region=row['feature']['regions'][0]['region']
+        for name,expected in [('x',.25),('y',.15),('width',.1),('height',.1)]:
+            self.assertAlmostEqual(region[name],expected)
+        self.assertEqual(region['units'],'normalized')
+        self.assertFalse(row['feature']['identity_inferred'])
 
 if __name__=='__main__':unittest.main()

@@ -25,4 +25,5 @@ where = ["src"]
 include = ["archive_research*"]
 
 [tool.setuptools.package-data]
+"archive_research" = ["kraken-LICENSE.txt"]
 "archive_research.web" = ["fixture.json", "templates/research_web/*.html"]

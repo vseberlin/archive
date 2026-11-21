@@ -1,5 +1,6 @@
 """Exercise real Git and hooks in temporary repositories, with no live remotes."""
 import os
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -250,6 +251,70 @@ class RepositoryGuardTests(unittest.TestCase):
         self.git('push', 'origin', 'HEAD:other', ok=False)
         self.git('push', str(self.remote), 'HEAD:main', ok=False)
         self.assertEqual(before, self.git('rev-parse', 'main', cwd=self.remote).stdout)
+
+    def api_publication(self, different_tree=False, orphan=False):
+        self.commit()
+        receipt = json.loads(self.guard('publish-check').stdout)
+        path = self.base / 'publication.json'
+        path.write_text(json.dumps(receipt))
+        tree = receipt['tree'] if not different_tree else self.git('rev-parse', 'HEAD~1^{tree}').stdout.strip()
+        parents = [] if orphan else ['-p', receipt['expected_remote_head']]
+        published = self.git('commit-tree', tree, *parents, input='API publication\n').stdout.strip()
+        self.git('fetch', '--quiet', str(self.root), published, cwd=self.remote)
+        self.git('update-ref', 'refs/heads/main', published, cwd=self.remote)
+        return path, receipt, published
+
+    def test_api_alignment_preserves_local_history_and_worktree(self):
+        path, receipt, published = self.api_publication()
+        before = (self.root / 'file.txt').read_bytes()
+        index_tree = self.git('write-tree').stdout
+        self.guard('align-publication', '--receipt', str(path), '--published-head', published)
+        self.assertEqual(self.git('rev-parse', 'HEAD').stdout.strip(), published)
+        self.assertEqual(self.git('rev-parse', 'refs/tags/local-before-publication/' + receipt['head']).stdout.strip(), receipt['head'])
+        self.assertEqual((self.root / 'file.txt').read_bytes(), before)
+        self.assertEqual(self.git('write-tree').stdout, index_tree)
+        self.assertEqual(self.git('status', '--porcelain').stdout, '')
+        self.guard('sync')
+        self.guard('publish-check')
+
+    def assert_alignment_refused(self, **kwargs):
+        path, receipt, published = self.api_publication(**kwargs)
+        self.guard('align-publication', '--receipt', str(path), '--published-head', published, ok=False)
+        self.assertEqual(self.git('rev-parse', 'HEAD').stdout.strip(), receipt['head'])
+        self.assertEqual(self.git('tag', '--list', 'local-before-publication/*').stdout, '')
+
+    def test_api_alignment_rejects_different_tree(self):
+        self.assert_alignment_refused(different_tree=True)
+
+    def test_api_alignment_rejects_lost_ancestry(self):
+        self.assert_alignment_refused(orphan=True)
+
+    def test_api_alignment_rejects_dirty_and_changed_local_or_remote(self):
+        path, receipt, published = self.api_publication()
+        (self.root / 'file.txt').write_text('unsaved operator work\n')
+        self.guard('align-publication', '--receipt', str(path), '--published-head', published, ok=False)
+        self.assertEqual((self.root / 'file.txt').read_text(), 'unsaved operator work\n')
+        (self.root / 'file.txt').write_text('changed\n')
+        self.guard('align-publication', '--receipt', str(path), '--published-head', receipt['expected_remote_head'], ok=False)
+        changed = dict(receipt, head=receipt['expected_remote_head'])
+        path.write_text(json.dumps(changed))
+        self.guard('align-publication', '--receipt', str(path), '--published-head', published, ok=False)
+        self.assertEqual(self.git('rev-parse', 'HEAD').stdout.strip(), receipt['head'])
+        self.assertEqual(self.git('tag', '--list', 'local-before-publication/*').stdout, '')
+
+    def test_api_alignment_preserves_conflicting_recovery_tag(self):
+        path, receipt, published = self.api_publication()
+        tag = 'refs/tags/local-before-publication/' + receipt['head']
+        self.git('update-ref', tag, receipt['expected_remote_head'])
+        self.guard('align-publication', '--receipt', str(path), '--published-head', published, ok=False)
+        self.assertEqual(self.git('rev-parse', tag).stdout.strip(), receipt['expected_remote_head'])
+        self.assertEqual(self.git('rev-parse', 'HEAD').stdout.strip(), receipt['head'])
+
+    def test_api_alignment_rejects_foreign_receipt(self):
+        path, receipt, published = self.api_publication()
+        path.write_text(json.dumps(dict(receipt, root=str(self.other))))
+        self.guard('align-publication', '--receipt', str(path), '--published-head', published, ok=False)
+        self.assertEqual(self.git('rev-parse', 'HEAD').stdout.strip(), receipt['head'])
 
     def test_force_push_of_diverged_history_and_sync_rejected(self):
         self.commit()

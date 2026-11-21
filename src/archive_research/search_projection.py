@@ -77,7 +77,7 @@ def receipt_entry(roots, work, key, mapping):
         new_line = previous and abs(box.get('y', 0) - previous.get('y', 0)) > max(box.get('height', 0), previous.get('height', 0)) * .5
         lines += ('\n' if new_line else ' ' if lines else '') + word['text']
         previous = box
-    blocks=row.get('feature',{}).get('text_blocks',[]) if result.recipe.extractor in ('ocr','document-text','handwriting') else []
+    blocks=row.get('feature',{}).get('text_blocks',[]) if result.recipe.extractor in ('ocr','document-text','handwriting','handwriting-decode') else []
     if blocks:
         # Preserve block boundaries so dehyphenation cannot join separate blocks.
         lines='\n\n'.join('\n'.join(line['text'] for line in block['lines']) for block in blocks)

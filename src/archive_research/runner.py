@@ -24,6 +24,7 @@ FEATURE_ADAPTERS['scientific-table']='extractors.scientific_table'
 FEATURE_ADAPTERS['ruled-table']='extractors.ruled_table'
 FEATURE_ADAPTERS['spelling']='extractors.spelling'
 FEATURE_ADAPTERS['handwriting']='extractors.handwriting'
+FEATURE_ADAPTERS['handwriting-decode']='extractors.handwriting_decode'
 
 
 def page_from_record(value):
@@ -278,6 +279,11 @@ def extract_one(roots, work, task, *, encoders=None):
                     raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work,encoders)
                     suffix,kind='.spelling.json','derived-spelling-text'
                     note='Derived dictionary corrections; literal OCR and all contributing boxes retained.'
+                elif task['extractor'] == 'handwriting-decode':
+                    from .extractors.handwriting_decode import extract
+                    raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work,encoders)
+                    suffix,kind='.handwriting-decode.json','derived-handwritten-line-readings'
+                    note='Derived decoding alternatives; literal parent preserved; manual review required.'
                 elif task['extractor'] == 'handwriting':
                     from .extractors.handwriting import extract
                     raw,words,feature,extra_artifacts=extract(image,page,transform,roots,recipe,Path(temporary),key,work,encoders)
@@ -369,7 +375,7 @@ def extract_one(roots, work, task, *, encoders=None):
                 limitations += ('Selected region only; retained image is a crop, not the complete page.',)
             status = 'complete' if words else 'partial'
             if task['extractor'] == 'visual': status = 'complete'
-            if task['extractor'] in ('pdf-layout', 'scan-layout', 'document-layout', 'document-text','ruled-table','spelling','handwriting'): status = 'partial'  # Semantic coverage is deliberately incomplete.
+            if task['extractor'] in ('pdf-layout', 'scan-layout', 'document-layout', 'document-text','ruled-table','spelling','handwriting','handwriting-decode'): status = 'partial'  # Semantic coverage is deliberately incomplete.
             if discovery and (not discovery['coverage']['scan_complete'] or
                               any(r['status'] != 'text_extracted' for r in discovery['regions'])):
                 status = 'partial'
@@ -416,5 +422,5 @@ def load_plan(path, expected_sha256=None):
         page_from_record(task['page'])
         if task.get('region') is not None:
             Region(**task['region'])
-            require(task['extractor'] in ('ocr','visual','scientific-region','scientific-table','ruled-table','spelling'), 'Unsupported region extractor')
+            require(task['extractor'] in ('ocr','visual','faces','scientific-region','scientific-table','ruled-table','spelling'), 'Unsupported region extractor')
     return value

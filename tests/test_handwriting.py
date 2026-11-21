@@ -79,6 +79,75 @@ class HandwritingTests(unittest.TestCase):
         self.assertEqual(ctc_decode([0,1,1,0,1,2,2,0],'ab'),'aab')
         with self.assertRaises(ValueError):ctc_decode([3],'ab')
 
+    def test_mannheim_refuses_unqualified_cpu_before_native_imports(self):
+        from archive_research.extractors.handwriting import require_mannheim_host,load_model
+        with patch('pathlib.Path.is_file',return_value=True),patch('pathlib.Path.read_text',return_value='flags : sse sse2 sse4a\n'):
+            with self.assertRaisesRegex(ValueError,'not qualified'):require_mannheim_host()
+            with self.assertRaisesRegex(ValueError,'not qualified'):load_model({}, {'backend':'mannheim-kraken'},None)
+
+    def test_kraken_codec_retains_order_and_refuses_ambiguous_codes(self):
+        from types import SimpleNamespace
+        from archive_research.extractors.handwriting import kraken_alphabet
+        self.assertEqual(kraken_alphabet(SimpleNamespace(c2l={'ß':[2],'a':[1]})),'aß')
+        for mapping in ({'ch':[1]},{'a':[1,2]},{'a':[0]},{'a':[2]}):
+            with self.assertRaises(ValueError):kraken_alphabet(SimpleNamespace(c2l=mapping))
+
+    def test_mannheim_preparation_bounds_and_blank_semantics(self):
+        import numpy as np
+        from PIL import Image
+        from archive_research.extractors.mannheim_onnx import prepare,MODEL_SHA256,PREPARATION
+        config={'format':'mannheim-onnx-1','image_height':120,'max_width':7000,'horizontal_padding':16,
+                'blank_index':0,'model_sha256':MODEL_SHA256,'preparation':PREPARATION,
+                'input_name':'image','output_name':'logits','alphabet':''.join(chr(i) for i in range(294))}
+        # Upstream degenerate-blank normalization is retained, not interpreted as text.
+        pixels=prepare(Image.new('RGB',(96,32),'white'),config)
+        self.assertEqual(pixels.shape,(1,1,120,416))
+        self.assertEqual(pixels.dtype,np.float32);self.assertTrue(np.isfinite(pixels).all())
+        np.testing.assert_array_equal(pixels[:,:,:,:16],0)
+        with self.assertRaisesRegex(ValueError,'qualified Mannheim input width'):
+            prepare(Image.new('L',(3000,32),255),config)
+        with self.assertRaisesRegex(ValueError,'input contract'):
+            prepare(Image.new('L',(96,32),255),{**config,'max_width':8192})
+
+    def test_mannheim_export_must_bind_exact_model_before_native_session(self):
+        from archive_research.extractors.handwriting import load_model
+        from archive_research.extractors.mannheim_onnx import MODEL_SHA256,PREPARATION
+        config={'format':'mannheim-onnx-1','image_height':120,'max_width':7000,'horizontal_padding':16,
+                'blank_index':0,'model_sha256':MODEL_SHA256,'preparation':PREPARATION,
+                'input_name':'image','output_name':'logits','alphabet':''.join(chr(i) for i in range(294))}
+        files={n:self.input/n for n in ('config.json','export-proof.json','model.onnx')}
+        files['config.json'].write_text(json.dumps(config));files['model.onnx'].write_bytes(b'model')
+        files['export-proof.json'].write_text(json.dumps({'source_sha256':MODEL_SHA256,'synthetic_only':True,
+            'archive_images_uploaded':False,'fixtures':[{'matches_kraken':True}]*7,'onnx_sha256':'f'*64}))
+        with patch('onnxruntime.InferenceSession',side_effect=AssertionError('Must not open changed model')):
+            with self.assertRaisesRegex(ValueError,'proof does not bind'):
+                load_model(files,{'backend':'mannheim-onnx','threads':1},None)
+
+    def test_mannheim_baseline_preparation_keeps_geometry_without_center_warp(self):
+        import numpy as np
+        from PIL import Image
+        from archive_research.extractors.mannheim_onnx import prepare,MODEL_SHA256,BASELINE_PREPARATION
+        config={'format':'mannheim-onnx-1','image_height':120,'max_width':4096,'horizontal_padding':16,
+                'blank_index':0,'model_sha256':MODEL_SHA256,'preparation':BASELINE_PREPARATION,
+                'input_name':'image','output_name':'logits','alphabet':''.join(chr(i) for i in range(294))}
+        pixels=prepare(Image.new('L',(100,50),255),config)
+        self.assertEqual(pixels.shape,(1,1,120,272));np.testing.assert_array_equal(pixels,0)
+        with self.assertRaisesRegex(ValueError,'qualified Mannheim input width'):
+            prepare(Image.new('L',(3000,40),255),config)
+        with self.assertRaisesRegex(ValueError,'too small'):
+            prepare(Image.new('L',(4,20),255),config)
+
+    def test_mannheim_preparation_mismatch_rejected_before_session(self):
+        from archive_research.extractors.handwriting import load_model
+        from archive_research.extractors.mannheim_onnx import MODEL_SHA256,BASELINE_PREPARATION
+        config={'format':'mannheim-onnx-1','image_height':120,'max_width':4096,'horizontal_padding':16,
+                'blank_index':0,'model_sha256':MODEL_SHA256,'preparation':BASELINE_PREPARATION,
+                'input_name':'image','output_name':'logits','alphabet':''.join(chr(i) for i in range(294))}
+        path=self.input/'baseline-config.json';path.write_text(json.dumps(config))
+        with patch('onnxruntime.InferenceSession',side_effect=AssertionError('No inference for a mismatched contract')):
+            with self.assertRaisesRegex(ValueError,'recipe and preparation differ'):
+                load_model({'config.json':path},{'backend':'mannheim-onnx','threads':1},None)
+
     def test_onnx_keeps_whole_long_line_and_white_padding(self):
         from PIL import Image
         config={'format_version':2,'image_height':64,'max_width':1024,'input_channels':1,'blank_index':0}

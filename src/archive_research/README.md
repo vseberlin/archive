@@ -1185,3 +1185,67 @@ Compare whole splits using summed errors/reference length, not mean page rates.
 
 The workbench can display an alternative raw reading beside each selected line;
 both are escaped text and neither changes the proposed finding or saved review.
+
+### Retained CTC scores and derived handwriting decoding
+
+The `mannheim-onnx` backend binds UB Mannheim's `german_handwriting` model
+(Zenodo 7933463) after conversion on a compatible machine. The manifest requires
+`model.onnx`, `config.json` and `export-proof.json`, all hashed. It uses the
+existing ONNX Runtime with NumPy/SciPy/Pillow center normalization, no local
+Kraken or PyTorch imports. Selected lines must normalize to at most 7,000 pixels;
+wider lines fail explicitly. Model outputs remain unreviewed proposals.
+
+`tools/export_mannheim_onnx.py` exports the pinned public model and synthetic
+fixtures on a compatible CPU; `tools/verify_mannheim_onnx.py` checks exact input
+pixels, probability tolerance and identical greedy text in the destination
+runtime. Synthetic equivalence is not handwriting accuracy qualification. Keep
+the public model's CC-BY-SA-4.0 attribution and the bundled Apache-2.0 license for
+the adapted Kraken normalization code. The native `mannheim-kraken` backend
+retains its conservative AVX/SSE4.1 gate; do not run the incomplete local Kraken
+environment. DWDS corpus support remains pending permitted data access.
+
+An explicit `line_preparation: "baseline-straight-v1"` selects recipe 4 with a
+matching baseline manifest/proof. It assumes a horizontal two-point baseline
+inside each existing rectangular line region, then uses Kraken's straight
+baseline path: no rotation, grayscale, LANCZOS scaling to height 120, padding and
+inversion, with a separate 4,096-pixel normalized width limit. Uniform blank tensors cause explicit abstention before recognition;
+no invented blank-line text or synthetic model scores are emitted. This does
+not detect baselines or rectify curved/sloping writing. Prior center-normalized
+recipes keep their identities. Export fixtures with `--preparation baseline-straight`
+and verify them locally with `--prefix mannheim-baseline`; nonblank fixtures also
+match Kraken's full `rpred` baseline pipeline.
+
+For `dehtr-v2` or `mannheim-onnx`, explicitly add `retain_scores: true` to the selection.
+This creates a separate recipe with per-line, hashed NPZ score artifacts; existing
+greedy recipes and readings remain unchanged. The score bundles contain numeric
+logits and the exact alphabet, never pickled objects. Re-decoding must reproduce
+the parent greedy text before a derived result can be published.
+
+Build a downstream task with
+`extractors.handwriting_decode.task_for(roots, work, key, mode, **settings)` and
+place it in an ordinary extraction plan. The key selects the retained-score
+handwriting receipt. Modes are `beam`, `lexicon` and `confusions`; the latter two
+require `dictionary` and `custom_lexicon` as hashed Sources. The dictionary is
+UTF-8 `word count` lines; the custom JSON contains `terms` and `names` arrays.
+It must be frozen independently of the scored reference answers.
+
+The `handwriting-decode` adapter uses bounded CTC prefix beam search, retaining
+separate blank/nonblank masses, and exact CTC forward probabilities for complete
+candidates. Defaults: beam 32, 12 classes per frame within 12 log units, eight
+retained candidates, lexical weight 0.8 and at most 64 candidates for confusion
+rescoring. The soft frequency-based word preference is not a trained contextual
+language model. Unknown names remain legal; known words can still win incorrectly.
+
+Confusions cover n/u, m/nn/un, e/i, r/v, cl/d, umlauts, ß/B/fs and bounded word
+splits/joins. A candidate changes one token (up to two substitutions) or one word
+boundary; original candidates remain available. Ornate capitals can receive
+alternatives from model scores, but this adds no capital-shape recognizer or
+Kurrent model. Candidate scores/margins are not calibrated confidence. All results
+remain partial, separately bound proposals, with parent text and candidate lists.
+
+Compare greedy and all three modes on identical frozen lines: summed CER/WER,
+line improvements/regressions, restored/damaged reference characters and words,
+spacing, labeled names/dates, candidate coverage and decoding time. Previously
+inspected validation pages are regression evidence, not an untouched acceptance
+set. Do not automatically replace raw readings or widen processing from this
+small comparison alone.

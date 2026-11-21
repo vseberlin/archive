@@ -44,6 +44,11 @@ def read_current(roots, work, key, _parents=(), *, verify_source=True):
             read_origin(roots,work,parent_origin,result.page,(*_parents,key),verify_source=verify_source)
     if result.recipe.extractor=='handwriting':
         read_origin(roots,work,settings['layout_origin'],result.page,(*_parents,key),verify_source=verify_source)
+    if result.recipe.extractor=='handwriting-decode':
+        _,parent,_=read_origin(roots,work,settings['reading_origin'],result.page,(*_parents,key),verify_source=verify_source)
+        require(parent.recipe.extractor=='handwriting' and
+                parent.recipe.record()['parameters']['settings'].get('retain_scores') is True,
+                'Decoding parent must retain original CTC scores')
     return row,result,digest
 
 

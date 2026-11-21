@@ -238,6 +238,22 @@ For explicitly requested publication through the connected GitHub tools, run
 that preserves ancestry. Rerun if either side changes. Terminal Git authentication
 must be available for guarded terminal push; hooks do not provide credentials.
 
+When branch reconciliation is explicitly requested after connector publication,
+save the `publish-check` JSON before publishing and run:
+
+```sh
+python3 tools/repo-guard.py align-publication --receipt /path/to/private/receipt.json --published-head FULL_COMMIT_SHA
+```
+
+This requires unchanged local HEAD, the exact freshly fetched remote head,
+identical reviewed/published trees, and preservation of the previous remote
+ancestry on both sides. It atomically retains the original local history under
+`local-before-publication/<original-head>` (a local recovery tag) and aligns the
+working branch to the published commit. Files and index remain untouched; no
+remote force push or extra merge commit is made. The recovery tag stays local.
+Verify clean status and equal local/remote heads afterward. Normal `sync` still
+refuses divergence; this command is only for reviewed, identical API publication.
+
 These checks protect project commands and normal hooks, not arbitrary shell or
 API operations. Git in a third-party checkout cannot infer an intended archive
 operation. Raw reset/clean, disabled hooks, edited policy and direct API calls can

@@ -80,9 +80,9 @@ class Guard:
                 path = self.root / path
             require(not path.exists(), 'Unfinished Git operation; inspect and resolve it explicitly.')
 
-    def run(self, *args, capture=True):
+    def run(self, *args, capture=True, input=None):
         return subprocess.run([GIT, '-C', str(self.root), *args], env=self.env,
-                              text=True, stdout=subprocess.PIPE if capture else None,
+                              text=True, input=input, stdout=subprocess.PIPE if capture else None,
                               stderr=subprocess.PIPE if capture else None, check=False)
 
     def git(self, *args, optional=False):
@@ -192,6 +192,42 @@ class Guard:
         else:
             self.files()
 
+    def align_publication(self, receipt_path, published_head):
+        """Adopt an identical API publication, retaining local history atomically."""
+        self.clean()
+        receipt = json.loads(Path(receipt_path).read_text())
+        require(isinstance(receipt, dict), 'Expected a publish-check receipt.')
+        require(receipt.get('root') == str(self.root) and receipt.get('branch') == self.branch and
+                receipt.get('remote') == 'origin' and receipt.get('destination') == 'refs/heads/main',
+                'Publication receipt belongs to another checkout or destination.')
+        for oid in (receipt.get('head'), receipt.get('tree'), receipt.get('expected_remote_head'), published_head):
+            require(isinstance(oid, str) and len(oid) == 40 and all(c in '0123456789abcdef' for c in oid),
+                    'Publication requires full hexadecimal object IDs.')
+        head = self.git('rev-parse', 'HEAD').strip()
+        require(head == receipt['head'] and self.git('rev-parse', 'HEAD^{tree}').strip() == receipt['tree'],
+                'Local HEAD changed since publication review.')
+        self.files(head)
+        self.fetch()
+        require(self.git('rev-parse', 'origin/main').strip() == published_head,
+                'Remote HEAD changed; inspect before alignment.')
+        self.files(published_head)
+        require(self.git('rev-parse', published_head + '^{tree}').strip() == receipt['tree'],
+                'Published tree differs from the reviewed local tree.')
+        for tip in (head, published_head):
+            require(self.run('merge-base', '--is-ancestor', receipt['expected_remote_head'], tip).returncode == 0,
+                    'Publication does not preserve the reviewed remote ancestry.')
+        backup = 'refs/tags/local-before-publication/' + head
+        existing = self.git('rev-parse', '--verify', '--quiet', backup, optional=True).strip()
+        require(not existing or existing == head, 'Local recovery tag already names different history.')
+        self.clean()
+        transaction = ('start\n' + ('verify ' + backup + ' ' + head if existing else 'create ' + backup + ' ' + head) +
+                       '\nverify refs/remotes/origin/main ' + published_head +
+                       '\nupdate refs/heads/' + self.branch + ' ' + published_head + ' ' + head + '\nprepare\ncommit\n')
+        require(self.run('update-ref', '--stdin', '-m', 'Align verified API publication; retain local history',
+                         input=transaction).returncode == 0,
+                'Atomic alignment refused; inspect refs before retrying.')
+        print(json.dumps({'head': published_head, 'tree': receipt['tree'], 'retained_local_history': backup}, indent=2))
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -200,6 +236,9 @@ def main():
         commands.add_parser(name)
     commands.add_parser('stage').add_argument('paths', nargs='+')
     commands.add_parser('commit').add_argument('message')
+    align = commands.add_parser('align-publication', help='Explicitly align an identical API publication, retaining local history')
+    align.add_argument('--receipt', required=True)
+    align.add_argument('--published-head', required=True)
     hook = commands.add_parser('_hook')
     hook.add_argument('name', choices=HOOKS)
     hook.add_argument('arguments', nargs='*')
@@ -222,6 +261,8 @@ def main():
     elif args.command == 'commit':
         guard.files()
         require(guard.run('commit', '-m', args.message, capture=False).returncode == 0, 'Commit failed.')
+    elif args.command == 'align-publication':
+        guard.align_publication(args.receipt, args.published_head)
     elif args.command == 'sync':
         guard.clean()
         guard.fetch()
