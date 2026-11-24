@@ -84,6 +84,10 @@ def main(argv=None):
     parts.add_argument('--handwriting', type=Path, help='JSON backend and bound local handwriting model manifest')
     parts.add_argument('--languages', default='deu+eng')
     parts.add_argument('--work', default='artifacts'); parts.add_argument('--output', required=True)
+    plan = processing('plan', 'Write sharded first-pass plans from a qualified unit catalogue; no inference')
+    plan.add_argument('--spec', type=Path, required=True, help='archive-research-plan-spec-1 JSON')
+    plan.add_argument('--work', default='artifacts')
+    plan.add_argument('--no-validate', action='store_true', help='Skip recipe checks (planning host lacks the extraction environment)')
     tables = processing('document-tables', 'Prepare bordered-table refinement from retained layout and positioned text')
     tables.add_argument('--layout-key', required=True);tables.add_argument('--reading-key', required=True)
     tables.add_argument('--work', default='artifacts');tables.add_argument('--output', required=True)
@@ -109,6 +113,14 @@ def main(argv=None):
                                   limit=a.limit, index=a.index, expected_plan=a.expected_plan,
                                   chunk_size=a.chunk_size, worker_timeout=a.worker_timeout,
                                   worker_start=a.worker_start, worker_count=a.worker_count, progress=a.progress)
+    elif a.command == 'plan':
+        from .plan_builder import write_plans
+        from .config import extraction_roots
+        manifest = write_plans(extraction_roots(a.roots), pipeline.read_json(a.spec), work=a.work,
+                               validate=not a.no_validate)
+        result = {k: manifest[k] for k in ('records_considered', 'records_planned', 'pages', 'tasks',
+                                           'shards', 'extractors_skipped_without_model')}
+        result['excluded'] = len(manifest['excluded'])
     elif a.command == 'document-tables':
         result = pipeline.document_tables(a.roots, a.layout_key, a.reading_key, a.output, work=a.work)
         result = {'tasks':len(result['tasks']), 'output':a.output, 'inference_ran':False}

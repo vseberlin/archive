@@ -421,6 +421,35 @@ after checking their manifest digest. It preserves existing identities and model
 information and reruns no model. The workbench checks original and preview
 bindings before serving either side. An offline original is shown as unavailable.
 
+### First-pass plans from unit catalogues
+
+`archive-research plan --roots ROOTS --spec SPEC.json` writes sharded
+`archive-research-plan-1` files from a unit's `CATALOG.csv` through
+`units.selected_members` (so only its qualified unit mappings). It runs no
+recognition and performs no recursive discovery. Page kind comes from file
+signatures; geometry from `preparation.inspect_page`. Records with unresolved
+order, missing witnesses, size disagreement, unsupported files or more than
+`max_pages_per_member` pages are listed in `<prefix>-manifest.json` and skipped.
+
+```json
+{"format": "archive-research-plan-spec-1", "metadata_adopted": false,
+ "root": "archive", "unit": "units/wf-sender", "identity_namespace": "EXISTING-NAMESPACE",
+ "material": "historical_newspaper", "output_prefix": "wf-sender-pass1",
+ "models": {"layout": {"...": "fingerprinted Source"}},
+ "languages": "deu+eng", "shard_size": 1000}
+```
+
+`material` is `clean_print`, `historical_newspaper`, `rd_reports` (with their OCR
+profiles) or `photo` (`visual`, optional `faces`; no OCR profile). Default
+extractors per material can be narrowed with `extractors`. A model-bound extractor
+without its model is skipped and reported; `photo` requires `models.visual`.
+`roles` defaults to `preservation_master`, with surrogates used only for records
+without a master (`surrogate_fallback`). One recipe per distinct
+extractor/kind/settings signature is built before writing, so an incomplete
+extraction environment fails early; `--no-validate` skips this on a planning host.
+Shards (`<prefix>-0001.json`, …) keep each `extract` run bounded; existing outputs
+are refused. Run each shard with the ordinary `extract --plan`.
+
 ## Source regions and local evidence packets
 
 An `ocr` task can additionally contain `region`, serialized with the existing

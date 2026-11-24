@@ -33,6 +33,15 @@ def recipe_for(task):
                          output='raster-placements-and-caption-leads')
 
 
+def validate_inputs(roots, work, task, recipe):
+    """PDF placement extraction has no model or parent receipt to verify.
+
+    The runner calls this hook on every feature adapter; the source binding is
+    already checked by the runner and the page geometry again inside ``extract``.
+    """
+    require(task['page']['kind'] == 'pdf' and task.get('region') is None, 'PDF layout needs a complete page')
+
+
 def union(regions):
     x, y = min(r.x for r in regions), min(r.y for r in regions)
     return Region(x, y, min(1., max(r.x+r.width for r in regions))-x,
