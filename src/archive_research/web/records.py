@@ -2,6 +2,8 @@
 import json
 import logging
 import os
+from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -56,6 +58,10 @@ class StaleProjection(ReviewError):
     def __init__(self, revision, message='Browsing is behind the readable records. Rebuild browsing before continuing.'):
         super().__init__(message)
         self.revision = revision
+
+
+class SaveOutcomeUnknown(ReviewError):
+    """The readable history could not confirm whether the submission was saved."""
 
 
 def sample_path(relative, directory='sample'):
@@ -119,12 +125,14 @@ def snapshot():
 
 def _snapshot():
     """Caller holds the research lock through any dependent write/projection."""
-    root = settings.PILOT_ROOT / 'records'
     # Compatible shared lock/read contract: token and displayed values come from
     # the same captured bytes. No old workbench files or locks are opened.
-    evidence_bytes = read_bytes(root / 'evidence.json')
-    assertion_bytes = read_bytes(root / 'assertions.jsonl')
-    return validate_records(evidence_bytes, assertion_bytes)
+    return validate_records(*_record_bytes())
+
+
+def _record_bytes():
+    root = settings.PILOT_ROOT / 'records'
+    return read_bytes(root / 'evidence.json'), read_bytes(root / 'assertions.jsonl')
 
 
 def validate_records(evidence_bytes, assertion_bytes):
@@ -294,17 +302,33 @@ def validate_records(evidence_bytes, assertion_bytes):
 
 
 def rebuild(expected_revision=None):
+    from .feedback import refresh_search
+
     with file_lock(settings.PILOT_ROOT / 'records/.research.lock'):
         captured = _snapshot()
         if expected_revision is not None:
             require(expected_revision == captured[3], 'Records changed. Reload before rebuilding.')
-        return _project(captured)
+        revision = _project(captured)
+    refresh_search()
+    return revision
 
 
-def _project(captured):
+@dataclass(frozen=True)
+class _ReviewProjection:
+    captured: tuple
+    case_key: str
+    base_revision: str
+
+
+def _project(source):
+    review = source if isinstance(source, _ReviewProjection) else None
+    captured = review.captured if review else source
     evidence, history, current, revision = captured
+    cases = evidence['cases']
     with transaction.atomic():
-        for case in evidence['cases']:
+        for case in cases:
+            if review and case['key'] != review.case_key:
+                continue
             payload = {**case, 'history': [r for r in history if assertion_case(r) == case['key']],
                        'assertions': [r for r in current if assertion_case(r) == case['key']],
                        'lineage': case.get('lineage', evidence.get('lineage', '')),
@@ -312,11 +336,18 @@ def _project(captured):
             assessment = next((r for r in payload['assertions'] if r['relation'] == 'research_assessment'), {})
             payload['physical_object'] = assessment.get('physical_object', {})
             payload['physical_object_relationship'] = dict(PHYSICAL_RELATIONSHIPS).get(payload['physical_object'].get('relationship', ''), '')
-            ResearchCase.objects.update_or_create(key=case['key'], defaults={
-                'title': case['title'], 'revision': revision, 'payload': payload})
-        ResearchCase.objects.exclude(key__in=[c['key'] for c in evidence['cases']]).delete()
-    from .feedback import refresh_search
-    refresh_search(captured)
+            values = {'title': case['title'], 'revision': revision, 'payload': payload}
+            if review:
+                updated = ResearchCase.objects.filter(key=case['key'], revision=review.base_revision).update(**values)
+                require(updated == 1, 'Browsing changed during review projection.')
+            else:
+                ResearchCase.objects.update_or_create(key=case['key'], defaults=values)
+        if review:
+            others = [c['key'] for c in cases if c['key'] != review.case_key]
+            stamped = ResearchCase.objects.filter(key__in=others, revision=review.base_revision).update(revision=revision)
+            require(stamped == len(others), 'Browsing changed during review projection.')
+        else:
+            ResearchCase.objects.exclude(key__in=[c['key'] for c in cases]).delete()
     return revision
 
 
@@ -359,10 +390,33 @@ def display_region(view):
     return dict(zip(('x', 'y', 'width', 'height'), (n*100 for n in rotations[view['rotation']])))
 
 
+@contextmanager
+def _save_lock():
+    """Preserve the save outcome if releasing the lock also fails."""
+    body_error = None
+    completed = False
+    try:
+        with file_lock(settings.PILOT_ROOT / 'records/.research.lock'):
+            try:
+                yield
+            except BaseException as error:
+                body_error = error
+                raise
+            else:
+                completed = True
+    except OSError as error:
+        if not completed and (body_error is None or error is body_error):
+            raise
+        logging.getLogger(__name__).exception('Could not release the research lock after a save attempt')
+        if body_error is not None:
+            raise body_error
+
+
 def save_review(key, submitted, actor, case_key='photo', *, comparison_decision=False):
     """Replace one readable history file, then refresh its disposable projection."""
-    with file_lock(settings.PILOT_ROOT / 'records/.research.lock'):
-        evidence, history, current, revision = _snapshot()
+    with _save_lock():
+        authority = _record_bytes()
+        evidence, _, current, revision = validate_records(*authority)
         case = next((c for c in evidence['cases'] if c['key'] == case_key), None)
         require(case is not None, 'Unknown case')
         require(not case.get('read_only', False), 'This case is read-only; no review was saved')
@@ -407,20 +461,20 @@ def save_review(key, submitted, actor, case_key='photo', *, comparison_decision=
             require(set(pair.values()) <= set(citations), 'Cite both photographs/pages in this comparison')
             record['reproduction_pair'] = {'query': view_locator(views[pair['query_view_key']]),
                                            'candidate': view_locator(views[pair['candidate_view_key']])}
-        validate_records(json.dumps(evidence).encode(),
-                         b''.join(json.dumps(r).encode()+b'\n' for r in history + [record]))
-        return _append_record(record)
+        return _append_record(authority, record)
 
 
 def save_physical_object(case_key, submitted, actor):
     """Correct a case reference without reviewing its research assertion."""
-    with file_lock(settings.PILOT_ROOT / 'records/.research.lock'):
-        evidence, history, current, revision = _snapshot()
+    with _save_lock():
+        authority = _record_bytes()
+        evidence, _, current, revision = validate_records(*authority)
         case = next((c for c in evidence['cases'] if c['key'] == case_key), None)
         require(case is not None and not case_synthetic(case, evidence), 'Real case required')
         require(not case.get('read_only', False), 'This case is read-only; nothing was saved')
         require(submitted.get('revision') == revision, 'Records changed since this form was opened. Nothing was saved. Reload and compare your wording.')
         _checked_cases(revision, evidence)
+        check_sources(evidence, case_key)
         require(isinstance(actor, str) and actor.strip(), 'Authenticated operator required')
         previous = physical_assessment(current, case_key)
         physical = {}
@@ -438,31 +492,41 @@ def save_physical_object(case_key, submitted, actor):
                   'recorded_at': datetime.now(timezone.utc).isoformat(),
                   'revision': previous['revision'] + 1, 'supersedes_revision': previous['revision'],
                   'based_on_revision': revision}
-        return _append_record(record)
+        return _append_record(authority, record)
 
 
-def _append_record(record):
-    """Caller holds the same lock through readable append and projection refresh."""
+def _append_record(authority, record):
+    """Caller holds the research lock through readable append and SQLite refresh."""
     path = settings.PILOT_ROOT / 'records/assertions.jsonl'
-    old_bytes = read_bytes(path)
+    evidence_bytes, old_bytes = authority
     new_bytes = old_bytes + (b'' if old_bytes.endswith(b'\n') else b'\n') + json.dumps(record, ensure_ascii=False).encode() + b'\n'
+    captured = validate_records(evidence_bytes, new_bytes)
+    revision = captured[3]
+    logger = logging.getLogger(__name__)
     try:
         atomic_write(path, new_bytes)
     except OSError:
-        # A directory fsync can fail after replacement. Never invite a repeat
-        # decision if the new readable record is already present.
-        if read_bytes(path) != new_bytes:
+        # The write can raise after replacing the history. Only the old or
+        # prospective bytes can resolve the outcome under the same lock.
+        try:
+            confirmed = read_bytes(path)
+        except (OSError, ReviewError) as confirmation_error:
+            logger.exception('Could not confirm review history after a write error')
+            raise SaveOutcomeUnknown('The review history could not be checked after a storage error.') from confirmation_error
+        if confirmed == old_bytes:
             raise
-        logging.getLogger(__name__).exception('Review file replaced but storage confirmation failed')
-        return {'indexed': False, 'revision': _snapshot()[3]}
-    captured = _snapshot()
+        if confirmed != new_bytes:
+            logger.exception('Review history did not match either snapshot after a write error')
+            raise SaveOutcomeUnknown('The review history changed unexpectedly during write confirmation.')
+        logger.exception('Review file replaced but storage confirmation failed')
+        return {'indexed': False, 'revision': revision, 'failed_component': 'storage', 'rebuild_available': True}
     try:
-        _project(captured)
+        _project(_ReviewProjection(captured, assertion_case(record), record['based_on_revision']))
     except Exception:
         # The decision is already saved. Rebuild only; never resubmit it.
-        logging.getLogger(__name__).exception('Review saved; projection refresh failed')
-        return {'indexed': False, 'revision': captured[3]}
-    return {'indexed': True, 'revision': captured[3]}
+        logger.exception('Review saved; browsing refresh failed')
+        return {'indexed': False, 'revision': revision, 'failed_component': 'browsing', 'rebuild_available': True}
+    return {'indexed': True, 'revision': revision}
 
 
 def export_bundle(case_key=None):

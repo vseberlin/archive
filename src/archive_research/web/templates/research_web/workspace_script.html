@@ -133,25 +133,17 @@
     const original = values();
     const status = root.querySelector('[data-draft]');
     const returnedDraft = status.textContent.includes('not saved');
-    let dirty = returnedDraft, submitting = false;
+    form.toggleAttribute('data-unretained', returnedDraft);
     form.addEventListener('input', () => {
-      dirty = returnedDraft || values() !== original;
+      const dirty = returnedDraft || values() !== original;
+      form.toggleAttribute('data-unretained', dirty);
       status.textContent = dirty ? 'Unsaved draft · kept while you inspect evidence' : 'No unsaved changes';
     });
     form.addEventListener('keydown', event => {
       // Editing a short field must not accidentally select the first decision.
       if (event.key === 'Enter' && event.target.matches('input:not([type=checkbox])')) event.preventDefault();
     });
-    form.addEventListener('submit', event => {
-      if (submitting || !event.submitter || event.submitter.name !== 'review') { event.preventDefault(); return; }
-      submitting = true;
-      status.textContent = 'Saving your decision…';
-      event.submitter.textContent = 'Saving…';
-    });
-    window.addEventListener('beforeunload', event => {
-      if (!dirty || submitting) return;
-      event.preventDefault(); event.returnValue = '';
-    });
+
   }
   selectView('anchor', anchor.value); selectView('evidence', evidence.value);
   const activeCase = root.querySelector('.workspace-queue a[aria-current="page"]');

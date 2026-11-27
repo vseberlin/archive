@@ -1,4 +1,7 @@
 """Behavior tests for the approved synthetic browse slice; no archive files."""
+import builtins
+from contextlib import contextmanager
+import io
 import json
 import os
 from pathlib import Path
@@ -11,10 +14,37 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 
-from archive_research.common import ReviewError, atomic_write, content_revision
+from archive_research.common import ReviewError, atomic_write, content_revision, staged_write
 from .fixtures import create_fixture
 from .models import ResearchCase
 from .records import bound_bytes, checked_cases, export_bundle, rebuild, save_review, snapshot
+
+
+@contextmanager
+def index_file_operations(path):
+    """Count opens and atomic publications of the configured aggregate file."""
+    operations = []
+
+    def record(operation, file):
+        if not isinstance(file, int) and os.path.abspath(os.fsdecode(file)) == str(path):
+            operations.append(operation)
+
+    def watch_open(open_file, parameter='file'):
+        def watched(*args, **kwargs):
+            record('open', args[0] if args else kwargs[parameter])
+            return open_file(*args, **kwargs)
+        return watched
+
+    def watch_replace(replace):
+        def watched(src, dst, *args, **kwargs):
+            record('replace', dst)
+            return replace(src, dst, *args, **kwargs)
+        return watched
+
+    with patch('os.open', watch_open(os.open, 'path')), patch('io.open', watch_open(io.open)), \
+            patch('builtins.open', watch_open(builtins.open)), \
+            patch('os.replace', watch_replace(os.replace)), patch('os.rename', watch_replace(os.rename)):
+        yield operations
 
 
 class PilotTests(TestCase):
@@ -98,7 +128,7 @@ class PilotTests(TestCase):
                            'postings': {word: [[0, count]] for word, count in counts.items()},
                            'coverage': {}, 'unavailable': [], 'refreshed_at': 'synthetic'})
         with override_settings(PROJECT={'mode': 'synthetic', 'research_index': 'synthetic.json'}), \
-             patch('archive_research.web.extraction.search_projection', return_value=(None, projection)):
+             patch('archive_research.web.extraction.base_search_projection', return_value=(None, projection)):
             response = self.client.get('/research/', {'q': 'Pumpstrasse'})
         self.assertContains(response, '<mark>Pumpstraße</mark>', html=True)
         self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
@@ -657,55 +687,316 @@ assert.deepEqual(reading.map(p => p.hidden), [false,true,true,true]);
         self.assertContains(self.client.get(url), 'Confirm match')
         self.assertEqual(snapshot()[2][-1]['review'], 'accepted')
 
-    def test_save_refreshes_selected_search_without_reextracting_and_recovers_failure(self):
+    def prepare_findings_index(self):
+        from dataclasses import asdict
         import hashlib
-        from types import SimpleNamespace
-        from archive_research.search_projection import seal, FORMAT, query
-        from archive_research.web.feedback import refresh_search
+        from archive_research import Roots, Source
+        from archive_research.search_projection import build_projection
+
+        history = self.root / 'records/assertions.jsonl'
+        info = history.stat()
+        spec = asdict(Source('fixture', 'history', 'history', 'records', history.name, info.st_size,
+                            info.st_mtime_ns, hashlib.sha256(history.read_bytes()).hexdigest()))
+        config = self.root / 'roots.toml'
+        config.write_text(f'[roots.records]\npath="{history.parent}"\naccess="read"\n'
+                          f'[roots.artifacts]\npath="{self.root / "cache"}"\naccess="work"\n')
+        roots = Roots.from_toml(config)
+        projection = build_projection(roots, 'artifacts', {'findings': [spec]})
+        path = self.root / 'cache/reviews-index.json'
+        atomic_write(path, json.dumps(projection).encode())
+        settings_override = override_settings(PROJECT={'mode': settings.PROJECT['mode'], 'research_index': path.name,
+                                                       'extraction_roots': str(config)})
+        return path, settings_override
+
+    def assert_save_controls_defer_index(self, form_url, post_url, controls):
+        from .projection_cache import _SETTLE_NS
+
+        path, config = self.prepare_findings_index()
+        # Advance only the projection clock past the stable-file admission window.
+        settled = path.stat().st_ctime_ns + _SETTLE_NS
+        with config, patch('archive_research.web.projection_cache.time_ns', return_value=settled), \
+                index_file_operations(path) as operations:
+            self.assertEqual(self.client.get('/cases/photo/').status_code, 200)
+            self.assertEqual(operations, ['open'], 'The warmup must open the configured index')
+            for button, data, redirect_url in controls:
+                with self.subTest(button=button):
+                    operations.clear()
+                    page = self.client.get(form_url)
+                    self.assertContains(page, f'>{button}</button>')
+                    self.assertEqual(operations, [], 'Opening the warm form opened or replaced the index')
+                    _, history, _, revision = snapshot()
+                    payload = {**data, 'revision': revision}
+                    response = self.client.post(post_url, payload)
+                    self.assertEqual(operations, [], 'Save POST opened or replaced the index')
+                    self.assertRedirects(response, redirect_url)
+                    self.assertEqual(operations, [], 'Warm redirect opened or replaced the index')
+                    _, saved, _, saved_revision = snapshot()
+                    self.assertEqual(saved[:-1], history)
+                    self.assertEqual(saved[-1]['based_on_revision'], revision)
+                    self.assertTrue(checked_cases(saved_revision))
+                    self.assertEqual(self.client.post(post_url, payload).status_code, 409)
+                    self.assertEqual(operations, [], 'Stale replay opened or replaced the index')
+                    self.assertEqual(snapshot()[1], saved)
+            self.assertEqual(self.client.get('/research/').status_code, 200)
+            self.assertEqual(operations, [], 'Empty search opened or replaced the index')
+
+    def test_case_review_controls_and_redirects_defer_index(self):
+        self.prepare_finding_views()
+        row = next(r for r in snapshot()[2] if r['key'] == 'context')
+        data = {**{k: row[k] for k in ('value', 'scope', 'uncertainty', 'citation_keys')}, 'workspace': '1'}
+        url = '/cases/people/?assertion=context'
+        self.assert_save_controls_defer_index(url, '/cases/people/review/context/', [
+            ('Confirm', {**data, 'review': 'accepted', 'advance': '1'}, '/cases/people/?assertion=other-question'),
+            ('Reject', {**data, 'review': 'rejected'}, url),
+            ('Leave unresolved', {**data, 'review': 'unresolved'}, url),
+        ])
+
+    def test_standalone_review_control_and_redirect_defer_index(self):
+        url = '/cases/photo/review/photo-type/'
+        self.assert_save_controls_defer_index(url, url, [
+            ('Save synthetic review', self.review_data(), '/cases/photo/'),
+        ])
+
+    def test_inline_comparison_controls_and_redirects_defer_index(self):
+        self.prepare_grouped_comparisons()
+        url = '/cases/people/'
+        data = {'comparison_workspace': '1', 'return_assertion': 'context', 'reason': 'Compared source views.'}
+        self.assert_save_controls_defer_index(url, url + 'review/pair-a/', [
+            (button, {**data, 'review': review}, url + '?assertion=context&comparison=pair-a')
+            for button, review in [('Match', 'accepted'), ('Not a match', 'rejected'), ('Uncertain', 'unresolved')]
+        ])
+
+    def test_people_match_controls_and_redirects_defer_index(self):
+        data = {**self.prepare_comparison_case(), 'show_rejected': '1'}
+        target = data['target_view_key']
+        url = f'/cases/people/people/?mode=matches&target={target}&show_rejected=1'
+        self.assert_save_controls_defer_index(url, '/cases/people/review/context/', [
+            (button, {**data, 'review': review}, url)
+            for button, review in [('Confirm match', 'accepted'), ('Reject comparison', 'rejected'),
+                                   ('Leave unresolved', 'unresolved')]
+        ])
+
+    def test_documentary_name_controls_and_redirects_defer_index(self):
+        self.prepare_documentary_overview()
+        row = snapshot()[2][-1]
+        data = {**{k: row[k] for k in ('value', 'scope', 'uncertainty', 'citation_keys')},
+                'reason': '', 'documentary_workspace': '1'}
+        url = '/cases/people/people/?mode=documents'
+        self.assert_save_controls_defer_index(url, '/cases/people/review/context/', [
+            (button, {**data, 'review': review}, url + '#documented-names')
+            for button, review in [('Confirm name / role', 'accepted'), ('Unresolved', 'unresolved')]
+        ])
+
+    def test_person_attribution_controls_and_redirects_defer_index(self):
+        data = self.prepare_people_case()
+        first, second = [v['key'] for v in snapshot()[0]['cases'][-1]['views'][:2]]
+        url = '/cases/people/people/?mode=people'
+        self.assert_save_controls_defer_index(url, url, [
+            ('Save attribution', data, url + f'&target={first}'),
+            ('Save &amp; next →', {**data, 'advance': '1', 'position': 'Third from the left'},
+             url + f'&target={second}'),
+        ])
+
+    @override_settings(PROJECT={'mode': 'local_review'})
+    def test_physical_object_control_and_redirect_defer_index(self):
+        self.add_local_case()
+        url = '/cases/P01/physical-object/'
+        self.assert_save_controls_defer_index(url, url, [
+            ('Save physical-object reference', self.physical_data(), '/cases/P01/'),
+        ])
+
+    def test_repeated_saves_defer_search_and_only_latest_findings_are_published(self):
         data = self.prepare_comparison_case()
-        history = self.root/'records/assertions.jsonl'
-        spec = {'unit': 'fixture', 'object_id': 'history', 'representation': 'history', 'root': 'records',
-                'path': 'assertions.jsonl', 'size_bytes': history.stat().st_size,
-                'mtime_ns': history.stat().st_mtime_ns, 'sha256': hashlib.sha256(history.read_bytes()).hexdigest()}
-        path = self.root/'cache/reviews-index.json'
-        value = seal({'format': FORMAT, 'metadata_adopted': False, 'selection': {'findings': [spec]},
-                      'entries': [], 'postings': {}, 'unavailable': [], 'coverage': {}, 'refreshed_at': 'fixture'})
-        path.write_text(json.dumps(value))
-        roots = SimpleNamespace(root=lambda name, access: self.root/('records' if name == 'records' else 'cache'))
-        loader = lambda **kwargs: (roots, json.loads(path.read_text()))
-        with override_settings(PROJECT={'mode': 'synthetic', 'research_index': path.name}), \
-             patch('archive_research.web.extraction.search_projection', side_effect=loader):
-            self.assertEqual(self.client.post('/cases/people/review/context/', data).status_code, 302)
-            indexed = json.loads(path.read_text())
-            self.assertEqual(indexed['review_feedback'][0]['review'], 'rejected')
-            self.assertEqual(query(indexed, 'Distinctive fixture reproduction')['hits'], [])
+        path, config = self.prepare_findings_index()
+        original = path.read_bytes()
+        query = {'q': 'Distinctive fixture reproduction'}
+        url = '/cases/people/review/context/'
+        with config, index_file_operations(path) as operations, \
+                patch('archive_research.receipts.read_current', side_effect=AssertionError('Search reopened corpus')):
+            self.assertEqual(self.client.post(url, data).status_code, 302)
             before = len(snapshot()[1])
-            data.update(revision=snapshot()[3], review='accepted')
-            with patch('archive_research.web.feedback.atomic_write', side_effect=OSError('index unavailable')):
-                self.assertEqual(self.client.post('/cases/people/review/context/', data).status_code, 503)
-            self.assertEqual(len(snapshot()[1]), before+1)
+            data.update(revision=snapshot()[3], review='accepted', reason='Latest complete decision')
+            self.assertEqual(self.client.post(url, data).status_code, 302)
+            latest = snapshot()[3]
+            self.assertEqual(self.client.post(url, data).status_code, 409)
+            self.assertEqual(len(snapshot()[1]), before + 1)
+            self.assertEqual(operations, [])
+            self.assertEqual(self.client.get('/research/').status_code, 200)
+            self.assertNotIn('replace', operations)
+            self.assertEqual(path.read_bytes(), original)
 
-            rebuild()
-            self.assertEqual(query(json.loads(path.read_text()), 'Distinctive fixture reproduction')['hits'][0]['review'], 'accepted')
-            self.assertEqual(len(snapshot()[1]), before+1)
+            result = self.client.get('/research/', query)
+            self.assertEqual(operations.count('replace'), 1)
+            self.assertContains(result, 'Distinctive')
+            url = f'/cases/people/?assertion=context&revision={latest}'
+            self.assertContains(result, url.replace('&', '&amp;'))
+            self.assertEqual(self.client.get(url).status_code, 200)
+            self.assertEqual(result.context['results']['hits'][0]['review'], 'accepted')
+            self.assertEqual(json.loads(path.read_bytes())['review_feedback'][0]['review'], 'accepted')
+            self.assertEqual(self.client.get('/research/', query).context['revision'], result.context['revision'])
+            self.assertEqual(operations.count('replace'), 1)
 
-    def test_stale_finding_search_offers_existing_rebuild_action(self):
-        from types import SimpleNamespace
-        from archive_research.search_projection import seal, FORMAT
-        self.prepare_comparison_case()
-        spec = {'unit': 'fixture', 'object_id': 'history', 'representation': 'history', 'root': 'records',
-                'path': 'assertions.jsonl', 'size_bytes': 1, 'mtime_ns': 1, 'sha256': '0'*64}
-        path = self.root/'cache/stale-index.json'
-        path.write_text(json.dumps(seal({'format': FORMAT, 'metadata_adopted': False,
-            'selection': {'findings': [spec]}, 'entries': [], 'postings': {}, 'coverage': {}, 'unavailable': []})))
-        roots = SimpleNamespace(root=lambda name, access: self.root/('records' if name == 'records' else 'cache'))
-        with override_settings(PROJECT={'mode': 'synthetic', 'research_index': path.name,
-                                        'extraction_roots': str(self.root/'roots.toml')}), \
-             patch('archive_research.Roots.from_toml', return_value=roots):
+            save_review('context', {**data, 'review': 'rejected', 'revision': latest}, 'operator', case_key='people')
+            self.assertContains(self.client.get(url), 'earlier review snapshot', status_code=409)
+            pinned = self.client.get('/research/', {**query, 'revision': result.context['revision'], 'offset': 1})
+            self.assertContains(pinned, 'Search projection changed', status_code=409)
+            hits = self.client.get('/research/', query).context['results']['hits']
+            self.assertEqual(hits, [])
+
+    def test_search_failure_leaves_index_and_explicit_rebuild_refreshes_latest_history(self):
+        data = self.prepare_comparison_case()
+        path, config = self.prepare_findings_index()
+        original = path.read_bytes()
+        with config:
+            self.assertEqual(self.client.post('/cases/people/review/context/', data).status_code, 302)
+            revision = snapshot()[3]
+            original_history = (self.root / 'records/assertions.jsonl').read_bytes()
+            with patch('archive_research.web.feedback.staged_write', side_effect=OSError('index unavailable')):
+                response = self.client.get('/research/?q=example')
+                self.assertContains(response, 'Could not refresh saved findings', status_code=409)
+                self.assertContains(response, 'Rebuild browsing', status_code=409)
+                self.assertContains(response, revision, status_code=409)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(self.client.post('/rebuild/', {'revision': data['revision']}).status_code, 409)
+            self.assertEqual(path.read_bytes(), original)
+            self.assertEqual(self.client.post('/rebuild/', {'revision': revision}).status_code, 302)
+            self.assertEqual(json.loads(path.read_bytes())['review_feedback'][0]['review'], 'rejected')
+            self.assertEqual((self.root / 'records/assertions.jsonl').read_bytes(), original_history)
+
+    def test_missing_and_invalid_search_bases_require_restore(self):
+        path, config = self.prepare_findings_index()
+        with config, patch('archive_research.web.feedback.staged_write') as publish:
+            for invalid in (None, b'{"invalid":true}'):
+                with self.subTest(invalid=invalid):
+                    if invalid is None:
+                        path.unlink()
+                    else:
+                        atomic_write(path, invalid)
+                    response = self.client.get('/research/?q=example')
+                    self.assertContains(response, 'base search index is unavailable or invalid', status_code=409)
+                    self.assertNotContains(response, 'Rebuild browsing', status_code=409)
+                    self.assertEqual(path.read_bytes() if path.exists() else None, invalid)
+            publish.assert_not_called()
+
+    def test_changed_search_base_offers_retry_instead_of_restore(self):
+        from .projection_cache import ProjectionChanged
+
+        with override_settings(PROJECT={'mode': 'synthetic', 'research_index': 'index.json'}), \
+                patch('archive_research.web.extraction.base_search_projection',
+                      side_effect=ProjectionChanged('Search projection changed while reading. Run the search again.')):
             response = self.client.get('/research/?q=example')
-        self.assertContains(response, 'Saved reviews are ahead of search', status_code=409)
-        self.assertContains(response, 'Rebuild browsing', status_code=409)
-        self.assertContains(response, snapshot()[3], status_code=409)
+            self.assertContains(response, 'Run the search again', status_code=409)
+            self.assertNotContains(response, 'Restore or regenerate', status_code=409)
+
+    def test_unavailable_selected_findings_are_retried_at_the_same_history_stamp(self):
+        from archive_research.search_projection import seal
+
+        self.prepare_comparison_case()
+        path, config = self.prepare_findings_index()
+        value = json.loads(path.read_bytes())
+        value.update(entries=[], postings={}, review_feedback=[], unavailable=[{'key': 'finding:0', 'reason': 'Unavailable'}])
+        atomic_write(path, json.dumps(seal(value)).encode())
+        with config:
+            response = self.client.get('/research/', {'q': 'Distinctive fixture reproduction'})
+        self.assertContains(response, 'Distinctive')
+        recovered = json.loads(path.read_bytes())
+        self.assertEqual(recovered['selection'], value['selection'])
+        self.assertEqual(recovered['unavailable'], [])
+
+    def test_unavailable_local_history_root_withholds_findings(self):
+        from archive_research.sources import Root
+
+        path, config = self.prepare_findings_index()
+        original = path.read_bytes()
+        check = Root.checked
+
+        def unavailable_local(root):
+            if root.path == self.root / 'records':
+                raise OSError('Required local history root unavailable')
+            return check(root)
+
+        with config, patch.object(Root, 'checked', unavailable_local):
+            response = self.client.get('/research/?q=example')
+        self.assertContains(response, 'Required local history root unavailable', status_code=409)
+        self.assertEqual(path.read_bytes(), original)
+
+    def test_local_attribution_search_link_keeps_its_revision_through_redirect(self):
+        from .people import save_attribution
+
+        data = self.prepare_people_case()
+        _, config = self.prepare_findings_index()
+        with config:
+            revision = save_attribution('people', data, 'operator')['revision']
+            key = snapshot()[2][-1]['key']
+            url = f'/cases/people/?assertion={key}&revision={revision}'
+            result = self.client.get('/research/', {'q': 'Invented reviewer reasoning'})
+            self.assertContains(result, url.replace('&', '&amp;'))
+            redirect = f'/cases/people/people/?edit={key}&revision={revision}'
+            self.assertRedirects(self.client.get(url), redirect)
+
+            save_attribution('people', {**data, 'revision': revision, 'attribution_key': key,
+                                         'position': 'Now at the right'}, 'operator')
+            self.assertContains(self.client.get(url, follow=True), 'Records changed', status_code=409)
+
+    def test_stalled_search_allows_a_save_and_discards_its_stale_replacement(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from contextlib import contextmanager
+        from threading import Event, current_thread
+        from . import feedback, records
+
+        data = self.prepare_comparison_case()
+        path, config = self.prepare_findings_index()
+        started, resume = Event(), Event()
+        main = current_thread()
+        checked = records._checked_cases
+        staged_reviews, published_reviews = [], []
+
+        @contextmanager
+        def stage_index(path, contents):
+            review = json.loads(contents)['review_feedback'][0]['review']
+            with staged_write(path, contents) as publish:
+                staged_reviews.append(review)
+                if len(staged_reviews) == 1:
+                    started.set()
+                    self.assertTrue(resume.wait(5), 'The concurrent save waited on index staging')
+
+                def track_publication():
+                    published_reviews.append(review)
+                    publish()
+
+                yield track_publication
+
+        def checked_for_thread(revision, evidence):
+            # TestCase wraps the main connection in a transaction. Search SQLite
+            # agreement is tested separately with a real query in the main thread.
+            return checked(revision, evidence) if current_thread() is main else []
+
+        with config, ThreadPoolExecutor(max_workers=1) as pool, \
+                patch.object(records, '_checked_cases', side_effect=checked_for_thread), \
+                patch.object(feedback, 'staged_write', side_effect=stage_index):
+            self.assertEqual(self.client.post('/cases/people/review/context/', data).status_code, 302)
+            roots, base = feedback.read_search_base()
+            pending = pool.submit(feedback.search_findings, roots, base)
+            try:
+                self.assertTrue(started.wait(5))
+                busy = self.client.get('/research/?q=example')
+                self.assertContains(busy, 'Search artifacts are being refreshed', status_code=409)
+                latest = save_review('context', {**data, 'review': 'accepted', 'revision': snapshot()[3]},
+                                     'operator', case_key='people')
+                self.assertTrue(latest['indexed'])
+                self.assertFalse(pending.done())
+                self.assertEqual(json.loads(path.read_bytes())['projection_sha256'], base['projection_sha256'])
+            finally:
+                resume.set()
+            updated, _, (_, revision) = pending.result(timeout=5)
+            self.assertEqual(staged_reviews, ['rejected', 'accepted'])
+            self.assertEqual(revision, latest['revision'])
+            self.assertEqual(updated['review_feedback'][0]['review'], 'accepted')
+            self.assertEqual(json.loads(path.read_bytes())['projection_sha256'], updated['projection_sha256'])
+            # A queued reader that still has the old base rechecks under the artifact lock.
+            self.assertEqual(feedback.search_findings(roots, base)[0]['projection_sha256'], updated['projection_sha256'])
+            self.assertEqual(published_reviews, ['accepted'])
+            self.assertEqual(list(path.parent.glob(f'.{path.name}.*')), [])
 
     def test_real_login_logout_and_csrf(self):
         client = Client(enforce_csrf_checks=True)
@@ -966,6 +1257,40 @@ assert.deepEqual(reading.map(p => p.hidden), [false,true,true,true]);
         rows = {row['key']: row for row in context['rows']}
         self.assertEqual(len(rows['description']['values']), 2)
         self.assertEqual(rows['historical_description']['values'][0]['text'], 'Earlier bear caption')
+
+    def test_confirm_only_prepares_viewer_on_error(self):
+        url = '/cases/photo/review/photo-type/'
+        data = {**self.review_data(), 'workspace': '1', 'advance': '1'}
+        with patch('archive_research.web.workspace.text_projection', return_value=None) as project:
+            self.assertEqual(self.client.post(url, data).status_code, 302)
+            project.assert_not_called()
+            committed = (self.root / 'records/assertions.jsonl').read_bytes()
+            self.assertEqual(self.client.post(url, data).status_code, 409)
+            project.assert_called_once_with()
+        self.assertEqual(committed, (self.root / 'records/assertions.jsonl').read_bytes())
+
+    def test_pair_draft_acknowledged_only_after_save(self):
+        self.prepare_grouped_comparisons()
+        token = 'a' * 32
+        data = {'comparison_workspace': '1', 'revision': snapshot()[3], 'review': 'accepted',
+                'reason': 'Compared both views', 'draft_receipt': token}
+        url = '/cases/people/review/pair-a/'
+        self.assertTrue(self.client.post(url, data).url.endswith('#review-saved-' + token))
+        stale = self.client.post(url, data)
+        self.assertEqual(stale.status_code, 409)
+        self.assertNotContains(stale, 'data-confirmed-draft="' + token + '"', status_code=409)
+        with patch('archive_research.web.records._project', side_effect=RuntimeError('unavailable')):
+            with self.assertLogs('archive_research.web.records', level='ERROR'):
+                saved = self.client.post(url, {**data, 'revision': snapshot()[3]})
+        self.assertContains(saved, 'data-confirmed-draft="' + token + '"', status_code=503)
+
+    def test_unknown_save_outcome_does_not_invite_a_retry(self):
+        from .records import SaveOutcomeUnknown
+        with patch('archive_research.web.views.save_review', side_effect=SaveOutcomeUnknown('confirmation unavailable')):
+            response = self.client.post('/cases/photo/review/photo-type/', self.review_data())
+        self.assertContains(response, 'Save outcome unknown', status_code=503)
+        self.assertNotContains(response, 'This submission was not saved', status_code=503)
+        self.assertNotContains(response, 'Rebuild browsing', status_code=503)
 
     def test_workspace_invalid_and_stale_submissions_keep_draft_in_comparison(self):
         url = '/cases/photo/review/photo-type/'

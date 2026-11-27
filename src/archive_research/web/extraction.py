@@ -7,6 +7,7 @@ import re
 from django.conf import settings
 
 from archive_research.common import plain_file, require, work_root
+from .projection_cache import base_search_projection
 
 
 def configured():
@@ -78,7 +79,7 @@ def lookup(key, revision):
     if settings.PROJECT.get('research_index'):
         from dataclasses import asdict
         from archive_research.receipts import read_current
-        roots, projection = search_projection()
+        roots, projection = base_search_projection()
         require(revision == projection['projection_sha256'], 'Search projection changed; reload')
         entry = next((e for e in projection['entries'] if e['key'] == key and e['kind'] == 'extraction'), None)
         require(entry is not None, 'Receipt outside selected projection')
@@ -94,26 +95,6 @@ def lookup(key, revision):
     row = next((r for r in rows if r['key'] == key), None)
     require(row is not None and row['available'], 'Bound extraction source or result unavailable')
     return roots, row, current
-
-
-def search_projection(*, allow_stale_reviews=False):
-    from archive_research import Roots
-    from archive_research.storage import target
-    from archive_research.search_projection import validate
-    config = Path(settings.PROJECT['extraction_roots'])
-    work_root(config.parent)
-    roots = Roots.from_toml(config)
-    path = target(roots.root('artifacts', 'work'), settings.PROJECT['research_index'])
-    value = validate(json.loads(path.read_text()))
-    if not allow_stale_reviews:
-        history = settings.PILOT_ROOT / 'records/assertions.jsonl'
-        for spec in value['selection'].get('findings', []):
-            if roots.root(spec['root'], 'read') / spec['path'] == history:
-                if hashlib.sha256(history.read_bytes()).hexdigest() != spec['sha256']:
-                    from .records import StaleProjection, snapshot as record_snapshot
-                    raise StaleProjection(record_snapshot()[3],
-                        'Saved reviews are ahead of search. Rebuild browsing to refresh findings; do not repeat a decision.')
-    return roots, value
 
 
 def search(query):

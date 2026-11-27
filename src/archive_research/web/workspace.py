@@ -8,32 +8,46 @@ from django.conf import settings
 from archive_research.common import ReviewError
 from .forms import ReviewForm
 from .processing import ocr_status
+from .projection_cache import base_search_projection, case_index
 from .records import check_binding, checked_cases, display_region
+
+
+# The 18 November evidence audit substantiated these legacy assessments before
+# fixed finding views were introduced. The three parked pilot cases lacked a
+# distinct research comparison as presented.
+AUDITED_ASSESSMENTS = frozenset({'P03', 'P05', 'P06', 'L01', 'L02', 'L03', 'L04'})
+EVALUATION_GROUPS = frozenset({'Prepared profile examples', 'Handwriting examples'})
+
+
+def navigation_cases(records, *, synthetic=False):
+    assessments, evaluations = [], []
+    for record in records:
+        payload = record.payload
+        if payload['synthetic'] != synthetic or payload.get('superseded_by'):
+            continue
+        if synthetic:
+            assessments.append(record)
+            continue
+        has_review = any(a.get('reviewer') and a['review'] != 'unreviewed' and not a.get('component_assertions')
+                         for a in payload['assertions'])
+        if payload.get('finding_views') or has_review or record.key in AUDITED_ASSESSMENTS:
+            group = evaluations if payload.get('group_label') in EVALUATION_GROUPS else assessments
+            group.append(record)
+    return assessments, evaluations
 
 
 def text_projection():
     """Read the selected projection; never discover sources or run OCR in a request."""
     if not settings.PROJECT.get('research_index'):
         return None
-    from .extraction import search_projection
-    return search_projection()[1]
+    return base_search_projection()[1]
 
 
-def prepared_text(view, projection):
+def prepared_text(view, projection, *, indexed=None):
     cached = ocr_status(view)
     if not projection:
         return cached
-    matches = []
-    for entry in projection['entries']:
-        if entry['kind'] != 'extraction' or entry.get('extractor') not in ('ocr', 'pdf-text', 'document-text', 'handwriting'):
-            continue
-        evidence = entry['evidence']
-        page = evidence['page']
-        if (page['index'] == (view['page_sequence'] if page['kind'] == 'pdf' else 0) and
-                evidence.get('region') is None and entry['availability'] == 'available' and
-                all(page['source'].get(k) == view['source'].get(k, 'sample' if k == 'root' else None)
-                    for k in ('root', 'path', 'size_bytes', 'mtime_ns')) and entry['fields']['text'].strip()):
-            matches.append(entry)
+    matches = (indexed if indexed is not None else case_index(projection)).prepared_entries(view)
     # A cache copied from an indexed extraction is a derived view, not a pinned
     # reading. Reusing a page in another case must not revive its older OCR.
     # Preserve separately prepared/crop-specific caches outside that selection.
@@ -101,7 +115,8 @@ def catalogue_context(view, lookup):
             'creators': sorted({e['fields']['creator'] for e in entries if e['fields'].get('creator')})}
 
 
-def context(request, key, *, assertion_key=None, form=None, save_error='', comparison_form=None, comparison_key=''):
+def navigation(request, key, *, assertion_key=None):
+    """Resolve the queue and the selected finding without preparing media or search data."""
     records = checked_cases(request.GET.get('revision') if request.method == 'GET' else None)
     record = next((c for c in records if c.key == key), None)
     if record is None:
@@ -128,7 +143,6 @@ def context(request, key, *, assertion_key=None, form=None, save_error='', compa
                           'url': case_url(candidate.key, query, state)})
     position = next(i for i, c in enumerate(queue) if c['active'])
     assertions = [a for a in record.payload['assertions'] if a['relation'] != 'person_attribution']
-    components = {k for a in assertions for k in a.get('component_assertions', [])}
     selected_key = assertion_key or request.GET.get('assertion') or assertions[0]['key']
     parent = next((a for a in assertions if a['key'] == selected_key and a.get('component_assertions')), None)
     if parent and record.payload.get('finding_views'):
@@ -136,15 +150,36 @@ def context(request, key, *, assertion_key=None, form=None, save_error='', compa
     assertion = next((a for a in assertions if a['key'] == selected_key), None)
     if assertion is None:
         raise Http404
+    # Advance among findings of this case before leaving for another case.
+    pending = next((a for a in assertions if a['key'] != selected_key and a['review'] == 'unreviewed'
+                    and not a.get('component_assertions')), None)
+    next_url = (case_url(key, query, state, pending['key']) if pending else
+                queue[position + 1]['url'] if position + 1 < len(queue) else '')
+    return {'case': record, 'assertion': assertion, 'assertions': assertions,
+            'queue': queue, 'queue_query': query, 'queue_state': state,
+            'position': position + 1, 'queue_count': len(queue),
+            'previous_url': queue[position - 1]['url'] if position else '',
+            'next_case_url': queue[position + 1]['url'] if position + 1 < len(queue) else '',
+            'next_url': next_url, 'return_url': case_url(key, query, state, selected_key)}
+
+
+def context(request, key, *, assertion_key=None, form=None, save_error='', comparison_form=None, comparison_key=''):
+    nav = navigation(request, key, assertion_key=assertion_key)
+    record, assertion = nav['case'], nav['assertion']
+    assertions = nav.pop('assertions')
+    components = {k for a in assertions for k in a.get('component_assertions', [])}
+    query, state = nav['queue_query'], nav['queue_state']
+    params = request.POST if request.method == 'POST' else request.GET
     if form is None:
         form = ReviewForm(initial={**assertion, 'reason': '', 'revision': record.revision},
                           views=record.payload['views'])
     try:
         projection = text_projection()
+        indexed = case_index(projection) if projection else None
     except (ReviewError, OSError, ValueError, KeyError, TypeError):
         projection = None  # Bound per-view OCR can still be shown; no source fallback.
-    from archive_research.search_projection import catalogue_lookup
-    metadata = catalogue_lookup(projection) if projection else {}
+        indexed = None
+    metadata = indexed.catalogue if indexed else {}
     views = []
     for original in record.payload['views']:
         view = {**original, 'available': False, 'is_pdf': False, 'is_tiff': False}
@@ -154,17 +189,12 @@ def context(request, key, *, assertion_key=None, form=None, save_error='', compa
                 raise ReviewError(view['unavailable_reason'])
             check_binding(view['source'])
             check_binding(view['preview'])
-            view.update(available=True, region=display_region(view), ocr=prepared_text(view, projection),
+            view.update(available=True, region=display_region(view), ocr=prepared_text(view, projection, indexed=indexed),
                         is_pdf=view['source']['path'].lower().endswith('.pdf'),
                         is_tiff=view['source']['path'].lower().endswith(('.tif', '.tiff')))
         except (ReviewError, OSError, ValueError, KeyError, TypeError) as error:
             view['error'] = str(error)
         views.append(view)
-    # Advance among findings of this case before leaving for another case.
-    pending = next((a for a in assertions if a['key'] != selected_key and a['review'] == 'unreviewed'
-                    and not a.get('component_assertions')), None)
-    next_url = (case_url(key, query, state, pending['key']) if pending else
-                queue[position + 1]['url'] if position + 1 < len(queue) else '')
     default_evidence = next((i for i, view in enumerate(views) if i and
                              (view.get('source') or {}).get('path', '').lower().endswith('.pdf') and
                              view['key'] in assertion['citation_keys']), 1 if len(views) > 1 else 0)
@@ -188,7 +218,7 @@ def context(request, key, *, assertion_key=None, form=None, save_error='', compa
         focus['anchor_indices'] = [v['index'] for v in focus['anchor_views']]
         focus['evidence_indices'] = [v['index'] for v in focus['evidence_views']]
         default_evidence = focus['evidence']['index']
-    return {'case': record, 'views': views, 'queue': queue, 'queue_query': query, 'queue_state': state,
+    return {**nav, 'views': views,
             'finding_focus': focus,
             'default_anchor': focus['anchor']['index'] if focus else comparison['anchor_index'] if comparison else 0,
             'comparison': comparison,
@@ -197,14 +227,10 @@ def context(request, key, *, assertion_key=None, form=None, save_error='', compa
             'comparison_url': case_url(key, query, state, next(iter(record.payload['reproduction_pairs'])))
                               if record.payload.get('reproduction_pairs') else '',
             'default_evidence': default_evidence,
-            'position': position + 1, 'queue_count': len(queue),
-            'previous_url': queue[position - 1]['url'] if position else '',
-            'next_case_url': queue[position + 1]['url'] if position + 1 < len(queue) else '',
-            'next_url': next_url, 'return_url': case_url(key, query, state, selected_key),
             'finding_links': [{**a, 'value': record.payload.get('finding_views', {}).get(a['key'], {}).get('question') or
                               ('Photograph comparisons' if a.get('component_assertions') else a['value']),
                                'url': case_url(key, query, state, a['key'])} for a in assertions
                               if (not a.get('component_assertions') if record.payload.get('finding_views') else a['key'] not in components)],
-            'assertion': assertion, 'form': form, 'save_error': save_error,
+            'form': form, 'save_error': save_error,
             'advance': params.get('advance', '1') == '1' if request.method == 'GET' else params.get('advance') == '1',
             'inspection': request.GET.get('inspect') == '1'}

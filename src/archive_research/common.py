@@ -79,8 +79,9 @@ def content_revision(*parts):
     return digest.hexdigest()
 
 
-def atomic_write(path, data):
-    """Replace a single authority atomically; derived CSV can be rebuilt."""
+@contextmanager
+def staged_write(path, data):
+    """Flush a replacement, then let the caller publish it after a final check."""
     plain_file(path)
     fd, name = tempfile.mkstemp(prefix=f'.{path.name}.', dir=path.parent)
     try:
@@ -88,14 +89,25 @@ def atomic_write(path, data):
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(name, path)
-        fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+
+        def publish():
+            plain_file(path)
+            os.replace(name, path)
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+
+        yield publish
     finally:
         Path(name).unlink(missing_ok=True)
+
+
+def atomic_write(path, data):
+    """Replace a single authority atomically; derived CSV can be rebuilt."""
+    with staged_write(path, data) as publish:
+        publish()
 
 
 @contextmanager

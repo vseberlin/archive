@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, Client
 
 from .fixtures import create_fixture
-from .records import rebuild
+from .records import rebuild, save_review, snapshot
 
 
 class ExtractionTests(TestCase):
@@ -99,6 +99,36 @@ class ExtractionTests(TestCase):
             self.assertContains(self.client.get('/research/?q=ALPHA'), 'ALPHA')
             self.assertEqual(self.client.get(f'/research/pages/{self.key}/?revision={revision}').status_code, 409)
         self.assertEqual((self.root/'records/assertions.jsonl').read_bytes(), self.history)
+
+    def test_prepared_citation_uses_exact_base_while_findings_await_search(self):
+        from archive_research import Roots, Source
+        from archive_research.search_projection import build_projection
+
+        config = self.root / 'roots.toml'
+        with config.open('a') as handle:
+            handle.write(f'\n[roots.records]\npath="{self.root / "records"}"\naccess="read"\n')
+        roots = Roots.from_toml(config)
+        history = self.root / 'records/assertions.jsonl'
+        info = history.stat()
+        source = Source('synthetic', 'history', 'history', 'records', history.name, info.st_size,
+                        info.st_mtime_ns, hashlib.sha256(history.read_bytes()).hexdigest())
+        projection = build_projection(roots, 'artifacts', {'keys': [self.key], 'findings': [asdict(source)]})
+        path = self.output / 'search-index.json'
+        original = json.dumps(projection)
+        path.write_text(original)
+        citation_url = f'/research/pages/{self.key}/'
+        with override_settings(PROJECT={**settings.PROJECT, 'research_index': path.name}):
+            _, _, records, revision = snapshot()
+            finding = next(row for row in records if row['key'] == 'photo-type')
+            save_review('photo-type', {**finding, 'revision': revision, 'review': 'accepted'}, 'operator')
+            self.assertContains(self.client.get(citation_url, {'revision': projection['projection_sha256']}), 'ALPHA')
+            self.assertEqual(path.read_text(), original)
+
+            current = self.client.get('/research/?q=ALPHA').context['revision']
+            self.assertNotEqual(current, projection['projection_sha256'])
+            self.assertContains(self.client.get(citation_url, {'revision': current}), 'ALPHA')
+            self.assertContains(self.client.get(citation_url, {'revision': projection['projection_sha256']}),
+                                'Search projection changed', status_code=409)
 
     def test_stale_result_link_and_invalid_word_refused(self):
         revision=self.current()

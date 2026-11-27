@@ -1,0 +1,76 @@
+<script data-confirmed-draft="{{ saved_draft }}">
+(() => {
+  const marker = 'archive-review-pending';
+  const prefix = '#review-saved-';
+  const fragment = location.hash.startsWith(prefix) ? location.hash.slice(prefix.length) : '';
+  const receipt = document.currentScript.dataset.confirmedDraft || fragment;
+  if (/^[0-9a-f]{32}$/.test(receipt)) {
+    try {
+      const pending = JSON.parse(sessionStorage.getItem(marker));
+      if (pending && pending.receipt === receipt) {
+        if (sessionStorage.getItem(pending.key) === pending.content) sessionStorage.removeItem(pending.key);
+        sessionStorage.removeItem(marker);
+      }
+      if (receipt === fragment) history.replaceState(history.state, '', location.pathname + location.search);
+    } catch { /* An unavailable tab store does not affect the saved decision. */ }
+  }
+
+  let active = null;
+  let buttonText = '';
+  let statusText = '';
+  let status = null;
+  document.addEventListener('submit', event => {
+    const form = event.target;
+    if (event.defaultPrevented || !form.matches('#workspace-review, .pair-decision, .pr-mention-review, #match-review, #person-attribution-form, .review-form')) return;
+    if (active || (form.id === 'workspace-review' && event.submitter?.name !== 'review')) {
+      event.preventDefault();
+      return;
+    }
+    const losingDraft = Array.from(document.querySelectorAll('form[data-unretained]')).some(other => other !== form);
+    if (losingDraft && !window.confirm('Another form has unsaved changes. Discard those changes and save this decision?')) {
+      event.preventDefault();
+      return;
+    }
+    active = form;
+    form.setAttribute('aria-busy', 'true');
+    status = form.id === 'workspace-review' ? document.querySelector('[data-draft]') : null;
+    if (status) { statusText = status.textContent; status.textContent = 'Saving your decision…'; }
+    const button = event.submitter;
+    if (button) {
+      buttonText = button.textContent;
+      button.dataset.saving = '1';
+      button.textContent = 'Saving…';
+    }
+    if (!form.dataset.draftKey) return;
+    try {
+      const key = form.dataset.draftKey;
+      const content = sessionStorage.getItem(key);
+      if (content === null) return;
+      const receipt = crypto.randomUUID().replaceAll('-', '');
+      sessionStorage.setItem(marker, JSON.stringify({key, content, receipt}));
+      let field = form.elements.namedItem('draft_receipt');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = 'draft_receipt';
+        form.append(field);
+      }
+      field.value = receipt;
+    } catch { /* Keep the draft when a browser cannot store a receipt. */ }
+  });
+  window.addEventListener('beforeunload', event => {
+    if (!active && document.querySelector('form[data-unretained]')) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
+  window.addEventListener('pageshow', event => {
+    if (!event.persisted || !active) return;
+    active.removeAttribute('aria-busy');
+    const button = Array.from(active.elements).find(field => field.dataset.saving);
+    if (button) { button.textContent = buttonText; delete button.dataset.saving; }
+    if (status) status.textContent = statusText;
+    active = null;
+  });
+})();
+</script>

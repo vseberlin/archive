@@ -120,11 +120,15 @@ class Roots:
             roots[name] = Root(**values)
         return cls(roots)
 
-    def root(self, name, access):
+    def declared_root(self, name, access):
+        """Identify a configured root without accessing its filesystem."""
         require(name in self._roots, f'Undeclared root: {name}')
         root = self._roots[name]
         require(root.access == access, f'Wrong root access: {name}')
-        return root.checked()
+        return root
+
+    def root(self, name, access):
+        return self.declared_root(name, access).checked()
 
     def _file(self, name, relative, access):
         relative_path(relative)

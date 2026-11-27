@@ -8,8 +8,8 @@
 <button>Search</button></form>
 <p class="muted">Prepared {{ projection.refreshed_at }}. Availability was checked then; opening evidence checks it again.</p>
 <p>{{ projection.coverage.indexed_receipts }} extraction results · {{ projection.coverage.available_receipts }} with sources available at refresh · {{ projection.coverage.failed_inputs }} inputs could not be indexed · {{ projection.coverage.unmapped_entries }} entries awaiting canonical identity mapping.</p>
-<p>This selection does not cover the whole archive. New source material needs an explicit refresh. Saved review findings update automatically; rejected findings are omitted while their source records remain searchable.</p>
-{% if projection.findings_refreshed_at %}<p class="muted">Review findings updated {{ projection.findings_refreshed_at }}.</p>{% endif %}
+<p>This selection does not cover the whole archive. New source material needs an explicit refresh. Running a search refreshes selected saved review findings. Rejected findings are omitted while their source records remain searchable.</p>
+{% if results and projection.findings_refreshed_at %}<p class="muted">Review findings updated {{ projection.findings_refreshed_at }}.</p>{% endif %}
 {% if results %}<p>{{ results.total_matches }} matches</p>
 {% for hit in results.hits %}<article class="card">
 <span class="badge">{{ hit.kind }}</span> <span class="badge">{{ hit.availability }}</span>{% if hit.review %} <span class="badge">{{ hit.review }}</span>{% endif %}
@@ -19,10 +19,10 @@
 {% if hit.missing_terms %}<p>Missing query terms: {{ hit.missing_terms|join:", " }}.</p>{% endif %}
 {% if hit.kind == 'extraction' %}<p><a href="{% url 'extraction_citation' hit.target %}?revision={{ revision }}">Inspect source evidence</a></p>
 {% elif hit.kind == 'finding' %}<p>{{ hit.evidence.reviewer }} · revision {{ hit.evidence.revision }} · research finding, not catalogue adoption.</p>
-<p><a href="{% url 'case' hit.evidence.case_key %}?assertion={{ hit.evidence.key }}">Inspect finding and citations</a></p>
+{% if hit.finding_revision %}<p><a href="{% url 'case' hit.evidence.case_key %}?assertion={{ hit.evidence.key }}&amp;revision={{ hit.finding_revision }}">Inspect finding and citations</a></p>{% else %}<p>This finding belongs to a separate history.</p>{% endif %}
 {% else %}<details><summary>Existing catalogue description</summary><p>{{ hit.catalogue_fields.description|linebreaksbr }}</p>{% if hit.catalogue_fields.places %}<p>Places: {{ hit.catalogue_fields.places }}</p>{% endif %}{% if hit.catalogue_fields.tags %}<p>Subjects: {{ hit.catalogue_fields.tags }}</p>{% endif %}{% if hit.catalogue_fields.inscription %}<p>Recorded inscription: {{ hit.catalogue_fields.inscription }}</p>{% endif %}<p class="muted">{{ hit.evidence.catalogue_label }} · {{ hit.inventory }} · existing catalogue record</p></details>{% endif %}
 </article>{% empty %}<p>No match in this selection. Unsearched or unavailable material may contain relevant evidence.</p>{% endfor %}
-{% if results.next_offset != None %}<a href="?q={{ query|urlencode }}&amp;offset={{ results.next_offset }}{% if fuzzy %}&amp;fuzzy=1{% endif %}">Next results</a>{% endif %}
+{% if results.next_offset != None %}<a href="?q={{ query|urlencode }}&amp;offset={{ results.next_offset }}&amp;revision={{ revision }}{% if fuzzy %}&amp;fuzzy=1{% endif %}">Next results</a>{% endif %}
 {% endif %}
 <details><summary>Coverage and limits</summary><pre>{{ projection.coverage }}</pre>{% for item in projection.unavailable %}<p>{{ item.key }}: {{ item.reason }}</p>{% endfor %}</details>
 {% endblock %}

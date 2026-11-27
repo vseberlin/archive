@@ -1,19 +1,21 @@
 import io
 import os
+import re
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.db import DatabaseError
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
-from archive_research.common import ReviewError
+from archive_research.common import ReviewError, require
 from .forms import PhysicalObjectForm, ReviewForm, PersonAttributionForm, ComparisonDecisionForm
 from .records import assertion_case, bound_bytes, case_synthetic, check_binding, checked_cases, display_region, export_bundle, rebuild, save_review, snapshot
 from .processing import ocr_status
-from .records import physical_assessment, save_physical_object
+from .records import SaveOutcomeUnknown, physical_assessment, save_physical_object
 from . import extraction
 from . import workspace
 
@@ -36,12 +38,34 @@ def page_search(request):
     operator(request)
     try:
         query = request.GET.get('q', '')[:200]
-        from django.conf import settings
         if settings.PROJECT.get('research_index'):
-            from archive_research.search_projection import query as search_query
-            _, projection = extraction.search_projection()
+            from archive_research.search_projection import query_validated as search_query
+            from .feedback import read_search_base, search_findings
+
+            roots, projection = read_search_base()
             offset = int(request.GET.get('offset', 0))
-            results = search_query(projection, query, offset=offset, fuzzy=request.GET.get('fuzzy') == '1') if query.strip() else None
+            require(offset >= 0, 'Invalid page')
+            results = None
+            if query.strip():
+                projection, cases, finding_binding = search_findings(roots, projection)
+                pinned = request.GET.get('revision')
+                require(pinned is None or pinned == projection['projection_sha256'],
+                        'Search projection changed. Run the search again.')
+                finding_cases = finding_history = None
+                if finding_binding is not None:
+                    source, finding_revision = finding_binding
+                    finding_history = (source['root'], source['path'])
+                    assessments, evaluations = workspace.navigation_cases(
+                        cases, synthetic=settings.PROJECT.get('mode') == 'synthetic')
+                    finding_cases = {case.key for case in assessments + evaluations}
+                results = search_query(projection, query, offset=offset, fuzzy=request.GET.get('fuzzy') == '1',
+                                       finding_cases=finding_cases, finding_history=finding_history)
+                if finding_history is not None:
+                    for hit in results['hits']:
+                        if hit['kind'] == 'finding':
+                            history = hit['evidence'].get('history', {})
+                            if (history.get('root'), history.get('path')) == finding_history:
+                                hit['finding_revision'] = finding_revision
             return render(request, 'research_web/aggregate_search.html', {
                 'query': query, 'results': results, 'projection': projection,
                 'revision': projection['projection_sha256'], 'fuzzy': request.GET.get('fuzzy') == '1'})
@@ -223,6 +247,38 @@ def unavailable(request, error):
         'message': str(error), 'rebuild_revision': getattr(error, 'revision', None)}, status=409)
 
 
+def draft_receipt(request):
+    token = request.POST.get('draft_receipt', '')
+    return token if re.fullmatch(r'[0-9a-f]{32}', token) else ''
+
+
+def saved_redirect(request, url):
+    receipt = draft_receipt(request)
+    return redirect(url + ('#review-saved-' + receipt if receipt else ''))
+
+
+def save_recovery(request, result=None, subject='change'):
+    if result is None:
+        return render(request, 'research_web/unavailable.html', {
+            'outcome_unknown': True,
+            'message': 'The storage operation could not be confirmed. Check the current finding and its history '
+                       'before taking another action. Do not submit again while the outcome is unknown.',
+        }, status=503)
+    component = result.get('failed_component', 'browsing')
+    messages_by_component = {
+        'browsing': 'Rebuild browsing to display the saved record.',
+        'storage': 'The history contains this decision. Storage durability could not be confirmed. '
+                   'Check storage before rebuilding browsing.',
+    }
+    return render(request, 'research_web/unavailable.html', {
+        'saved': True, 'saved_draft': draft_receipt(request), 'saved_revision': result['revision'],
+        'saved_heading': {'storage': 'Review recorded; storage needs checking',
+                          'browsing': 'Review saved; browsing needs rebuilding'}[component],
+        'message': f'Your {subject} is saved in the readable history. Do not submit again. ' + messages_by_component[component],
+        'rebuild_revision': result['revision'],
+    }, status=503)
+
+
 def operator(request):
     if not request.user.is_staff:
         raise PermissionDenied
@@ -250,7 +306,10 @@ def case(request, key):
         if request.GET.get('assertion', '').startswith('person-attribution-'):
             from urllib.parse import urlencode
             from django.urls import reverse
-            return redirect(reverse('people', args=[key]) + '?' + urlencode({'edit': request.GET['assertion']}))
+            params = {'edit': request.GET['assertion']}
+            if 'revision' in request.GET:
+                params['revision'] = request.GET['revision']
+            return redirect(reverse('people', args=[key]) + '?' + urlencode(params))
         context = workspace.context(request, key)
         if context['case'].payload.get('superseded_by') and not request.GET.get('revision'):
             return redirect('case', key=context['case'].payload['superseded_by'])
@@ -387,20 +446,19 @@ def review(request, key, assertion_key):
             if not form.is_valid():
                 return response(400)
             try:
-                navigation = workspace.context(request, key, assertion_key=assertion_key) if in_workspace else None
+                navigation = workspace.navigation(request, key, assertion_key=assertion_key) if in_workspace else None
                 result = save_review(assertion_key, form.cleaned_data, request.user.get_username(), case_key=key,
                                      comparison_decision=pair_workspace)
+            except SaveOutcomeUnknown:
+                return save_recovery(request)
             except (ReviewError, OSError, ValueError, KeyError, TypeError, DatabaseError) as error:
                 return response(409, str(error))
             if not result['indexed']:
-                return render(request, 'research_web/unavailable.html', {
-                    'saved': True, 'rebuild_revision': result['revision'],
-                    'message': 'Your review is in the readable history. Do not submit it again. '
-                               'Rebuild browsing to display the saved record.'}, status=503)
+                return save_recovery(request, result)
             messages.success(request, ('Synthetic' if case_synthetic(selected, evidence) else 'Research') + ' review saved. Earlier revisions are retained.')
             if pair_workspace:
                 from urllib.parse import urlencode
-                return redirect(workspace.case_url(key, assertion=return_assertion) + '&' +
+                return saved_redirect(request, workspace.case_url(key, assertion=return_assertion) + '&' +
                                 urlencode({'comparison': assertion_key}))
             if request.POST.get('documentary_workspace') == '1':
                 from django.urls import reverse
@@ -415,7 +473,7 @@ def review(request, key, assertion_key):
                                if k != assertion_key and any(r['key'] == k and r.get('case_key') == key and
                                    r['review'] in ('unreviewed', 'unresolved') for r in current)]
                     target = pending[0] if pending else target
-                return redirect(reverse('people', args=[key]) + '?' + urlencode({
+                return saved_redirect(request, reverse('people', args=[key]) + '?' + urlencode({
                     'mode': 'matches', 'target': target, 'show_rejected': request.POST.get('show_rejected', '')}))
             if navigation:
                 target = navigation['next_url'] if request.POST.get('advance') == '1' else ''
@@ -436,6 +494,9 @@ def people(request, key, *, match_form_override=None, match_error='', match_stat
     operator(request)
     try:
         evidence, history, current, revision = snapshot()
+        if request.method == 'GET':
+            require(request.GET.get('revision', revision) == revision,
+                    'Records changed. Reload the finding before continuing.')
         selected = next((c for c in evidence['cases'] if c['key'] == key), None)
         if selected is None or not selected.get('documentary_people'):
             raise Http404
@@ -482,18 +543,18 @@ def people(request, key, *, match_form_override=None, match_error='', match_stat
             else:
                 try:
                     result = save_attribution(key, form.cleaned_data, request.user.get_username())
+                except SaveOutcomeUnknown:
+                    return save_recovery(request)
                 except (ReviewError, OSError, ValueError, KeyError, TypeError, DatabaseError) as failure:
                     error, status = str(failure), 409
                 else:
                     if not result['indexed']:
-                        return render(request, 'research_web/unavailable.html', {
-                            'saved': True, 'rebuild_revision': result['revision'],
-                            'message': 'Your attribution is saved in the readable history. Do not submit again; rebuild browsing.'}, status=503)
+                        return save_recovery(request, result)
                     messages.success(request, 'Your attribution was saved with its sources and uncertainty. Earlier revisions are retained.')
                     targets = selected.get('documentary_targets', [v['key'] for v in selected['views']])
                     if request.POST.get('advance') == '1' and target_key in targets:
                         target_key = targets[(targets.index(target_key)+1) % len(targets)]
-                    return redirect(reverse('people', args=[key]) + '?' + urlencode({'mode': 'people', 'target': target_key}))
+                    return saved_redirect(request, reverse('people', args=[key]) + '?' + urlencode({'mode': 'people', 'target': target_key}))
         views = {}
         for original in selected['views']:
             view = {**original, 'available': False}
@@ -570,14 +631,13 @@ def physical_object(request, key):
                 return render(request, 'research_web/physical_object.html', context, status=400)
             try:
                 result = save_physical_object(key, form.cleaned_data, request.user.get_username())
+            except SaveOutcomeUnknown:
+                return save_recovery(request)
             except (ReviewError, OSError, ValueError, KeyError, TypeError, DatabaseError) as error:
                 context['save_error'] = str(error)
                 return render(request, 'research_web/physical_object.html', context, status=409)
             if not result['indexed']:
-                return render(request, 'research_web/unavailable.html', {
-                    'saved': True, 'rebuild_revision': result['revision'],
-                    'message': 'Your physical-object change is saved in the readable history. '
-                               'Do not submit it again. Rebuild browsing to display it.'}, status=503)
+                return save_recovery(request, result, 'physical-object change')
             messages.success(request, 'Physical-object reference saved. Research review outcome unchanged.')
             return redirect('case', key=key)
         return render(request, 'research_web/physical_object.html', context)

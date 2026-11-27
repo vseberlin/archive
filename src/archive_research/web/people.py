@@ -4,9 +4,7 @@ from datetime import datetime, timezone
 import re
 import unicodedata
 
-from django.conf import settings
-
-from archive_research.common import file_lock, require
+from archive_research.common import require
 
 
 RELATION = 'person_attribution'
@@ -176,11 +174,11 @@ def validate_attribution(record, case):
 
 def save_attribution(case_key, submitted, actor):
     """Append to the existing readable review history, with existing lock/recovery."""
-    from .records import (_snapshot, _checked_cases, check_sources, assertion_case,
+    from .records import (_save_lock, _record_bytes, _checked_cases, check_sources, assertion_case,
                           case_synthetic, validate_records, _append_record)
-    import json
-    with file_lock(settings.PILOT_ROOT / 'records/.research.lock'):
-        evidence, history, current, revision = _snapshot()
+    with _save_lock():
+        authority = _record_bytes()
+        evidence, _, current, revision = validate_records(*authority)
         case = next((c for c in evidence['cases'] if c['key'] == case_key), None)
         require(case is not None and case.get('documentary_people'), 'No documentary candidates prepared for this case')
         require(not case.get('read_only', False), 'This case is read-only')
@@ -232,6 +230,4 @@ def save_attribution(case_key, submitted, actor):
                   'supersedes_revision': previous['revision'] if previous else None,
                   'reviewer': actor, 'reviewed_at': datetime.now(timezone.utc).isoformat(),
                   'based_on_revision': revision, 'synthetic': case_synthetic(case, evidence), 'metadata_adopted': False}
-        validate_records(json.dumps(evidence).encode(),
-                         b''.join(json.dumps(r).encode()+b'\n' for r in history + [record]))
-        return _append_record(record)
+        return _append_record(authority, record)

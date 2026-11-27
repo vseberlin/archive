@@ -1,7 +1,6 @@
 <script>
 (() => {'use strict';
 const root=document.getElementById('review-workspace');if(!root)return;
-const unsaved=new Set();
 root.querySelectorAll('.pair-decision').forEach(form=>{
  const key='archive-pair-draft:'+root.dataset.draftUser+'|'+root.dataset.case+'|'+form.dataset.key;
  const panel=Array.from(root.querySelectorAll('[data-pair-note]')).find(p=>p.dataset.key===form.dataset.key);
@@ -10,10 +9,9 @@ root.querySelectorAll('.pair-decision').forEach(form=>{
  if(form.dataset.bound!=='1'){try{const draft=JSON.parse(sessionStorage.getItem(key)||'null');if(draft&&typeof draft.reason==='string'&&typeof draft.revision==='string'){
  const stale=revision.value!==draft.revision;note.value=draft.reason;revision.value=draft.revision;tab.textContent='Comparison note •';
  status.textContent=stale?'Older note restored; compare current records before saving.':'Note restored in this tab · not saved';}}catch{}}
- const retain=()=>{tab.textContent='Comparison note •';try{sessionStorage.setItem(key,JSON.stringify({reason:note.value,revision:revision.value}));unsaved.delete(key);status.textContent='Note retained in this tab · not saved';}catch{unsaved.add(key);status.textContent='Unsaved note';}};
+ const retain=()=>{tab.textContent='Comparison note •';try{sessionStorage.setItem(key,JSON.stringify({reason:note.value,revision:revision.value}));form.removeAttribute('data-unretained');status.textContent='Note retained in this tab · not saved';}catch{form.setAttribute('data-unretained', '');status.textContent='Unsaved note';}};
  note.addEventListener('input',retain);if(form.dataset.bound==='1'){retain();if(!panel.hidden)tab.click();}
- form.addEventListener('submit',()=>{unsaved.delete(key);try{sessionStorage.removeItem(key);}catch{}});
+ form.dataset.draftKey=key;
 });
-window.addEventListener('beforeunload',event=>{if(unsaved.size){event.preventDefault();event.returnValue='';}});
 })();
 </script>

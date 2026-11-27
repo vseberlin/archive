@@ -211,12 +211,16 @@ feedback applies to the selected search projection's visual query in either
 direction, before pagination. Contradictory reviews remain visible. Raw similarity
 scores are unchanged; no retraining or new extraction occurs.
 
-Every save refreshes only the selected finding history and comparison feedback
-inside the existing search projection, preserving all prepared extraction and
-catalogue entries. Rejected findings leave text-finding results; original sources
-remain searchable. Failed refresh uses the existing saved-but-unindexed recovery:
-rebuild browsing to refresh findings without resubmitting a decision. Stale finding
-search is withheld. Source coverage timestamps stay distinct from finding updates.
+Confirm saves the readable decision and updates the SQLite case view. The next
+workbench search that needs findings brings the selected search index up to date
+from the latest saved history. Several decisions can share one refresh. The
+explicit rebuild action also refreshes search. Tools that read the durable index
+file directly see its most recently published snapshot.
+
+Case pages use verified catalogue and OCR data from the selected base index.
+The process reuses those data across case views while the file binding remains
+current. A search refresh failure leaves the saved decisions available in the
+case history. Correct the index problem and retry the search.
 
 ## Prepared page search and image leads
 
@@ -355,12 +359,17 @@ come from the server. CSRF-protected saves require the displayed revision and
 unchanged source/preview bindings. Earlier JSONL bytes are retained; a new record
 names its superseded revision. A stale form is refused with entered text intact.
 
-Save and rebuild hold the same file lock through projection refresh. If history
-was saved but projection refresh failed, the UI explicitly says it was saved and
-offers **Rebuild browsing**. Do not resubmit the review. Recovery checks the
-current readable revision and never writes another decision. A failed write
-before replacement preserves the existing history. If replacement succeeded but
-storage confirmation failed, the UI also reports saved and requires rebuilding.
+A successful workspace save computes its destination from the case queue and selected finding.
+A single review updates the changed SQLite case payload and stamps the other
+cases with the shared revision under the research lock. Search-index publication
+takes place on demand as described above.
+
+If the readable decision is saved and a projection fails, the response identifies which
+projection needs attention. **Rebuild browsing** recovers a stale projection from the current
+history. A missing or invalid base search index first requires restoration or regeneration.
+If storage fails after an attempted replacement, the writer checks the exact history bytes.
+A matching new history is reported as saved. When the check cannot establish the outcome,
+the operator is asked to inspect the finding history before taking further action.
 
 Generic research admin add/change/delete remain disabled, including for the local
 superuser. Built-in account administration remains available to that user.

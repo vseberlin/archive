@@ -1,12 +1,11 @@
 <script>
 (() => {'use strict';
 const form=document.getElementById('person-attribution-form')||document.getElementById('match-review');
-const status=document.getElementById('draft-status'),scope=document.getElementById('draft-scope');let dirty=false,retained=false;
+const status=document.getElementById('draft-status'),scope=document.getElementById('draft-scope');let retained=false;
 const draftKey='archive-review-draft:'+scope.dataset.key,fields=new Set(['position','candidate_key','reason','uncertainty','citation_keys','review','value','scope','revision','attribution_key','advance']);
-function changed(){dirty=true;retained=false;if(form){try{const data=Array.from(new FormData(form)).filter(([name])=>fields.has(name));sessionStorage.setItem(draftKey,JSON.stringify(data));retained=true;}catch{}}if(status)status.textContent=retained?'Draft retained in this tab · not saved':'Unsaved draft';}
-if(form){if(scope.dataset.bound!=='1'){try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||'null');if(Array.isArray(saved)){const currentRevision=form.elements.namedItem('revision').value;for(const field of form.elements){if(!fields.has(field.name)||field.type==='submit')continue;const values=saved.filter(([name])=>name===field.name).map(([,value])=>value);if(field.type==='checkbox'||field.type==='radio')field.checked=values.includes(field.value);else if(values.length)field.value=values[0];}dirty=true;retained=true;if(status)status.textContent=form.elements.namedItem('revision').value===currentRevision?'Draft restored in this tab · not saved':'Older draft restored · records changed; compare before saving';}}catch{}}
-form.addEventListener('input',changed);form.addEventListener('change',changed);form.addEventListener('submit',()=>{dirty=false;try{sessionStorage.removeItem(draftKey);}catch{}});if(scope.dataset.bound==='1')changed();}
-window.addEventListener('beforeunload',event=>{if(dirty&&!retained){event.preventDefault();event.returnValue='';}});
+function changed(){retained=false;if(form){try{const data=Array.from(new FormData(form)).filter(([name])=>fields.has(name));sessionStorage.setItem(draftKey,JSON.stringify(data));retained=true;}catch{}form.toggleAttribute('data-unretained',!retained);}if(status)status.textContent=retained?'Draft retained in this tab · not saved':'Unsaved draft';}
+if(form){if(scope.dataset.bound!=='1'){try{const saved=JSON.parse(sessionStorage.getItem(draftKey)||'null');if(Array.isArray(saved)){const currentRevision=form.elements.namedItem('revision').value;for(const field of form.elements){if(!fields.has(field.name)||field.type==='submit')continue;const values=saved.filter(([name])=>name===field.name).map(([,value])=>value);if(field.type==='checkbox'||field.type==='radio')field.checked=values.includes(field.value);else if(values.length)field.value=values[0];}retained=true;if(status)status.textContent=form.elements.namedItem('revision').value===currentRevision?'Draft restored in this tab · not saved':'Older draft restored · records changed; compare before saving';}}catch{}}
+form.addEventListener('input',changed);form.addEventListener('change',changed);form.dataset.draftKey=draftKey;if(scope.dataset.bound==='1')changed();}
 const selection=document.getElementById('id_candidate_key');
 function showPerson(key){document.querySelectorAll('[data-person]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.person===key)));document.querySelectorAll('[data-person-panel]').forEach(p=>{p.hidden=p.dataset.personPanel!==key;});const hint=document.getElementById('choose-candidate');if(hint)hint.hidden=Boolean(key);}
 document.querySelectorAll('[data-person]').forEach(button=>button.addEventListener('click',()=>{if(selection){selection.value=button.dataset.person;selection.dispatchEvent(new Event('change',{bubbles:true}));}showPerson(button.dataset.person);}));
@@ -15,7 +14,39 @@ document.querySelectorAll('[data-source-tab]').forEach(button=>button.addEventLi
 const search=document.getElementById('candidate-search');if(search){const fold=s=>s.toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const filter=()=>{const terms=fold(search.value).trim().split(/\s+/).filter(Boolean);let count=0;document.querySelectorAll('[data-search]').forEach(b=>{b.hidden=!terms.every(t=>fold(b.dataset.search).includes(t));if(!b.hidden)count++;});document.getElementById('candidate-empty').hidden=count>0;};search.addEventListener('input',filter);filter();}
 document.querySelectorAll('[data-open-history]').forEach(b=>b.addEventListener('click',()=>{const history=document.getElementById('review-history');history.open=true;history.scrollIntoView({behavior:'smooth',block:'start'});}));
 document.querySelector('[data-photo-zoom]')?.addEventListener('click',event=>{const zoomed=document.getElementById('photo-viewer').classList.toggle('zoomed');event.currentTarget.textContent=zoomed?'Fit image':'Zoom +';});
-const picture=document.getElementById('target-image'),position=document.getElementById('id_position');if(picture&&position){picture.style.cursor='crosshair';picture.addEventListener('click',event=>{const rect=picture.getBoundingClientRect(),x=100*(event.clientX-rect.left)/rect.width,y=100*(event.clientY-rect.top)/rect.height;const marker=document.getElementById('position-marker');marker.style.left=x+'%';marker.style.top=y+'%';marker.hidden=false;position.value=`Marked position: ${x.toFixed(1)}% from left, ${y.toFixed(1)}% from top of the displayed photograph`;position.dispatchEvent(new Event('input',{bubbles:true}));});}
+const picture = document.getElementById('target-image');
+const position = document.getElementById('id_position');
+if (picture && position) {
+  const marker = document.getElementById('position-marker');
+  const suffix = /(?:^|\s)Marked position: (\d{1,3}(?:\.\d+)?)% from left, (\d{1,3}(?:\.\d+)?)% from top of the displayed photograph$/;
+  function restoreMarker() {
+    const point = position.value.trimEnd().match(suffix);
+    marker.hidden = !(point && Number(point[1]) <= 100 && Number(point[2]) <= 100);
+    if (!marker.hidden) {
+      marker.style.left = point[1] + '%';
+      marker.style.top = point[2] + '%';
+    }
+  }
+  restoreMarker();
+  position.addEventListener('input', restoreMarker);
+  picture.style.cursor = 'crosshair';
+  picture.addEventListener('click', event => {
+    const rect = picture.getBoundingClientRect();
+    const x = Math.min(100, Math.max(0, 100 * (event.clientX - rect.left) / rect.width)).toFixed(1);
+    const y = Math.min(100, Math.max(0, 100 * (event.clientY - rect.top) / rect.height)).toFixed(1);
+    const description = position.value.trimEnd().replace(suffix, '').trimEnd();
+    const point = `Marked position: ${x}% from left, ${y}% from top of the displayed photograph`;
+    const value = description ? description + ' ' + point : point;
+    if (value.length > position.maxLength) {
+      position.setCustomValidity('Shorten the position description to add the marker.');
+      position.reportValidity();
+      position.setCustomValidity('');
+      return;
+    }
+    position.value = value;
+    position.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+}
 document.addEventListener('keydown',event=>{if(form&&(event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();const button=document.querySelector('button[form="'+form.id+'"][type="submit"]');if(button)form.requestSubmit(button);}});
 })();
 </script>

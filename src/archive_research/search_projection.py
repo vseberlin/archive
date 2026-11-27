@@ -1,4 +1,5 @@
 """Rebuildable catalogue/text/finding projection. Queries perform no source I/O."""
+from bisect import bisect_left
 from collections import Counter, defaultdict
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -244,11 +245,36 @@ def refresh_catalogues(roots, value, specs):
 def entry_postings(entries):
     postings = defaultdict(list)
     for number, entry in enumerate(entries):
-        terms = Counter(tokens(' '.join(entry['fields'].values())))
-        entry['token_count'] = sum(terms.values())
-        for token, frequency in terms.items():
-            postings[token].append([number, frequency])
+        _add_entry_postings(postings, number, entry)
     return dict(postings)
+
+
+def _add_entry_postings(postings, number, entry):
+    terms = Counter(tokens(' '.join(entry['fields'].values())))
+    entry['token_count'] = sum(terms.values())
+    for token, frequency in terms.items():
+        postings[token].append([number, frequency])
+
+
+def _remap_postings(postings, positions, additions):
+    # Earlier entry numbers are stable, so most posting lists can be reused as-is.
+    prefix = next((n for n, number in enumerate(positions) if n != number), len(positions))
+    result = {}
+    for token, rows in postings.items():
+        added = additions.pop(token, [])
+        if rows and rows[-1][0] >= prefix:
+            split = bisect_left(rows, [prefix])
+            tail = [[positions[number], frequency] for number, frequency in rows[split:]
+                    if positions[number] is not None]
+            tail.extend(added)
+            tail.sort()
+            rows = rows[:split] + tail
+        elif added:
+            rows = rows + added
+        if rows:
+            result[token] = rows
+    result.update(additions)
+    return result
 
 
 def read_finding_history(roots, source_record):
@@ -297,28 +323,55 @@ def entries_for_current(current, source_record, mapping):
 
 
 def refresh_findings(value, source_record, current):
-    """Refresh one selected review history, reusing all extraction/catalogue entries."""
-    from copy import deepcopy
+    """Validate the input and refresh one selected review history."""
+    return refresh_validated_findings(validate(value), source_record, current)
+
+
+def refresh_validated_findings(value, source_record, current):
+    """Refresh a validated projection, sharing untouched entries and posting rows."""
     from .review_feedback import feedback_rows
-    value = deepcopy(validate(value))
+
     def same(source):
         return all(source.get(k) == source_record[k] for k in ('root', 'path', 'unit', 'object_id'))
-    specs = value['selection'].get('findings', [])
+
+    specs = list(value['selection'].get('findings', []))
     selected = [i for i, spec in enumerate(specs) if same(spec)]
     require(len(selected) == 1, 'Review history must be selected exactly once in this search index')
     specs[selected[0]] = source_record
-    entries = [e for e in value['entries'] if not (e['kind'] == 'finding' and same(e['evidence']['history']))]
-    entries.extend(entries_for_current(current, source_record, mapping_rows(value['selection'].get('identity_bindings', []))))
+    entries, replaced = [], {}
+    positions = [None] * len(value['entries'])
+    for number, entry in enumerate(value['entries']):
+        if entry['kind'] == 'finding' and same(entry['evidence']['history']):
+            replaced[entry['key']] = (number, entry)
+        else:
+            positions[number] = len(entries)
+            entries.append(entry)
+
+    additions = defaultdict(list)
+    mapping = mapping_rows(value['selection'].get('identity_bindings', []))
+    for entry in entries_for_current(current, source_record, mapping):
+        previous = replaced.get(entry['key'])
+        if previous and list(previous[1]['fields'].items()) == list(entry['fields'].items()):
+            positions[previous[0]] = len(entries)
+            entry['token_count'] = previous[1]['token_count']
+        else:
+            _add_entry_postings(additions, len(entries), entry)
+        entries.append(entry)
+
     feedback = [r for r in value.get('review_feedback', []) if not same(r['history'])]
-    value['review_feedback'] = feedback + feedback_rows(current, source_record)
-    postings = entry_postings(entries)
-    value.update(entries=entries, postings=dict(postings), findings_refreshed_at=datetime.now(timezone.utc).isoformat())
-    value['unavailable'] = [r for r in value['unavailable'] if r['key'] != f'finding:{selected[0]}']
-    value['coverage'].update(entries_by_kind=dict(Counter(e['kind'] for e in entries)),
-                            entries_by_availability=dict(Counter(e['availability'] for e in entries)),
-                            unmapped_entries=sum(e['object_uid'] is None for e in entries),
-                            failed_inputs=len(value['unavailable']))
-    return seal(value)
+    unavailable = [r for r in value['unavailable'] if r['key'] != f'finding:{selected[0]}']
+    return seal({**value,
+                 'selection': {**value['selection'], 'findings': specs},
+                 'entries': entries,
+                 'postings': _remap_postings(value['postings'], positions, additions),
+                 'review_feedback': feedback + feedback_rows(current, source_record),
+                 'findings_refreshed_at': datetime.now(timezone.utc).isoformat(),
+                 'unavailable': unavailable,
+                 'coverage': {**value['coverage'],
+                              'entries_by_kind': dict(Counter(e['kind'] for e in entries)),
+                              'entries_by_availability': dict(Counter(e['availability'] for e in entries)),
+                              'unmapped_entries': sum(e['object_uid'] is None for e in entries),
+                              'failed_inputs': len(unavailable)}})
 
 
 def seal(value):
@@ -327,7 +380,7 @@ def seal(value):
 
 
 def validate(value):
-    require(value.get('format') == FORMAT and value.get('metadata_adopted') is False,
+    require(isinstance(value, dict) and value.get('format') == FORMAT and value.get('metadata_adopted') is False,
             'Unsupported search projection')
     require(value.get('projection_sha256') == sha({k: v for k, v in value.items() if k != 'projection_sha256'}),
             'Search projection changed; refresh explicitly')
@@ -462,8 +515,16 @@ def snippet_parts(snippet, highlights):
     return parts
 
 
-def query(value, text, *, limit=20, offset=0, kinds=None, unit=None, fuzzy=False):
-    validate(value)
+def query(value, text, *, limit=20, offset=0, kinds=None, unit=None, fuzzy=False,
+          finding_cases=None, finding_history=None):
+    """Limit findings to listed cases, optionally within just one (root, path) history."""
+    return query_validated(validate(value), text, limit=limit, offset=offset, kinds=kinds,
+                           unit=unit, fuzzy=fuzzy, finding_cases=finding_cases, finding_history=finding_history)
+
+
+def query_validated(value, text, *, limit=20, offset=0, kinds=None, unit=None, fuzzy=False,
+                    finding_cases=None, finding_history=None):
+    """Query an already verified or freshly sealed projection without mutating it."""
     require(isinstance(text, str) and text.strip() and len(text) <= 300, 'Bounded search query required')
     require(type(limit) is int and 1 <= limit <= 100 and type(offset) is int and offset >= 0, 'Invalid page')
     terms = list(dict.fromkeys(t for t in tokens(text) if t not in _TITLES))
@@ -503,6 +564,12 @@ def query(value, text, *, limit=20, offset=0, kinds=None, unit=None, fuzzy=False
         entry = value['entries'][number]
         if kinds and entry['kind'] not in kinds or unit and entry['source_identity']['unit'] != unit:
             continue
+        if finding_cases is not None and entry['kind'] == 'finding':
+            evidence = entry['evidence']
+            history = evidence['history']
+            if ((finding_history is None or (history['root'], history['path']) == finding_history)
+                    and evidence['case_key'] not in finding_cases):
+                continue
         exact = text.casefold() in {entry.get('object_uid', '').casefold() if entry.get('object_uid') else '',
                                   entry['fields'].get('identifier', '').casefold()}
         if valid_uid(text.strip()) and not exact:

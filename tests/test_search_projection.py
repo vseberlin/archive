@@ -319,6 +319,20 @@ class SearchProjectionTests(unittest.TestCase):
         self.assertEqual(query(value, 'combined')['hits'], [])
         self.assertEqual(query(value, 'diary')['hits'], [])
 
+    def test_case_filter_can_be_scoped_to_one_history(self):
+        record = {'case_key': 'parked', 'key': 'outside', 'value': 'Shared term', 'subject': 'photo',
+                  'revision': 0, 'supersedes_revision': None, 'review': 'accepted',
+                  'citation_keys': ['photo'], 'metadata_adopted': False}
+        inside = {**record, 'case_key': 'assessed', 'key': 'inside'}
+        local = asdict(self.source('local.jsonl', '\n'.join(json.dumps(r) for r in (record, inside))))
+        foreign = asdict(self.source('foreign.jsonl', json.dumps(record)))
+        value = build_projection(self.roots, 'artifacts', {'keys': [], 'findings': [local, foreign]})
+        options = {'finding_cases': {'assessed'}}
+        self.assertEqual(query(value, 'shared', **options)['total_matches'], 1)
+        hits = query(value, 'shared', **options, finding_history=(local['root'], local['path']))['hits']
+        self.assertEqual({(h['evidence']['history']['path'], h['evidence']['key']) for h in hits},
+                         {(local['path'], 'inside'), (foreign['path'], 'outside')})
+
     def test_review_refresh_reuses_sources_and_keeps_rejection_feedback(self):
         from archive_research.search_projection import refresh_findings
         from archive_research.review_feedback import entry_locator
@@ -341,6 +355,58 @@ class SearchProjectionTests(unittest.TestCase):
         self.assertEqual(query(updated, 'Distinctive reproduction')['hits'][0]['review'], 'accepted')
         self.assertEqual(len(updated['review_feedback']), 1)
         self.assertEqual(updated['review_feedback'][0]['review'], 'accepted')
+
+    def test_refresh_remaps_multiple_histories_like_a_full_rebuild(self):
+        from archive_research.search_projection import refresh_findings, tokens
+        from archive_research.review_feedback import entry_locator
+
+        def history(name, records):
+            return asdict(self.source(name, '\n'.join(json.dumps(row) for row in records)))
+
+        common = {'case_key': 'case', 'revision': 0, 'supersedes_revision': None,
+                  'subject': 'photo', 'citation_keys': ['page', 'photo'], 'metadata_adopted': False}
+        locator = entry_locator(build_projection(self.roots, 'artifacts', {'keys': [self.key]})['entries'][0])
+        pair = {'query': locator, 'candidate': {**locator, 'page': 9}}
+        removed = {**common, 'key': 'pair', 'value': 'obsolete signal signal', 'review': 'accepted',
+                   'reproduction_pair': pair}
+        corrected = {**common, 'key': 'reading', 'value': 'erasure signal', 'review': 'unreviewed'}
+        retained = {**common, 'key': 'steady', 'value': 'Invented signal', 'review': 'unreviewed'}
+        other = {**common, 'key': 'other', 'value': 'Other signal signal signal', 'review': 'unresolved',
+                 'reproduction_pair': pair}
+        records = [removed, corrected, retained]
+        first = history('first.jsonl', records)
+        second = history('second.jsonl', [other])
+        selection = {'keys': [self.key], 'catalogues': [self.catalogue()], 'findings': [first, second]}
+        value = build_projection(self.roots, 'artifacts', selection)
+
+        rejected = {**removed, 'revision': 1, 'supersedes_revision': 0, 'review': 'rejected'}
+        new_text = {**corrected, 'revision': 1, 'supersedes_revision': 0, 'review': 'accepted',
+                    'value': 'updated signal signal'}
+        status_only = {**retained, 'revision': 1, 'supersedes_revision': 0, 'review': 'accepted'}
+        accepted_again = {**rejected, 'revision': 2, 'supersedes_revision': 1, 'review': 'accepted'}
+        for append, current, changed in [([rejected, new_text, status_only],
+                                          [rejected, new_text, status_only], new_text),
+                                         ([accepted_again], [accepted_again, new_text, status_only], accepted_again)]:
+            with self.subTest(review=current[0]['review']):
+                records.extend(append)
+                updated_source = history('first.jsonl', records)
+                original = deepcopy(value)
+                with patch('archive_research.search_projection.tokens', wraps=tokens) as tokenize:
+                    updated = refresh_findings(value, updated_source, current)
+                tokenize.assert_called_once()
+                self.assertIn(changed['value'], tokenize.call_args.args[0])
+                self.assertEqual(value, original)
+                self.assertIs(updated['entries'][0], value['entries'][0])
+                self.assertIs(updated['postings']['funktechnik'], value['postings']['funktechnik'])
+                # Refresh preserves retained entry order and appends the updated history's findings.
+                rebuilt = build_projection(self.roots, 'artifacts', {**selection, 'findings': [second, updated_source]})
+                rebuilt['selection']['findings'] = [updated_source, second]
+                rebuilt['refreshed_at'] = value['refreshed_at']
+                rebuilt['findings_refreshed_at'] = updated['findings_refreshed_at']
+                self.assertEqual(validate(updated), seal(rebuilt))
+                self.assertEqual(query(updated, 'Invented signal'), query(rebuilt, 'Invented signal'))
+                self.assertEqual(updated['review_feedback'][-1]['review'], current[0]['review'])
+                value = updated
 
     def test_visual_query_applies_exact_pair_review_before_pagination(self):
         from archive_research.review_feedback import entry_locator
